@@ -141,7 +141,7 @@ The dashboard derives one more, `stale`, when a run's status is `running` but no
 ~/.factory/runs/github.com/acme/report/new-color-q1w2e/
   request.json     the normalized request (JSON)
   run.json         current state (JSON), with the paths block, rewritten atomically
-  events.jsonl     append-only history (JSON Lines)
+  events.jsonl     append-only history (JSON Lines), including a run_snapshot event after each change [snapshot-event]
   lock             pid, host and heartbeat of the owning engine
   decisions/       <stage>.<n>.yaml decision file and <stage>.<n>.html decision page, one pair per visit to a stage
   merge.json       result of the merge policy
@@ -214,6 +214,26 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 - Each worker runs in its own process group, recorded in `task.json`. Before a new attempt starts, any recorded group that is still alive is killed, so a worker left over from a crashed engine cannot keep editing the worktree.
 - Write-ahead: an attempt's usage record is written before the worker starts. On takeover, open attempts are closed as `interrupted` and their tasks resume from the last checkpoint as new attempts. Before a new attempt after a crash, timeout or kill, the engine resets the task worktree to the last checkpoint commit (`git reset --hard`, then `git clean -fd` that leaves the git-excluded shims alone), so no half-written edit survives. Edits since the checkpoint are lost, at most `checkpoint_every_minutes` of work; the engine first saves the discarded diff as `tasks/<task>/discarded-<n>.patch` for troubleshooting.
 
+**Run rebuild**
+
+Decision E1, option `[snapshot-event]` (decision page `docs/reviews/rebuild-run-decisions.html`; the event catalogue named no fields, so a run could not be rebuilt from it).
+
+- After each change to a run, the engine writes one `run_snapshot` event to `events.jsonl`. It carries the whole run.
+- `recover --rebuild`, and the read of an unreadable `run.json`, replay only the last `run_snapshot`. They do not read the other events to rebuild.
+- Heartbeat and conflict signals are not part of a rebuild. They are recomputed on the next tick.
+- The other events are unchanged: each still records what happened, for the dashboard and for audit.
+
+```mermaid
+flowchart LR
+  change["A change to the run"] --> write["write run.json, atomically"]
+  change --> snap["append run_snapshot<br/>to events.jsonl"]
+  bad["run.json unreadable,<br/>or recover --rebuild"] --> last["read the last run_snapshot"]
+  last --> run["Run, with heartbeat and<br/>signals left empty"]
+  run --> tick["next tick recomputes<br/>heartbeat and signals"]
+```
+
+**Open, not decided here** (Unspecified): the fields and schema of a `run_snapshot`; how it is stored (inline in the event or by reference); whether it is written before or after `run.json`; what a rebuild does when `events.jsonl` has no `run_snapshot`; whether readers of `events.jsonl` (the dashboard, `read_events`) skip snapshots; and whether `events.jsonl` needs a size limit.
+
 **Event catalogue** (`events.jsonl`)
 
 | Group | Events |
@@ -224,6 +244,9 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 | Human stops | `attention_requested`, `attention_cleared`, `decision_requested`, `decision_recorded`, `decision_approved`, `decision_rejected`, `decision_invalidated`, `decision_reopened` |
 | Steering | `note_queued`, `note_delivered`, `worker_restarted` |
 | Delivery and cleanup | `pr_opened`, `merge_evaluated`, `merged`, `sink_written`, `archived` |
+| Snapshot | `run_snapshot` [snapshot-event] |
+
+`run_snapshot` is written after each change to a run and carries the whole run. It is the only event that does: the other events record what happened, and a rebuild uses the last `run_snapshot`, not the other events. Its payload (field names, schema and storage format) is Unspecified; see **Run rebuild** above.
 
 Module 6 is built as two parts with separate contracts. 6A, the state store, is a foundation every module uses. 6B, the engine loop, is the integrator that composes the others.
 
@@ -252,7 +275,7 @@ def acquire_lock(run_dir: Path, owner: str) -> Lock                # non-blockin
 def heartbeat(lock: Lock) -> None                                  # display only
 def release(lock: Lock) -> None
 def lock_status(run_dir: Path) -> LockState                        # live: lock held; free: not held; stale: not held while run.json says running
-def rebuild_run(run_dir: Path) -> Run                              # replay events.jsonl; heartbeat and signals left empty
+def rebuild_run(run_dir: Path) -> Run                              # the last run_snapshot in events.jsonl [snapshot-event]; heartbeat and signals left empty
 def find_by_source(home: Path, key: str, ref: str, body_sha: str) -> str | None
 def find_run(home: Path, run_id: str) -> RunRef | None             # any repo; used by the launcher
 def list_runs(home: Path, *, key: str | None = None) -> list[RunRef]
@@ -267,7 +290,7 @@ def history_append(home: Path, record: HistoryRecord) -> None
 ```
 
 - **Run and test:** `pytest factory/engine/tests/state`, including a multiprocess test with two writers on events and a scanner test over 500 fixture runs.
-- **Errors:** lock held raises `state.locked` (exit 5). A failed write keeps the last good file. An unreadable `run.json` is rebuilt from events. A missing `repo_path` is reported as a flag, never an error.
+- **Errors:** lock held raises `state.locked` (exit 5). A failed write keeps the last good file. An unreadable `run.json` is rebuilt from the last `run_snapshot` in `events.jsonl` [snapshot-event]. A missing `repo_path` is reported as a flag, never an error.
 
 Acceptance criteria:
 
@@ -276,7 +299,9 @@ Acceptance criteria:
 - [ ] Two processes appending events at once produce whole lines only, on Linux and macOS.
 - [ ] `acquire_lock` refuses while another process holds the lock, whatever its heartbeat says, and succeeds right after that process is killed.
 - [ ] A process stopped with SIGSTOP for longer than the old 60-second limit keeps its lock; `lock_status` reports `live`, and a tick starts no second engine.
-- [ ] `rebuild_run` from events gives the same status, stage, stage and task states, loop counters and attention item as the engine wrote. Heartbeat and conflict signals are not events; they are recomputed on the next tick.
+- [ ] A `run_snapshot` event is written after each change to a run and carries the whole run [snapshot-event].
+- [ ] `rebuild_run` replays only the last `run_snapshot` in `events.jsonl` and gives the same status, stage, stage and task states, loop counters and attention item as the engine wrote. Heartbeat and conflict signals are not part of the rebuild; they are recomputed on the next tick.
+- [ ] With every other event removed from `events.jsonl` and one `run_snapshot` left, `rebuild_run` gives the same run. A rebuild never reads the other events.
 - [ ] `repo_key` gives `github.com/acme/report` for both SSH and HTTPS remotes, `local/<folder>` with no remote, and the override when set.
 - [ ] Run ids are unique across the whole factory home, not only within one repo.
 - [ ] With 500 runs, `RunScanner.scan` re-reads only files whose time or size changed, and flags a deleted repo as `repo_missing`.
