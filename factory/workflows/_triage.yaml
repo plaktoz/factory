@@ -1,0 +1,9 @@
+name: _triage
+stages:
+  - id: triage
+    tasks:
+      - {id: rules, cmd: [factory, triage], out: triage.json}
+      - {id: classify, skill: classify, needs: [rules], when: {artifact: triage.json, confidence_below: 0.8},
+         out: triage.json}
+    gate: [{check: type-resolved}]
+    approval: when-low-confidence

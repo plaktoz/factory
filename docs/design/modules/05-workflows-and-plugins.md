@@ -43,6 +43,10 @@ stages:
 - Gates run in order and stop at the first failure. Prefer a command or schema check; use an LLM rubric only inside a task whose output a schema gate then reads.
 - `tasks_from` builds a stage's task list from an earlier artifact at run time. The engine validates the generated tasks against the workflow schema before starting them.
 - Lookup order: `.factory/config/workflows/`, then `factory/workflows/`. Built-in workflows: bug-fix, feature, new-app, chore, research.
+- A workflow file is checked against `factory/schemas/workflow.schema.json`. Only `stages` is required. A file that omits keys gets these values: `name` from the file name, `type` from the name, `policy.write: false`, `sink: pull_request` when it writes and `comment` when it does not, and the `defaults` values in the example above. A task with `cmd` and no `skill` gets `retries: 0` unless it sets its own.
+- A stage with `verify` as its id has `sync_base: true` unless the file says otherwise.
+- `load_workflow` reports every problem it finds in one `config.invalid` error, each with the file, the line where the YAML has one, and the path inside the file. It also resolves each task's `skill` through module 10. `validate_workflow` takes no repo, so it does not check skill names.
+- Two parallel tasks overlap when their scopes can match the same file. A listed file in `shared_files` clears an overlap only when it is the one file the two scopes share. Two glob scopes that overlap are always reported, because one listed file cannot cover every file they match.
 
 **Bug-fix workflow**
 
@@ -92,6 +96,26 @@ stages:
 ```
 
 The two review tasks replace one skill that would otherwise start two subagents, so the engine sees both. The verify stage has no LLM tasks.
+
+**Chore workflow** (phase 1a)
+
+A chore is a small change with no root-cause analysis and no approval stop. It has one worker task, then the repo's own check, and it has no review stage, so a chore costs one worker run. Its scope is the whole repo except the deny paths. Merge policy ([module 13](13-delivery.md)) decides whether a chore auto-merges.
+
+```yaml
+name: chore
+type: chore
+sink: pull_request
+policy: {write: true, deny_paths: [".github/**"]}
+stages:
+  - id: implement
+    tasks: [{id: change, skill: implement, scope: ["**"], helpers: {mode: off}, out: change.json}]
+    gate: [{check: scope-diff}, {check: lint-clean}]
+    on_fail: {goto: implement, max: 2}
+  - id: verify
+    needs: [implement]
+    tasks: [{id: check, cmd: [scripts/check], out: check.log}]
+    on_fail: {goto: implement, max: 2}
+```
 
 **Research workflow**
 
@@ -217,6 +241,8 @@ def validate_workflow(wf: Workflow, cfg: Config) -> list[Problem]
     """schema, needs cycles, overlapping parallel write scopes, unknown skill or check,
     unknown goto target, shared_files owners exist."""
 def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]   # validated like static tasks
+    """artifact is a JSON array with one task object per item. Each item must match the workflow schema's task form,
+    and the list must pass the checks of a static stage (needs, cycles, overlapping scopes). `task_template` is phase 1b."""
 def expand_helpers(task: TaskSpec, subagents: Literal["native", "none"]) -> list[TaskSpec]
     """native: [task]; none or mode off: one sibling task per split hint."""
 # plugins.py
