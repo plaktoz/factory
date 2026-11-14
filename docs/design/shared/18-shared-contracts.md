@@ -73,6 +73,7 @@ class FactoryError(Exception):
 These 21 types, `ErrorKind` above and the 20 below, are used by two or more modules, or appear in a field of a shared type. Their shapes were accepted on 2026-11-14 (decision R1, see [open decisions](../../reviews/open-decisions.md)), so every module in waves 1 to 3 and every wave 0 fake codes to one shape. A change to one of them is made in this section and in every module in its **Used by** cell, in the same commit.
 
 ```python
+# types.py
 class Clock(Protocol):
     def now(self) -> datetime: ...
     def sleep(self, seconds: float) -> None: ...
