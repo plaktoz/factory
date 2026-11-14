@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Decisions before wave 0</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--mute:#666660;--line:#dcdcd6;--accent:#2b5fd9;--accent-bg:#e8eefc;--pro:#1b7a3e;--con:#b3261e;--rec:#8a5a00;--rec-bg:#fdf1d6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f2c260;--rec-bg:#3a2f12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 120px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.card h2{font-size:17px;margin:0 0 2px}
+.tag{font-size:12px;color:var(--mute);margin:0 0 10px}
+.ctx{margin:0 0 12px}
+.ctx b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.opts{display:grid;gap:8px}
+label.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+label.opt:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}
+label.opt input{margin-right:8px}
+.name{font-weight:600}
+.rec{font-size:11px;font-weight:600;color:var(--rec);background:var(--rec-bg);border-radius:4px;padding:1px 6px;margin-left:6px}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 0 24px;font-size:13px}
+@media(max-width:560px){.pc{grid-template-columns:1fr;margin-left:0}}
+.pc ul{margin:0;padding-left:16px}
+.pro li::marker{color:var(--pro)} .con li::marker{color:var(--con)}
+.why{font-size:13px;color:var(--mute);margin:10px 0 0}
+textarea{width:100%;min-height:54px;margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
+button{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+#out{display:none;margin-top:24px}
+#out textarea{min-height:320px;font:13px/1.45 ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1 id="h1"></h1>
+<p class="sub" id="intro"></p>
+<div id="list"></div>
+<section id="out" class="card">
+  <h2>Prompt</h2>
+  <p class="tag">Copy this and paste it into the Claude Code session.</p>
+  <textarea id="prompt" readonly></textarea>
+</section>
+</main>
+<div class="bar">
+  <span id="count"></span>
+  <button id="gen">Generate prompt</button>
+  <button id="copy" class="alt">Copy</button>
+  <button id="reset" class="alt">Reset to recommended</button>
+</div>
+<script id="data" type="application/json">{"title": "Decisions before wave 0", "intro": "The pilot decisions P1 to P4 are applied. Four calls remain before the contracts are frozen and wave 0 starts. Settled by checks and not asked: the Python 3.10 floor (uv ran 3.10.22) and the log-size default of 50 MB.", "target": "docs/design/shared/18-shared-contracts.md, modules 3, 16 and 17, and docs/reviews/phase-1-decisions.md (D7)", "storage_key": "open-decisions-v1", "decisions": [{"id": "R1", "title": "Which shared types wave 0 freezes", "ref": "Section 18; docs/reviews/ready-for-development.md, gap G1", "context": "47 names used in signatures are defined nowhere. 15 of them cross a module boundary (GateSpec and GateContext are used by seven modules), and 5 more shared types appear only in field lists. A type that two modules build to different shapes fails when they meet.", "options": [{"id": "freeze-shared", "name": "Freeze the 20 shared types now, with the shapes proposed in the review, and put them in section 18", "recommended": true, "pros": ["Every module in waves 1 to 3 codes to one shape", "The shapes come from how callers already use each type, and the contract tests (W0.6) check them", "The fakes can be written in wave 0"], "cons": ["Some shapes may be wrong until a module uses them; a change then touches every caller", "About 28 module-local types still wait for their own wave"]}, {"id": "freeze-core", "name": "Freeze only the types section 18 already lists, plus Clock; each module defines the rest in its own wave", "pros": ["Less written before any code exists", "Each owner shapes its own types with its tests in hand"], "cons": ["The gap review shows the cross-module types (GateContext, PrRef, JoinResult) are the ones that mismatch", "The fakes in wave 0 need those types, so they would be written against guesses"]}], "why": "The types that cross modules are exactly where parallel builds fail, so fixing them first costs less than reconciling them later."}, {"id": "R2", "title": "One configuration type or two", "ref": "Module 3 `load_config`; module 16 `tick`", "context": "Module 3 defines `load_config(repo) -> Config` and merges machine and repo files into it. Module 16 calls `tick(cfg: MachineConfig, ...)`, and no module defines `MachineConfig`. `tick` runs with no repo, so `repo=None` is already allowed.", "options": [{"id": "one-config", "name": "One Config with a machine part and a repo part; `tick` takes a Config loaded with repo=None", "recommended": true, "pros": ["No new type or loader", "Precedence (flag, env, machine, repo, default) stays in one place", "Matches module 3 as written; only module 16's signature changes"], "cons": ["A function that needs only machine settings can still be handed repo fields"]}, {"id": "two-configs", "name": "Keep MachineConfig as its own type, with `load_machine_config` added to module 3", "pros": ["The type says which settings a function may read", "`tick` cannot read a repo setting by mistake"], "cons": ["A second loader, schema and set of tests", "Functions that need both take two arguments"]}], "why": "Module 3 already merges both files into one Config, so one type needs no new code."}, {"id": "R3", "title": "Where the repo's worktree comparison comes from", "ref": "Module 17 `cleanup_check`; the pilot repo's AGENTS.md, section 3", "context": "The pilot repo's rule is to compare each changed file with the committed or merged file before a forced removal. It has no script that does this. With `cleanup_check` unset, every worktree that is not clean is skipped and reported, so they pile up until someone clears them. Untracked and ignored files have no committed copy to compare with.", "options": [{"id": "repo-script", "name": "The repo supplies the comparison as a command and sets `cleanup_check`; the spec stays as written", "recommended": true, "pros": ["The rule lives with the repo that owns it", "No engine code that guesses what the rule means", "Other repos with other rules use the same key"], "cons": ["The pilot skips every worktree that is not clean until it adds the script", "Needs a change in the pilot repo, which you own"]}, {"id": "builtin-compare", "name": "The factory ships a built-in comparison that checks changed tracked files against the run branch", "pros": ["Works in the pilot at once", "One implementation shared by every repo"], "cons": ["The engine decides what 'safe to remove' means, which is the repo's rule to set", "It can only report untracked and ignored files, not judge them"]}, {"id": "never-force", "name": "No check at all: a worktree that is not clean is always kept, and you clear it by hand with `factory gc`", "pros": ["Nothing is removed that was not compared by a person", "No new key or code"], "cons": ["Drops the P2 decision you already took", "Leftover worktrees and branches grow with every dirty run"]}], "why": "P2 made the repo's comparison the gate, so the repo should provide it."}, {"id": "D7", "title": "Worker isolation: how to stop a worker reading secrets", "ref": "Decision D7; module 9 threat model and isolation", "context": "D7 accepted a tool allowlist, a scrubbed environment and denied reads, with no OS sandbox (the spec says so in module 9 and the phase split). A canary test showed a Read deny rule blocks only the Read tool, and an allowed `python3` read the file anyway. Tested on macOS with Claude Code 2.1.325: its own sandbox setting (`sandbox.filesystem.denyRead`, `allowWrite`) blocked that read, and writes worked only in the worktree and the task folder. That setting runs each Bash command under `sandbox-exec` (seen in the process list), which the man page marks DEPRECATED; the binary also names `bwrap` for Linux. Not tested: Linux, and an OAuth login.", "options": [{"id": "claude-sandbox", "name": "Turn on Claude Code's own sandbox setting for every worker, with denied reads for secrets and writes only to the worktree and `$FACTORY_TASK_DIR`; `doctor` runs the canary each time", "recommended": true, "pros": ["Tested: it blocks the interpreter read that beat the deny rule", "Tested: writes to the worktree and task folder work; other paths are blocked", "Anthropic keeps the sandbox profile, and the engine adds no wrapper code"], "cons": ["Claude only; a second harness in phase 2 needs its own boundary", "On macOS it rests on `sandbox-exec`, which is marked DEPRECATED, so a future macOS can break it; `doctor` must prove it on each machine", "The setting names can change between releases; Linux is not tested here"]}, {"id": "own-sandbox", "name": "The factory wraps each worker itself: `sandbox-exec` on macOS and `bubblewrap` on Linux", "pros": ["Same boundary for any harness, including Codex later", "Tested on macOS: blocks both `python3` and `cat` reads of a denied file", "The factory owns the profile, so a harness update cannot loosen it"], "cons": ["Same deprecated `sandbox-exec` on macOS, and the factory must maintain the profile", "Two code paths to build and test, and `bubblewrap` is not tested here", "More engine code in phase 1a"]}, {"id": "keep-d7", "name": "Keep D7 as accepted: allowlist and scrubbed environment only, with the open interpreter route reported by `doctor`", "pros": ["No new code", "Residual risk is already stated in module 9"], "cons": ["Tested: an allowed interpreter reads a denied file", "A task allowed an interpreter can read your other secrets"]}], "why": "It is the only option tested to close the gap without engine code, and both sandbox options rest on the same macOS mechanism, so the choice is who maintains it."}]}</script>
+<script>
+const P=JSON.parse(document.getElementById("data").textContent), D=P.decisions;
+const KEY="decision-page:"+P.storage_key;
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function recOf(d){return d.options.find(o=>o.recommended).id}
+document.getElementById("h1").textContent=P.title;
+document.getElementById("intro").innerHTML=esc(P.intro)+" Spec: <code>"+esc(P.target)+"</code>. Recommended options are preselected. Pick one per card, add a question if you are unsure, then press <b>Generate prompt</b> and paste it back into Claude Code.";
+const list=document.getElementById("list");
+D.forEach(d=>{
+  const cur=(state[d.id]&&state[d.id].choice)||recOf(d);
+  const el=document.createElement("section");el.className="card";
+  el.innerHTML=
+   `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`+
+   `<div class="opts">`+d.options.map(o=>
+     `<label class="opt"><input type="radio" name="${esc(d.id)}" value="${esc(o.id)}" ${o.id===cur?"checked":""}>`+
+     `<span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">Recommended</span>':""}`+
+     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div></label>`).join("")+
+   `<label class="opt"><input type="radio" name="${esc(d.id)}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
+   `<p class="why">Why recommended: ${esc(d.why)}</p>`+
+   `<textarea data-q="${esc(d.id)}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;
+  list.appendChild(el);
+});
+list.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.type==="radio"){state[t.name]=Object.assign(state[t.name]||{},{choice:t.value})}
+  else if(t.dataset.q){state[t.dataset.q]=Object.assign(state[t.dataset.q]||{},{note:t.value})}
+  save();
+});
+function build(){
+  const lines=["Decisions on "+P.target+" (from the decision page \""+P.title+"\").","Apply each choice, update everything it touches, and keep related sections consistent. Where I asked a question, answer it and wait for me before applying that item.",""];
+  let unsure=0;
+  D.forEach(d=>{
+    const s=state[d.id]||{};const ch=s.choice||recOf(d);const note=(s.note||"").trim();
+    if(ch==="unsure"){unsure++;lines.push(`${d.id} ${d.title}: NOT SURE.`+(note?` Question: ${note}`:" (no question written)"))}
+    else{const o=d.options.find(x=>x.id===ch);
+      lines.push(`${d.id} ${d.title}: ${o.name} [${o.id}]`+(o.recommended?" (recommended)":" (not the recommendation)")+(note?`. Note: ${note}`:""))}
+  });
+  document.getElementById("count").textContent=`${D.length} decisions, ${unsure} unsure`;
+  return lines.join("\n");
+}
+const out=document.getElementById("out"),ta=document.getElementById("prompt");
+document.getElementById("gen").onclick=()=>{ta.value=build();out.style.display="block";out.scrollIntoView({behavior:"smooth"})};
+document.getElementById("copy").onclick=async()=>{
+  ta.value=build();out.style.display="block";
+  try{await navigator.clipboard.writeText(ta.value);flash("Copied")}catch(e){ta.select();flash(document.execCommand&&document.execCommand("copy")?"Copied":"Select and copy")}
+};
+document.getElementById("reset").onclick=()=>{state={};save();location.reload()};
+function flash(m){const b=document.getElementById("copy");const t=b.textContent;b.textContent=m;setTimeout(()=>b.textContent=t,1200)}
+document.getElementById("count").textContent=`${D.length} decisions`;
+</script>
+</body>
+</html>
