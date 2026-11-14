@@ -1,0 +1,12 @@
+name: typescript
+detect: {any_file: [package.json]}
+files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+practices: own:practices/typescript
+variants:
+  npm:
+    when: {any_file: [package.json]}
+    format:       [npx, --no-install, prettier, --write]
+    format_check: [npx, --no-install, prettier, --check]
+    lint:         [npx, --no-install, eslint]
+    test:         [npm, test]
+    build:        [npm, run, build]

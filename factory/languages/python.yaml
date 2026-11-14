@@ -1,0 +1,12 @@
+name: python
+detect: {any_file: [pyproject.toml]}
+files: ["**/*.py"]
+practices: own:practices/python
+variants:
+  ruff:
+    when: {file: pyproject.toml}
+    format:       [ruff, format]
+    format_check: [ruff, format, --check]
+    lint:         [ruff, check]
+    test:         [pytest]
+    build:        []

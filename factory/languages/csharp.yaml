@@ -1,0 +1,12 @@
+name: csharp
+detect: {any_file: ["*.csproj"]}
+files: ["**/*.cs"]
+practices: own:practices/csharp
+variants:
+  dotnet:
+    when: {any_file: ["*.csproj"]}
+    format:       [dotnet, format]
+    format_check: [dotnet, format, --verify-no-changes]
+    lint:         [dotnet, format, --verify-no-changes]
+    test:         [dotnet, test]
+    build:        [dotnet, build]
