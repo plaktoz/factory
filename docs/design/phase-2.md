@@ -12,6 +12,7 @@ Items moved out of phase 1, with the design that was already written for them, s
 | P2-6 | React application support | 2026-11-14 | The 17A toolchain profile format, with a TypeScript and JavaScript profile detected by `package.json`; the practice-pack mechanism of module 10 |
 | P2-7 | Python application support | 2026-11-14 | The 17A toolchain profile format, with a Python profile detected by `pyproject.toml`; the practice-pack mechanism of module 10 |
 | P2-8 | Browser testing with Playwright, and UI diff | 2026-11-14 | The gate shape (`GateSpec`, `check`), the `run` step for the target app (P2-5 to P2-7), and the dashboard's Playwright tests in module 15 |
+| P2-9 | Explore evals for workers, skills and workflows | 2026-11-14 | Fake adapters and recorded results for every module; the `helpers off` fallback that gives the same gate evidence; token and model records in `usage.jsonl` |
 
 Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-split) table of the main spec. Phase 2 is after phase 1b.
 
@@ -249,3 +250,50 @@ Rules that apply to all three entries:
 **Sources**
 
 - [Playwright visual comparisons](https://playwright.dev/docs/test-snapshots): `toHaveScreenshot`, `maxDiffPixels` and `maxDiffPixelRatio`.
+
+## Evals: P2-9
+
+### P2-9 Explore the use of evals
+
+**What this is.** An exploration, not a build. The question is whether evals (a set of cases, each with a prompt and graders that score what a worker or skill produced) would tell the factory something its gates and tests cannot: how well an LLM worker does a task, and whether a change to a skill, a prompt or a model makes it better or worse. Phase 1 tests the engine with fakes and checks each run with gates. Neither measures worker quality over many runs.
+
+**Two meanings of "eval", kept apart.**
+
+| Meaning | In scope for this item | Why |
+| --- | --- | --- |
+| Evals as scored tests of LLM behavior (cases, graders, scores) | Yes | This is the exploration |
+| `eval()`, running a string as code | No, and the factory must not use it | The spec uses argument lists with no shell (module 3), a safe YAML loader (module 3) and checks that run in a separate process (module 5). Dynamic code from a request, an issue body or a worker would bypass all three |
+
+**What phase 1 keeps so this is cheap to add.**
+
+- Every worker adapter has a fake with scripted results ([module 9](modules/09-worker-adapters-and-governed-helpers.md)), so the engine can be tested without a model. Evals test the model side only.
+- `usage.jsonl` records the observed model, tokens and exit of each attempt ([module 14](modules/14-token-tracking.md)), so a score can be tied to a model and a cost.
+- A workflow must pass with helpers off before native helpers are switched on ([module 9](modules/09-worker-adapters-and-governed-helpers.md)), which gives a baseline to compare against.
+- Gate evidence has one shape per stage (`GateResult`), so a grader can read it like a gate does.
+
+**What is known** (checked 2026-11-14 on Claude Code 2.1.325):
+
+- Claude Code has `claude plugin eval`. It runs `case.yaml` files (or a `prompt.md` with `graders/*.md`) from an `evals/` folder against a plugin, and reports scored results.
+- It can run a no-plugin baseline arm and report the score difference (`--ablation with-without`), repeat each case (`--runs`, default 3), cap spend (`--max-cost-usd`) and write JSON (`--json`) or an HTML report (`--report`).
+- Grader model defaults to Haiku (`--judge-model`). Every run is a full `claude` child on your own credential, so runs share one rate limit.
+- By default it also publishes the HTML report to claude.ai when the account supports it. A factory use must switch that off (`--no-publish`), because a report holds prompts and outputs from a private repo.
+- It runs author-supplied scaffold scripts and real MCP servers only when asked (`--scaffold`, `--allow-real-servers`). They run as the user, outside the OS sandbox that confines shell tools.
+- Whether `claude plugin eval` can score the factory's own skills (`factory/skills/own/`) is Unspecified: the factory's skills are not packaged as a Claude Code plugin.
+
+**Questions to answer.**
+
+- [ ] What would a case be? A seeded request plus its expected gate result, or an artifact checked against a schema, or a rubric on a report. Unspecified.
+- [ ] Which workers and stages need scores first (for example `triage` classification, `root-cause`, `review-standards`)? Unspecified.
+- [ ] Are code-based graders (a schema check, a test that must pass) enough, or is an LLM judge needed? An LLM judge adds its own error and cost. Unspecified.
+- [ ] How to score a change: run the same cases with the old and the new skill, prompt or model, and compare. Where the baseline lives. Unspecified.
+- [ ] What it costs: `usage.jsonl` gives tokens per attempt, so a suite's cost can be estimated before it runs. Budget and cap. Unspecified.
+- [ ] Where results are stored, and whether they are committed. Results can contain private prompts, so the default is not to publish and not to commit. Unspecified.
+- [ ] Whether an eval runs in CI, on a schedule, or only on request. Unspecified.
+- [ ] Whether the existing tool (`claude plugin eval`) is enough, or the factory needs its own runner so evals also cover a future Codex adapter ([P2-1](#p2-1-codex-worker-adapter)). Unspecified.
+- [ ] How evals relate to the live smoke test (`FACTORY_LIVE=1`) and the pilot in [section 20](shared/20-dependencies-and-plan.md). Unspecified.
+
+**Deliverable.**
+
+- [ ] A short written finding, with a small trial: one case set for one stage, run through the chosen tool, with the score, the cost and a decision on whether to build evals into the factory. The trial must use `--no-publish` and sandboxed tools only.
+
+**Not decided here.** The format of a case, the graders, the runner and the storage. Nothing in phase 1 changes.
