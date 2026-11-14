@@ -382,3 +382,87 @@ def test_the_engine_pushes_only_the_run_branch_and_nothing_else_reaches_the_remo
     assert gitops.join(rw, [t], regenerate=[], join_cmd=None).ok
     gitops.push(rw, "run-1")
     assert sorted(r for r in ls_remote(repo) if r != "HEAD") == ["refs/heads/main", "refs/heads/run-1"]
+
+
+# ---------------- hook retry ----------------
+
+def _install_hook(worktree, script):
+    hooks = Path(run(worktree, "rev-parse", "--path-format=absolute", "--git-path", "hooks"))
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-commit").write_text(script)
+    (hooks / "pre-commit").chmod(0o755)
+
+
+def test_a_hook_that_edits_files_is_retried_once_with_its_changes_staged(repo, cfg):
+    rw = start_run(repo, cfg)
+    a = make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    # a formatter-style hook: it edits the file and fails the first time; on the second commit the edit is staged
+    _install_hook(rw, "#!/bin/sh\nif ! grep -q formatted services/api.py; then echo '# formatted' >> services/api.py; exit 1; fi\nexit 0\n")
+    r = gitops.join(rw, [a], regenerate=[], join_cmd=None)
+    assert r.ok and not r.hook_failed and len(r.commits) == 1
+    assert "# formatted" in run(rw, "show", "HEAD:services/api.py")  # the hook's edit is in the commit
+
+
+def test_a_second_hook_failure_is_returned_as_hook_failed(repo, cfg):
+    rw = start_run(repo, cfg)
+    a = make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    _install_hook(rw, "#!/bin/sh\necho '# touched' >> services/api.py\nexit 1\n")  # edits and fails every time
+    before = run(rw, "rev-parse", "HEAD")
+    r = gitops.join(rw, [a], regenerate=[], join_cmd=None)
+    assert not r.ok and r.hook_failed
+    assert run(rw, "rev-parse", "HEAD") == before and run(rw, "status", "--porcelain") == ""
+
+
+# ---------------- chained branches and rework resets ----------------
+
+def test_chained_task_branches_are_deleted_after_the_join_dependents_first(repo, cfg):
+    rw = start_run(repo, cfg)
+    a = make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    b = make_task(repo, cfg, "run-1", "b", {"web/app.js": "y = 'b'\n"}, bases=["run-1--a"])
+    c = make_task(repo, cfg, "run-1", "c", {"services/new.py": "z = 'c'\n"}, bases=["run-1--b"])
+    assert gitops.join(rw, [a, b, c], regenerate=[], join_cmd=None).ok
+    deleted = gitops.delete_chained_branches(repo, "run-1", {"a": [], "b": ["a"], "c": ["b"]})
+    assert deleted == ["run-1--c", "run-1--b", "run-1--a"]  # dependents first
+    assert run(repo, "branch", "--list", "run-1--*") == ""
+    assert run(rw, "rev-list", "--count", "main..HEAD") == "3"  # the join commits are untouched
+
+
+def test_deleting_in_the_wrong_order_would_be_seen(repo, cfg):
+    """The order is computed from needs, not from the order the dict was written in."""
+    start_run(repo, cfg)
+    for t, bases in (("a", ["run-1"]), ("b", ["run-1--a"])):
+        make_task(repo, cfg, "run-1", t, {f"web/{t}.js": t}, bases=bases)
+    assert gitops.delete_chained_branches(repo, "run-1", {"a": [], "b": ["a"]}) == ["run-1--b", "run-1--a"]
+    assert gitops.delete_chained_branches(repo, "run-1", {"b": ["a"], "a": []}) == []  # already gone; no error
+
+
+def test_a_reworked_task_resets_and_recreates_the_tasks_that_need_it(repo, cfg):
+    start_run(repo, cfg)
+    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    make_task(repo, cfg, "run-1", "b", {"web/only_b.js": "b's own work\n"}, bases=["run-1--a"])
+    make_task(repo, cfg, "run-1", "c", {"web/c.js": "c"}, bases=["run-1--b"])
+    # a is reworked: it gets a new change on its branch
+    tw_a = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--a"
+    (tw_a / "services" / "api.py").write_text("x = 'a, reworked'\n")
+    gitops.checkpoint(tw_a, "a", 2)
+    needs = {"a": [], "b": ["a"], "c": ["b"]}
+    recreated = gitops.reset_dependents(repo, cfg, "run-1", "a", needs)
+    assert recreated == ["b", "c"]  # dependencies first; a itself is not touched
+    tw_b = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--b"
+    assert (tw_b / "services" / "api.py").read_text() == "x = 'a, reworked'\n"  # b sees a's NEW branch
+    assert not (tw_b / "web" / "only_b.js").exists()  # b's own old work (a file only b created) was reset
+    assert run(tw_a, "rev-parse", "HEAD") == run(repo, "rev-parse", "run-1--a")  # a untouched
+
+
+def test_a_task_that_does_not_need_the_reworked_one_is_left_alone(repo, cfg):
+    start_run(repo, cfg)
+    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    make_task(repo, cfg, "run-1", "d", {"web/d.js": "d"})
+    before = run(repo, "rev-parse", "run-1--d")
+    assert gitops.reset_dependents(repo, cfg, "run-1", "a", {"a": [], "d": []}) == []
+    assert run(repo, "rev-parse", "run-1--d") == before
+
+
+def test_a_cycle_in_needs_is_refused(repo, cfg):
+    with pytest.raises(FactoryError, match="cycle"):
+        gitops.delete_chained_branches(repo, "run-1", {"a": ["b"], "b": ["a"]})
