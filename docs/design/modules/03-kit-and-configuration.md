@@ -33,7 +33,7 @@ factory/                    the kit: replaced whole on update, never edited
   overrides/                skill overrides and stages.map additions
 
 .factory/                   in the repo, git-ignored except config/
-  .gitignore                "*", "!config/", "!.gitignore"
+  .gitignore                "*", "!config/", "!config/**", "!.gitignore"
   inbox/                    markdown requests waiting for intake
 
 ~/.factory/                 the factory home ($FACTORY_HOME), one per machine user
@@ -52,7 +52,7 @@ factory/                    the kit: replaced whole on update, never edited
   logs/                     tick and dashboard logs
 ```
 
-`.factory/.gitignore` ignores everything except `config/`, so the factory never edits the repo's own `.gitignore`.
+`.factory/.gitignore` ignores everything except `config/`, so the factory never edits the repo's own `.gitignore`. It needs `!config/**` as well as `!config/`: `*` also matches the files inside `config/`, and `!config/` alone re-includes only the folder, so git tracked none of its files (found in wave 1, 2026-11-14, with `git add --dry-run`).
 
 **YAML is read with YAML 1.2 booleans** (found in wave 0, 2026-11-14). A plain `yaml.safe_load` reads `off`, `on`, `yes` and `no` as booleans, so `helpers: {mode: off}` becomes `False` and a plugin hook key `on:` becomes `True`. Both appear in the spec's own examples ([module 5](05-workflows-and-plugins.md)). Every YAML file the factory reads (config, workflows, plugins, decision files) goes through one safe loader in `config.py` that treats only `true` and `false` as booleans. The loader is a subclass of `SafeLoader` and never runs code. Test: the spec's own examples load with `mode == "off"`.
 
