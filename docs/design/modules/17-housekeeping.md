@@ -59,6 +59,12 @@ def cleanup_after_join(repo: Path, cfg: Config, run: Run, task_ids: list[str]) -
 def cleanup_after_merge(repo: Path, cfg: Config, run: Run) -> None                       # called by 6B or tick
 ```
 
+- **Choices the code makes where this file is silent:**
+  - A run ended when its last event, other than `archived`, was written. Retention and `cleanup_check` are read from each run's own repo.
+  - A failed or aborted run keeps its worktrees `keep_failed_days`, and its run folder is archived after `archive_after_days`.
+  - `gc` has no pull request state, so a done run's worktree is due with its archive. `cleanup_after_merge` removes it sooner.
+  - When the repo is gone, git cannot check or remove a worktree, so it stays and is reported.
+  - A joined task whose worktree is still not clean is reported while its run is active, and nothing else of an active run is touched.
 - **Run and test:** `pytest factory/engine/tests/housekeeping` with `FakeClock`; `factory gc --json`.
 - **Errors:** a worktree that is not clean and fails `cleanup_check` is skipped and reported (`GcReport.skipped` holds the path, the reason and the check output); a failed delete is reported and the rest continues; an archive is verified before the run folder is removed.
 
