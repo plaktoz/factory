@@ -50,6 +50,13 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     ),
     "sandbox.srt_missing": CatalogueEntry("fail_fast", "srt is not installed; give the install command"),
     "sandbox.node_old": CatalogueEntry("fail_fast", "Node is older than 22.12, which srt needs"),
+    "git.network": CatalogueEntry("transient", "A GitHub or network call failed on a rate limit, a timeout or a lost connection; retry with backoff"),
+    "git.index_locked": CatalogueEntry("transient", "index.lock is held by another git process; retry"),
+    "git.push_rejected": CatalogueEntry("human", "The push was rejected after one base sync and one retry; show the rejection"),
+    "git.auth_expired": CatalogueEntry("human", "GitHub login has expired; run gh auth login"),
+    "git.command_failed": CatalogueEntry("task_retry", "A git command failed and matches no other git code; the message holds git's stderr"),
+    "git.path_exists": CatalogueEntry("fail_fast", "A worktree or branch path already exists; name the path"),
+    "git.worktree_dirty": CatalogueEntry("human", "A worktree with changes was not removed; show the files"),
     "sandbox.canary_open": CatalogueEntry(
         "human", "doctor found a read or write route that is not blocked; name the route"
     ),

@@ -208,6 +208,13 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `config.invalid` | `fail_fast` | Name the file, the line and the form to write |
 | `state.locked` | `fail_fast` | Another engine holds the run; exit 5 |
 | `git.hook_failed` | `human` | Show the hook output |
+| `git.network` | `transient` | A GitHub or network call failed on a rate limit, a timeout or a lost connection; retry with backoff (module 7) |
+| `git.index_locked` | `transient` | `index.lock` is held by another git process; retry with backoff (module 7) |
+| `git.push_rejected` | `human` | A push was rejected after one base sync and one retry; show the rejection (module 7) |
+| `git.auth_expired` | `human` | GitHub login has expired; run `gh auth login` (module 7) |
+| `git.path_exists` | `fail_fast` | A worktree or branch path already exists; name the path (module 7) |
+| `git.command_failed` | `task_retry` | A git command failed and matches no other git code; the message holds git's stderr. Not a catch-all for the codes above (module 7) |
+| `git.worktree_dirty` | `human` | A worktree with changes was not removed; show the files, and a removal only with force (module 7) |
 | `notes.task_finished` | `fail_fast` | A note for a finished task is refused |
 | `sandbox.unavailable` | `human` | The OS refused to start the sandbox (`sandbox_apply: Operation not permitted`, exit 71) |
 | `sandbox.settings_invalid` | `fail_fast` | The settings file parses but a field fails validation; name the field |
