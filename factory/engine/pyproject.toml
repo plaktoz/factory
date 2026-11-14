@@ -1,0 +1,23 @@
+[project]
+name = "factory-engine"
+version = "0.1.0"
+description = "Deterministic engine that turns a request into reviewed work, with LLM workers doing bounded tasks."
+# Python 3.10 is the floor (module 3, decision G9). Tests run on 3.10 and on the newest installed Python.
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6",
+    "jsonschema>=4",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["factory_engine"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
