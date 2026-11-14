@@ -164,7 +164,7 @@ Submitting with `status: question` routes the run back to the packet task with y
   - 3: `load_config` (notify, `dashboard_url`), `validate`
   - 6A: `append_event`, `read_run`
   - 7: `TrackerAdapter.set_status`
-- **Writes:** `decisions/<stage>.<n>.yaml` and `.html`; events `decision_*`, `attention_requested`, `attention_cleared`. It returns an `Outcome`; 6B decides the routing through 8, so this module never routes or starts an engine.
+- **Writes:** `decisions/<stage>.<n>.yaml` and `.html`; events `decision_*`, `attention_requested`, `attention_cleared`, and `attention_notified` (one per notification pass, with the channels that sent and failed, read by `due_reminders`). It returns an `Outcome`; 6B decides the routing through 8, so this module never routes or starts an engine.
 - **CLI it backs:** `decide`, `check`, `reopen`, `open`, `inbox`.
 
 ```python

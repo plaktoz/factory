@@ -58,6 +58,22 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     "git.command_failed": CatalogueEntry("task_retry", "A git command failed and matches no other git code; the message holds git's stderr"),
     "git.path_exists": CatalogueEntry("fail_fast", "A worktree or branch path already exists; name the path"),
     "git.worktree_dirty": CatalogueEntry("human", "A worktree with changes was not removed; show the files"),
+    "decision.not_requested": CatalogueEntry(
+        "fail_fast", "No decision file exists for this stage visit; the engine writes it when the stop begins"
+    ),
+    "decision.stale_packet": CatalogueEntry(
+        "fail_fast", "The packet changed since the page was built; reopen the decision page and answer the current packet"
+    ),
+    "decision.bad_choice": CatalogueEntry(
+        "fail_fast", "Name a decision id and one of its option ids from the packet, and answer every decision"
+    ),
+    "decision.locked": CatalogueEntry("fail_fast", "This decision is approved and locked; run factory reopen to change it"),
+    "decision.no_packet": CatalogueEntry(
+        "fail_fast", "This stop needs a packet from its skill (architect or classify); the engine has no template for it"
+    ),
+    "decision.render_failed": CatalogueEntry(
+        "fail_fast", "The decision page could not be written; the decision file is still usable, so run factory open again"
+    ),
     "sandbox.canary_open": CatalogueEntry(
         "human", "doctor found a read or write route that is not blocked; name the route"
     ),
