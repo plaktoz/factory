@@ -163,7 +163,7 @@ class UsageRecord:    run_id: str; task_id: str; stage: str; attempt: int; harne
 | `Signals` | 6, 7, 15 | The `behind_base, overlaps` comment in 7 |
 | `TaskBranch`, `JoinResult`, `SyncResult` | 6, 7, 8 | The comments on `join` and `sync_base` |
 | `TaskState` | 6, 8, 12 | `task.json`, `TaskStatus`, D12 and the restart cap |
-| `Event` | 6, 12, 15 | The `events.jsonl` catalogue in 6 |
+| `Event` | 6, 12, 15 | The `events.jsonl` catalogue in 6, including `run_snapshot` (decision E1) |
 | `CheckResult`, `Problem` | 3, 5, 9, 10, 16 | `doctor`, `validate_workflow`, `verify_lock` |
 | `UsageRecord` | 13, 14, 15, 16 | The `usage.jsonl` table in 14, with P4 |
 | `ErrorKind` | 8, 19 | The five handling types in [section 19](19-error-handling-types.md) |
