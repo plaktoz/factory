@@ -1,0 +1,92 @@
+# Task list
+
+The durable state of the work. A new session continues from this file alone: read **Resume here**, then the first task that is not `[x]`. Update a task's marker in the same step that finishes it, with the evidence.
+
+Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it was checked), `[-]` not done (say why).
+
+## Resume here
+
+Next: **W0.1**, when the owner says to start. Nothing blocks it. R1, R2, R3, D7 and Q1 to Q4 are decided and applied (`docs/reviews/open-decisions.md`). Q5 does not block wave 0.
+
+Pending owner request, before or alongside W0.1: (1) drop OAuth, state "key or gateway token only", and keep Linux as a pre-pilot check: **done** (module 9 Login and Linux note; `open-decisions.md`, Round 3, item 1); (2) drop `sandbox-exec` only if no alternative exists and it is not a project requirement: **done, kept** (`open-decisions.md`, Round 3); (3) use Node 26, not Node 25 (owner's choice): **done**, tested on Node 26.13.0 (`open-decisions.md`, Round 3); (4) define a distinct `failIfUnavailable` error code for each failure type: **done** (section 18 `sandbox.*` rows; module 9 criteria; tests in `open-decisions.md`, Round 3, item 4); (5) explain and decide G2, G3 and G9: **G3 and G9 done**; **G2 open** (a wave-by-wave fix, names listed in `open-decisions.md`, Round 3, item 5). Decide at the recommendation (rule in `.claude/skills/decision-page/SKILL.md`, step 1). Build a page only for what is left.
+
+Why the design phase was slow, and the fixes: `docs/reviews/design-phase-constraint.md`. Still Unspecified: the owner's "fixed" criteria "both 2 and 3".
+
+## Rules from the owner
+
+- Phase 1 first. Phase 2 (Codex, Windows, comment answers) is not built and not extended.
+- Do not ask for confirmation when a result can be checked with evidence. Check it.
+- Keep the docs readable by people: a diagram or flow for each changed behavior.
+- After a review decision is made, apply it to the specs, then clean up the files.
+- No commits unless the owner asks. Nothing is committed since `025907f`.
+- Follow D1 to D14. D7 changed on 2026-11-14 to Claude Code's sandbox. Linux is a pre-pilot check and OAuth login is out of scope (phase 1 uses a key or gateway token).
+- Autonomy (owner, 2026-11-14): run every wave to the end with test evidence and no questions. A checkpoint is a commit, push and merge, done without asking. An issue gets at most 3 passes; after that it is recorded in the Log as blocked and the work goes on. The owner returns after the last wave to test by hand, using a tutorial that covers a new project, the dashboard, and fixing an issue in an existing project.
+
+## A. Apply the pilot decisions P1 to P4
+
+Source: `docs/reviews/pilot-repo-decisions.json`. All four took the recommended option. None contained a question.
+
+| # | Decision | Applied as |
+| --- | --- | --- |
+| P1 | Checkpoints on a local task branch, never pushed; only the join commit is pushed | Checkpoints are always local; no config key (turning them off would break D12 recovery and note delivery). Owner accepts by running `factory init` |
+| P2 | Cleanup runs the repo's comparison first, and skips removal when it fails | Repo config `cleanup_check` (an argument list); a failed check skips and reports |
+| P3 | Pilot starts in phase 1a with one chore or bug-fix issue and a human merge, then feature work in 1b | Phase split table and the integration tests |
+| P4 | Leave `model` unset; store the model the harness result reports | `modelUsage` keys of the JSON result (checked below) |
+
+Evidence for P4 (checked on Claude Code 2.1.325, `-p --output-format json`): the result has no `model` key. It has `modelUsage`, keyed by the model name the gateway returned, with token counts per key. A run with subagents can have several keys, so the record holds a list.
+
+- [x] **S1. Module 7 (P1).** Commit-authority rule, flow diagram, 3 criteria. Checked: diagram parses, links resolve.
+- [x] **S2. Module 3.** `cleanup_check` in the example, Repo rules table and diagram, 2 criteria. Left for W0.4: the `factory.yaml` and `merge-policy` JSON Schemas (gap G8).
+- [x] **S3. Module 17 (P2).** Flow diagram, safety rules, 3 new criteria, table and error text made consistent. Checked: diagram parses.
+- [x] **S4. Modules 9 and 14 (P4).** `model` optional, no flag when unset, `models_observed`, `UsageRecord` fields, reports by observed model, 4 criteria; 15, 16, phase-1 wording updated. Evidence: real `claude -p` call, `modelUsage` keys.
+- [x] **S5. Module 13.** `auto.workflows: []` rule, decision diagram, 1 criterion.
+- [x] **S6. Phase split and plan (P3).** Pilot row in the phase split; pilot live test in the integration list.
+- [x] **S7. Walkthrough.** Cleanup step says removal waits for the check. No glossary entry added: the term is defined where used, in modules 3 and 17.
+- [x] **S8. Decision log.** "Pilot repo decisions (P1 to P4)" added with evidence and one open point (no repo comparison script yet).
+- [x] **S9. Phase 2 file.** P2-4 is now a pointer table; the open and add-back blocks are removed. P2-1 to P2-3 untouched.
+
+## B. Checks (run before any task above is marked `[x]`)
+
+- [x] **V1. Diagrams.** 10 diagrams parse with Mermaid; a deliberately broken one fails. Script: `/tmp/factory-review/mmd.mjs` (uses the install in `/private/tmp/mmd.q03wQ4`).
+- [x] **V2. Links.** 124 links, 0 broken; a planted break is caught. Script: `/tmp/factory-review/links.py`.
+- [x] **V3. Consistency.** Scanned removal, model and checkpoint statements across `docs/design`; one loose label fixed, no contradictions left.
+
+## R. Readiness review (added 2026-11-14 at the owner's request)
+
+Report: `docs/reviews/ready-for-development.md`. Verdict: not ready until the shared type shapes are accepted.
+
+- [x] **R1. Run the checks.** Name check over 32 dependency edges, type check, events, config keys, error codes. Each script was shown to catch a planted fault. Fixed on the spot: 2 events, 3 config keys.
+- [x] **R2. Owner accepts or changes O1 to O4.** Accepted on 2026-11-14 as R1 and R2 on `open-decisions.html`. Applied: 20 shapes in section 18, `tick(cfg: Config)` in 16, `Config` parts and the `factory-config` and `merge-policy` schemas (G8) in 3, `Config` on module 17's cleanup calls. `ready-for-development.md` marked closed. Not done: the error-code catalogue (G3), left to each module's wave as the review proposes. Checked by `scripts/docs-check/`.
+
+## C. Clean up (after A and B)
+
+- [x] **C1.** Removed this session's scratch files (`/tmp/factory-probe`, `/tmp/pilot-agents.b64`, `/tmp/pilot-err.txt`, `/tmp/factory-review`). The three check scripts moved into `scripts/docs-check/` so a rerun does not depend on `/tmp`. `/tmp/factory-tools` is left until D7 is done (canary test).
+- [x] **C2.** `pilot-repo-decisions.json` and `.html` kept beside `phase-1-decisions.html`: the log names them as the source. `docs/README.md` already says a `*-decisions.json` is the source of its page.
+- [x] **C3.** `docs/tasks.md` is listed in `docs/README.md`; `scripts/docs-check/` is listed in `AGENTS.md`.
+
+## D. Follow-up decision page: D7 worker isolation
+
+- [x] **D7.** Decided on `open-decisions.html` (option `claude-sandbox`) and applied in module 9, the phase split and the decision log. Canary tests on 2026-11-14 are listed in `docs/reviews/open-decisions.md`. Still untested: Linux (a pre-pilot check). OAuth login is out of scope. The original plan for this task, kept for history: build `docs/reviews/worker-isolation-decisions.json` and its page with the `decision-page` skill. Facts for it: a Read deny rule blocks only the Read tool and an allowed `python3` read the file anyway; `sandbox-exec` is marked deprecated in its man page; macOS and Linux only (D6). Options to weigh: allowlist and scrubbed env only (today), a container or VM per worker, `sandbox-exec` on macOS with `bubblewrap` on Linux. Run the page's browser check. Do not claim any option works until a canary test shows it.
+- OAuth login is out of scope for phase 1; it is not claimed or tested.
+
+## E. Implementation: wave 0, phase 1a first
+
+Procedure: `AGENTS.md`, "Building one module". The spec is `docs/design/shared/18-shared-contracts.md` and `docs/design/shared/20-dependencies-and-plan.md`. Wave 0 is done when the shared types, the schemas, the error and exit codes, and the four fakes exist, and the contract tests pass. Starts only after R2, because the contracts must be frozen first.
+
+- [ ] **W0.1 Package skeleton.** `factory/engine/pyproject.toml`, `factory_engine/__init__.py`, test runner (`pytest` is not installed here; `uv` is). Python 3.15 is on this machine; the target version is not yet written in the spec, so state it in the file and in module 3.
+- [ ] **W0.2 `errors.py`.** `FactoryError` with `code`, `message`, `hint`, `kind`; the five handling kinds from section 19; exit-code constants from section 18.
+- [ ] **W0.3 `types.py`.** The shared types in section 18, plus `Workflow`, `Stage`, `TaskSpec`, `GateSpec`, `OnFail`.
+- [ ] **W0.4 Schemas.** `factory/schemas/*.schema.json` for the files module 3 lists; the dataclasses mirror them; a test checks both stay in step. `usage` carries the P4 `models` list.
+- [ ] **W0.5 Fakes.** `FakeClock`, `FakeWorkerAdapter`, `FakeTracker`, `FakePullRequests`, each with a test that shows it can script success and failure.
+- [ ] **W0.6 Contract tests.** `factory/engine/tests/contracts/` checks that public signatures match the spec's code blocks.
+- [ ] **W0.7 Wave 0 report.** Acceptance criteria of section 18 each tied to a passing test; the list of what is left for wave 1.
+
+Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
+
+## Log
+
+- 2026-11-14 (round 2): Q1 to Q4 applied. `srt` sandboxes gate and `cmd` commands, caches go under the task's `work/` folder, nine string commands are now lists, `RunSpec` is frozen (21 shared types). Q5 held with a question. Tested live, results in `open-decisions.md`.
+- 2026-11-14 (decisions before wave 0): R1, R2, R3 and D7 applied, all recommended options. R3 needed no spec change. D7 canary run live (sandbox blocks the `python3` read; writes only in the worktree and task folder). Two points held back for the owner: the `GateSpec.cmd` string form and `RunSpec`.
+
+- 2026-11-14 (later): S1 to S9, V1 to V3, R1 and C1 to C3 done and checked (10 diagrams parse, 124 links resolve). Readiness review written. Waiting on the owner for R2 (O1 to O4). Wave 0 not started on purpose: the review found 20 shared types with no definition.
+- 2026-11-14: a draft `checkpoints: off|local-branch` key was removed: it would let a repo switch off the checkpoints that D12 recovery needs. P1 to P4 received, all recommended. Owner said phase 2 is not needed now; phase 1 first. Pilot repo `AGENTS.md` read (section 3 is "Do the work"; the worktree rule is in it). P4 evidence taken from a real `claude -p` call. S1 edited.

@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Open items after the wave 0 decisions</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--mute:#666660;--line:#dcdcd6;--accent:#2b5fd9;--accent-bg:#e8eefc;--pro:#1b7a3e;--con:#b3261e;--rec:#8a5a00;--rec-bg:#fdf1d6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f2c260;--rec-bg:#3a2f12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 120px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.card h2{font-size:17px;margin:0 0 2px}
+.tag{font-size:12px;color:var(--mute);margin:0 0 10px}
+.ctx{margin:0 0 12px}
+.ctx b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.opts{display:grid;gap:8px}
+label.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+label.opt:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}
+label.opt input{margin-right:8px}
+.name{font-weight:600}
+.rec{font-size:11px;font-weight:600;color:var(--rec);background:var(--rec-bg);border-radius:4px;padding:1px 6px;margin-left:6px}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 0 24px;font-size:13px}
+@media(max-width:560px){.pc{grid-template-columns:1fr;margin-left:0}}
+.pc ul{margin:0;padding-left:16px}
+.pro li::marker{color:var(--pro)} .con li::marker{color:var(--con)}
+.why{font-size:13px;color:var(--mute);margin:10px 0 0}
+textarea{width:100%;min-height:54px;margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
+button{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+#out{display:none;margin-top:24px}
+#out textarea{min-height:320px;font:13px/1.45 ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1 id="h1"></h1>
+<p class="sub" id="intro"></p>
+<div id="list"></div>
+<section id="out" class="card">
+  <h2>Prompt</h2>
+  <p class="tag">Copy this and paste it into the Claude Code session.</p>
+  <textarea id="prompt" readonly></textarea>
+</section>
+</main>
+<div class="bar">
+  <span id="count"></span>
+  <button id="gen">Generate prompt</button>
+  <button id="copy" class="alt">Copy</button>
+  <button id="reset" class="alt">Reset to recommended</button>
+</div>
+<script id="data" type="application/json">{"title": "Open items after the wave 0 decisions", "intro": "R1, R2, R3 and D7 are applied. Tests this round closed the sandbox questions: cat, python3 and the Read tool are blocked; local and remote MCP servers (the real Tavily server, key from TAVILY_API_KEY) work with the sandbox on; allowedDomains lets a listed domain through; a sandbox that cannot apply fails the command. Five calls remain.", "target": "docs/design/shared/18-shared-contracts.md, modules 5, 8, 9, 7, 3 and docs/reviews/open-decisions.md", "storage_key": "open-items-v1", "decisions": [{"id": "Q1", "title": "Sandbox for gate commands and cmd tasks", "ref": "Module 8 run_gates; module 9 CommandAdapter; decision D7", "context": "D7 turns on Claude Code's sandbox, which covers only Claude workers. A gate such as `make build` and any `cmd` task runs through CommandAdapter as a plain subprocess, with the engine's full access to your files. Tested on macOS: Anthropic's standalone `srt` (@anthropic-ai/sandbox-runtime 0.0.83) denied a read, refused a write outside the worktree, allowed one inside it, and ran a piped command.", "options": [{"id": "srt-wrap", "name": "Run every cmd task and gate command under srt, with the same read and write rules as the workers", "recommended": true, "pros": ["Same boundary for workers and commands, built by Anthropic", "Tested: read denied, outside write refused, in-worktree write allowed", "The repo's own scripts cannot read the factory home"], "cons": ["One more dependency: an npm package, pinned at 0.0.83, that the kit must install and doctor must check", "Linux is not tested, and the macOS path rests on the deprecated sandbox-exec", "Build tools that write caches outside the worktree fail until listed (see Q2)"]}, {"id": "leave-open", "name": "Leave cmd tasks and gates unsandboxed and state it as residual risk", "recommended": false, "pros": ["No new dependency or code", "No cache-path problems for builds"], "cons": ["A gate command runs with full user access, so D7 protects workers but not the repo's own scripts", "A planted script in the repo can read the factory home"]}, {"id": "own-wrapper", "name": "Write the factory's own sandbox-exec and bubblewrap wrapper for commands", "recommended": false, "pros": ["The factory owns the profile"], "cons": ["Two code paths to build and test", "Duplicates what srt already does", "This was the option D7 declined"]}], "why": "srt is the same mechanism Claude uses, it passed the same canary, and it closes the one path D7 left open."}, {"id": "Q2", "title": "Where build caches go under the write boundary", "ref": "Module 9 write boundary; module 17A toolchains", "context": "Tested with the sandbox on: a write to ~/.npm failed with Operation not permitted, while a write inside the worktree worked. npm, Maven and Gradle write caches under your home folder, so a worker or gate that installs or builds fails unless the cache path is writable. Tested names: npm_config_cache works and npm_cache does nothing.", "options": [{"id": "cache-in-task-dir", "name": "Point each tool's cache at a folder under the task's work/ folder (npm_config_cache, MAVEN_OPTS, GRADLE_USER_HOME), set by the adapter", "recommended": true, "pros": ["The write boundary stays exactly two paths", "Nothing a worker writes persists outside the run", "No shared cache for one run to poison"], "cons": ["Each task downloads dependencies again, so builds are slower", "Each language profile in 17A needs its cache variable named", "Needs network access to the package registry for every task"]}, {"id": "shared-cache-dir", "name": "Add one factory cache folder, such as $FACTORY_HOME/cache, to allowWrite and point every tool at it", "recommended": false, "pros": ["Dependencies download once per machine", "Faster builds"], "cons": ["A third writable path, shared across runs and repos", "One run can write a bad package that a later run installs", "Breaks the 'writes only to the worktree and task folder' rule that D7 states"]}, {"id": "allow-home-caches", "name": "Add ~/.npm, ~/.m2 and ~/.gradle to allowWrite", "recommended": false, "pros": ["Tools work unchanged"], "cons": ["A worker can write into your own tool caches", "Breaks the D7 rule", "Cache poisoning reaches your own builds"]}], "why": "It keeps D7's two-path rule intact, and speed can be bought back later with a read-only shared cache."}, {"id": "Q3", "title": "String commands in gates and join_cmd", "ref": "Section 18 GateSpec.cmd; module 5 YAML; module 7 join_cmd", "context": "Section 18 freezes GateSpec.cmd as list[str] and module 3 requires argument lists with no shell. Seven commands in module 5's YAML and one in module 4 are strings (`cmd: \"make build\"`), and module 7 writes `join_cmd: \"npm install --package-lock-only\"`. That is nine, and none uses shell syntax such as a pipe or &&.", "options": [{"id": "lists-only", "name": "Rewrite the nine examples as argument lists and make a string an error at load", "recommended": true, "pros": ["Matches module 3's no-shell rule and the frozen type", "No parsing rule to document or get wrong", "The schema check catches the mistake before a run"], "cons": ["Slightly noisier YAML: [make, build] for make build", "Repos copying the examples must use lists"]}, {"id": "split-string", "name": "Accept a string and split it into words with shlex at load; still no shell", "recommended": false, "pros": ["The short form in the examples stays valid", "Still no shell is used"], "cons": ["A hidden rule: quotes and spaces in a path split in surprising ways", "The frozen type gains a second input form to test"]}, {"id": "string-is-shell", "name": "A string runs through the shell, a list does not", "recommended": false, "pros": ["Pipes and && work in a gate"], "cons": ["Contradicts module 3 and breaks Windows later", "Opens injection through request text that reaches a command"]}], "why": "Nine examples are cheap to fix now, and a list keeps one meaning for the frozen type."}, {"id": "Q4", "title": "RunSpec shape", "ref": "Section 18; module 5 TaskSpec and plugin manifest", "context": "TaskSpec has `run: RunSpec | None` and the readiness review lists RunSpec as undefined without proposing a shape. Module 5 shows two forms in the plugin manifest: `run: {script: \u003cpath>, args: [...]}` and `run: {python: \u003cmodule:function>}`.", "options": [{"id": "script-or-python", "name": "RunSpec has script: str | None, python: str | None, args: list[str]; exactly one of script and python is set", "recommended": true, "pros": ["Matches both forms module 5 already shows", "Small, and checkable by the schema", "The os: rule from module 5 applies to script only"], "cons": ["A third kind of task, such as a container, needs a new field"]}, {"id": "tagged-union", "name": "RunSpec is a tagged union with a kind field: script, python", "recommended": false, "pros": ["Adding a kind later is a new variant, not a new field"], "cons": ["Changes the YAML in module 5 to add kind: script", "More ceremony for two kinds"]}], "why": "It freezes exactly what the spec already writes and changes no example."}, {"id": "Q5", "title": "Linux and OAuth login: when to test", "ref": "Decision D6 and D7; module 9 isolation", "context": "Neither is tested. This machine is macOS with a gateway token. Linux needs bubblewrap, and Claude Code names it in the binary. An OAuth login needs a machine that has one. Both change whether D7 holds, and wave 0 does not need either.", "options": [{"id": "gate-at-1a-pilot", "name": "Test both before the phase 1a pilot run; the doctor canary fails on any machine where it does not pass", "recommended": true, "pros": ["Wave 0 starts now", "doctor already proves the boundary per machine, so an untested machine cannot silently run workers", "The pilot is the first run on the owner's real setup"], "cons": ["Linux support is claimed in D6 but unproven until then", "A surprise could change the module 9 text late"]}, {"id": "test-before-wave-0", "name": "Test both now, before wave 0", "recommended": false, "pros": ["No claim goes into code unproven"], "cons": ["Blocks wave 0 on machines and logins this session does not have", "Wave 0 touches neither"]}, {"id": "macos-only-1a", "name": "Declare phase 1a macOS only and move Linux to 1b", "recommended": false, "pros": ["Claims only what was tested"], "cons": ["Reopens D6, which stands", "Needs your sign-off on a scope change"]}], "why": "doctor makes an untested machine fail closed, so waiting costs nothing."}]}</script>
+<script>
+const P=JSON.parse(document.getElementById("data").textContent), D=P.decisions;
+const KEY="decision-page:"+P.storage_key;
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function recOf(d){return d.options.find(o=>o.recommended).id}
+document.getElementById("h1").textContent=P.title;
+document.getElementById("intro").innerHTML=esc(P.intro)+" Spec: <code>"+esc(P.target)+"</code>. Recommended options are preselected. Pick one per card, add a question if you are unsure, then press <b>Generate prompt</b> and paste it back into Claude Code.";
+const list=document.getElementById("list");
+D.forEach(d=>{
+  const cur=(state[d.id]&&state[d.id].choice)||recOf(d);
+  const el=document.createElement("section");el.className="card";
+  el.innerHTML=
+   `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`+
+   `<div class="opts">`+d.options.map(o=>
+     `<label class="opt"><input type="radio" name="${esc(d.id)}" value="${esc(o.id)}" ${o.id===cur?"checked":""}>`+
+     `<span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">Recommended</span>':""}`+
+     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div></label>`).join("")+
+   `<label class="opt"><input type="radio" name="${esc(d.id)}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
+   `<p class="why">Why recommended: ${esc(d.why)}</p>`+
+   `<textarea data-q="${esc(d.id)}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;
+  list.appendChild(el);
+});
+list.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.type==="radio"){state[t.name]=Object.assign(state[t.name]||{},{choice:t.value})}
+  else if(t.dataset.q){state[t.dataset.q]=Object.assign(state[t.dataset.q]||{},{note:t.value})}
+  save();
+});
+function build(){
+  const lines=["Decisions on "+P.target+" (from the decision page \""+P.title+"\").","Apply each choice, update everything it touches, and keep related sections consistent. Where I asked a question, answer it and wait for me before applying that item.",""];
+  let unsure=0;
+  D.forEach(d=>{
+    const s=state[d.id]||{};const ch=s.choice||recOf(d);const note=(s.note||"").trim();
+    if(ch==="unsure"){unsure++;lines.push(`${d.id} ${d.title}: NOT SURE.`+(note?` Question: ${note}`:" (no question written)"))}
+    else{const o=d.options.find(x=>x.id===ch);
+      lines.push(`${d.id} ${d.title}: ${o.name} [${o.id}]`+(o.recommended?" (recommended)":" (not the recommendation)")+(note?`. Note: ${note}`:""))}
+  });
+  document.getElementById("count").textContent=`${D.length} decisions, ${unsure} unsure`;
+  return lines.join("\n");
+}
+const out=document.getElementById("out"),ta=document.getElementById("prompt");
+document.getElementById("gen").onclick=()=>{ta.value=build();out.style.display="block";out.scrollIntoView({behavior:"smooth"})};
+document.getElementById("copy").onclick=async()=>{
+  ta.value=build();out.style.display="block";
+  try{await navigator.clipboard.writeText(ta.value);flash("Copied")}catch(e){ta.select();flash(document.execCommand&&document.execCommand("copy")?"Copied":"Select and copy")}
+};
+document.getElementById("reset").onclick=()=>{state={};save();location.reload()};
+function flash(m){const b=document.getElementById("copy");const t=b.textContent;b.textContent=m;setTimeout(()=>b.textContent=t,1200)}
+document.getElementById("count").textContent=`${D.length} decisions`;
+</script>
+</body>
+</html>

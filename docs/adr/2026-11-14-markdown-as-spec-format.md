@@ -4,7 +4,7 @@ Status: accepted, 2026-11-14
 
 ## Decision
 
-The phase 1 spec is `docs/design/phase-1.md`. There is no `.docx` copy, and none is kept in step.
+The phase 1 spec is `docs/design/phase-1.md` and the module files it links (see `2026-11-14-one-file-per-module.md`). There is no `.docx` copy, and none is kept in step.
 
 ## Why
 
