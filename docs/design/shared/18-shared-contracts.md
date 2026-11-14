@@ -49,7 +49,7 @@ class Run:         run_id: str; repo: str; repo_key: str; repo_path: Path; reque
                    branch: str | None; worktree: Path; status: RunStatus; stage: str | None
                    stages: list[StageState]; loops: dict[str, int]; attention: AttentionItem | None
                    pr: PrRef | None; signals: Signals | None; heartbeat: str
-                   kit_hash: str; infra_wait: InfraWait | None
+                   kit_hash: str; infra_wait: InfraWait | None; paths: dict[str, str]
 
 @dataclass
 class AttentionItem: kind: Literal["approval", "decision", "triage", "blocked", "merge_review", "request_changed"]

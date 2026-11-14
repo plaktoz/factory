@@ -196,7 +196,8 @@ The dashboard derives one more, `stale`, when a run's status is `running` but no
   "signals": null,
   "heartbeat": "2026-11-14T10:20:12+08:00",
   "kit_hash": "ab12cd",
-  "infra_wait": null
+  "infra_wait": null,
+  "paths": {"run_dir": "/home/me/.factory/runs/github.com/acme/payments-api/new-color-q1w2e", "repo": "/home/me/dev/payments-api", "worktree": "/home/me/dev/worktree/payments-api/new-color-q1w2e"}
 }
 ```
 

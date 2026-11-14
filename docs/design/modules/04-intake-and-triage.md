@@ -68,6 +68,15 @@ stages:
 - `factory watch` picks up a folder only after it has had no new files for 10 seconds, so a half-copied folder is not split.
 - Dedupe uses the folder path plus a hash of all its files.
 
+**Built behavior** (wave 2, where the rules above left a choice):
+
+- An invalid request gets the `factory:invalid` label (added to module 7's status labels) and a comment, or `factory_error` in the front matter. It is marked once; a later sync does not repeat it. The reason is also written to `$FACTORY_HOME/intake/<repo key>/events.jsonl` as `request_invalid`, because no run exists to hold the event. `request_duplicate` goes to the same log.
+- The body hash ignores the factory's own `factory_status`, `factory_run` and `factory_error` keys, so writing status into a markdown file never makes it look changed.
+- The duplicate check reads active runs and, for archived runs, the `request.json` inside each zip in `archive/<repo key>/`. `history.jsonl` holds no source ref, so it cannot answer the question.
+- A changed body on an active run is logged as `request_changed` once per new hash. The attention item is raised only when no engine holds the run lock; otherwise the engine owns the write.
+- `run.json` carries a `paths` block (`run_dir`, `repo`, `worktree`), added to the shared `Run` type. The branch is `null` until triage ends.
+- Keyword rules decide only when exactly one type matches; several matches or none leave `type: null` for the `classify` task.
+
 **Module contract: 4 Intake and triage**
 
 - **Depends on:**

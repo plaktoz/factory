@@ -6,7 +6,7 @@ Policy and Defaults take their fields from the workflow YAML in module 5; Config
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Literal, Protocol
@@ -180,6 +180,7 @@ class Run:
     heartbeat: str
     kit_hash: str
     infra_wait: InfraWait | None
+    paths: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

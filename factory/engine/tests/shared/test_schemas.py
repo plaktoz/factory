@@ -51,7 +51,9 @@ RUN = {"schema_version": 1, "run_id": "new-color-q1w2e", "repo": "payments-api",
        "stages": [{"id": "propose", "visit": 1, "status": "done", "tasks": ["plan"], "started": "t0", "ended": "t1"},
                   {"id": "fix", "visit": 1, "status": "running", "tasks": ["backend", "frontend"], "started": "t1", "ended": None}],
        "loops": {"verify->fix": 1}, "attention": None, "pr": None, "signals": None,
-       "heartbeat": "2026-11-14T10:20:12+08:00", "kit_hash": "ab12cd", "infra_wait": None}
+       "heartbeat": "2026-11-14T10:20:12+08:00", "kit_hash": "ab12cd", "infra_wait": None,
+       "paths": {"run_dir": "/h/runs/k/new-color-q1w2e", "repo": "/home/me/dev/payments-api",
+                 "worktree": "/home/me/dev/worktree/payments-api/new-color-q1w2e"}}
 TASK = {"schema_version": 1, "task_id": "backend", "stage": "fix", "status": "running", "attempt": 2, "restarts": 0,
         "task_base": "a1b2c3", "worktree": "/w/backend", "checkpoints": 3}
 USAGE = {"schema_version": 1, "run_id": "r", "task_id": "backend", "stage": "fix", "attempt": 1, "harness": "claude",

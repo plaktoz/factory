@@ -16,7 +16,8 @@ from .types import PrRef, PrState, Source
 
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
 
-STATUS_LABELS = ("factory:queued", "factory:running", "factory:needs-human", "factory:blocked", "factory:done", "factory:failed")
+STATUS_LABELS = ("factory:queued", "factory:running", "factory:needs-human", "factory:blocked", "factory:done", "factory:failed",
+                 "factory:invalid")
 ALL_LABELS = ("factory", *STATUS_LABELS)
 
 
