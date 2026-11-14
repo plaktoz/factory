@@ -200,8 +200,7 @@ def join(run_worktree: Path, tasks: list[TaskBranch], *, regenerate: list[str],
             git(run_worktree, "reset", "--hard", start, check=False)
             git(run_worktree, "clean", "-fd", "-e", ".factory-run.json", check=False)
             return JoinResult(ok=False, conflict_files=conflicts, hook_failed=False, commits=[])
-        r = git(run_worktree, "-c", "user.name=factory", "-c", "user.email=factory@local",
-                "commit", "-m", f"task({task.task_id}): joined from {task.branch}", check=False)
+        r = _commit_with_hook_retry(run_worktree, f"task({task.task_id}): joined from {task.branch}")
         if r.returncode != 0:
             git(run_worktree, "reset", "--hard", start, check=False)
             return JoinResult(ok=False, conflict_files=[], hook_failed=True, commits=[])
@@ -214,6 +213,19 @@ def join(run_worktree: Path, tasks: list[TaskBranch], *, regenerate: list[str],
                 "commit", "-m", "chore: regenerate lockfiles at join", check=False)
             commits.append(git(run_worktree, "rev-parse", "HEAD").stdout.strip())
     return JoinResult(ok=True, conflict_files=[], hook_failed=False, commits=commits)
+
+
+def _commit_with_hook_retry(worktree: Path, message: str) -> subprocess.CompletedProcess:
+    """Commit with the repo's hooks on. A hook that edits files (a formatter) fails the commit and leaves its edit
+    unstaged; the spec retries once with that edit staged, and a second failure is returned as hook_failed (module 7)."""
+    ident = ["-c", "user.name=factory", "-c", "user.email=factory@local"]
+    r = git(worktree, *ident, "commit", "-m", message, check=False)
+    if r.returncode == 0:
+        return r
+    git(worktree, "add", "-A", check=False)
+    for path in NEVER_COMMITTED:
+        git(worktree, "reset", "-q", "--", path, check=False)
+    return git(worktree, *ident, "commit", "-m", message, check=False)
 
 
 def _unmerged(worktree: Path) -> list[str]:
@@ -316,3 +328,63 @@ def check_scope_diff(spec: GateSpec, ctx: GateContext) -> GateResult:
         return GateResult(passed=False, gate="scope-diff", code="gate.scope_violation",
                           output_tail="\n".join(bad[-200:]), details={"files": bad, "scope": ctx.scope, "deny": ctx.deny})
     return GateResult(passed=True, gate="scope-diff", code="ok", output_tail="", details={"files": files})
+
+
+def _depth(task_id: str, needs: dict[str, list[str]], seen: frozenset[str] = frozenset()) -> int:
+    if task_id in seen:
+        raise FactoryError("config.invalid", f"tasks need each other in a cycle at {task_id!r}", hint="remove the cycle from `needs`")
+    return 1 + max((_depth(n, needs, seen | {task_id}) for n in needs.get(task_id, [])), default=0)
+
+
+def delete_chained_branches(repo: Path, run_id: str, needs: dict[str, list[str]]) -> list[str]:
+    """After the join, delete the task branches dependents first (module 7). A dependent was made from its
+    dependency's branch, so the dependency's branch is deleted last. Returns the branches in the order deleted.
+    This composes delete_branch and remove_worktree from the contract; it adds no new public contract."""
+    order = sorted(needs, key=lambda t: _depth(t, needs), reverse=True)  # deepest dependent first
+    deleted = []
+    for task_id in order:
+        branch = f"{run_id}--{task_id}"
+        for wt in _worktrees_on(repo, branch):
+            remove_worktree(wt, force=True)
+        if _has_ref(repo, branch):
+            delete_branch(repo, branch)
+            deleted.append(branch)
+    return deleted
+
+
+def reset_dependents(repo: Path, cfg: Config, run_id: str, reworked: str, needs: dict[str, list[str]]) -> list[str]:
+    """A task was reworked: every task that needs it, directly or not, is reset and recreated from its new branch
+    (module 7). Returns the recreated task ids, dependencies first. Uses create_task_worktree, remove_worktree and
+    delete_branch from the contract."""
+    affected = {t for t in needs if reworked in _all_needs(t, needs)}
+    recreated = []
+    for task_id in sorted(affected, key=lambda t: _depth(t, needs)):
+        branch = f"{run_id}--{task_id}"
+        for wt in _worktrees_on(repo, branch):
+            remove_worktree(wt, force=True)
+        if _has_ref(repo, branch):
+            delete_branch(repo, branch)
+        bases = [f"{run_id}--{n}" for n in needs[task_id]] or [run_id]
+        create_task_worktree(repo, cfg, run_id, task_id, base_branches=bases)
+        recreated.append(task_id)
+    return recreated
+
+
+def _all_needs(task_id: str, needs: dict[str, list[str]], seen: frozenset[str] = frozenset()) -> set[str]:
+    out: set[str] = set()
+    for n in needs.get(task_id, []):
+        if n in seen:
+            raise FactoryError("config.invalid", f"tasks need each other in a cycle at {n!r}", hint="remove the cycle from `needs`")
+        out |= {n} | _all_needs(n, needs, seen | {task_id})
+    return out
+
+
+def _worktrees_on(repo: Path, branch: str) -> list[Path]:
+    out = git(repo, "worktree", "list", "--porcelain").stdout
+    found, current = [], None
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            current = Path(line.split(" ", 1)[1])
+        elif line == f"branch refs/heads/{branch}" and current is not None:
+            found.append(current)
+    return found
