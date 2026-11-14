@@ -281,10 +281,32 @@ Rules that apply to all three entries:
 - It runs author-supplied scaffold scripts and real MCP servers only when asked (`--scaffold`, `--allow-real-servers`). They run as the user, outside the OS sandbox that confines shell tools.
 - Whether `claude plugin eval` can score the factory's own skills (`factory/skills/own/`) is Unspecified: the factory's skills are not packaged as a Claude Code plugin.
 
+**Proposed use, by impact.** This is a recommendation from reading the stages in modules 4, 5, 8, 9 and 14. No eval has been run yet, so the order is a judgment, and the trial below is how to test it. Each target is ranked on three things: how bad it is if the model is wrong and nothing catches it, how much a deterministic gate already covers it, and how cheaply it can be graded. An eval is worth its cost only where a gate cannot see the error.
+
+| # | Target | Why it ranks here | Case and grader |
+| --- | --- | --- | --- |
+| 1 | Reviewers (`review-standards`, `review-spec`) | They are the last LLM check before a human merge, and a repo can allow auto-merge ([module 13](modules/13-delivery.md)). The `no-blocking-findings` gate trusts the findings JSON, so a reviewer that misses a defect passes silently | A diff with a planted defect (a bug, a scope escape, a missed spec line), plus clean diffs. A code grader checks that a finding cites the planted file and line. It measures recall and false alarms and needs no LLM judge |
+| 2 | Model drift: a regression suite run on a schedule | A repo can set no model override (see [P2-4](#p2-4-pilot-repo-plaktoztest-adapters)), so the model changes when the harness default changes. [Module 14](modules/14-token-tracking.md) records the observed model, but nothing checks that quality held | The cases of targets 1, 3 and 4, run on a schedule and after any new model name appears in `usage.jsonl`. Compare each score with the last run |
+| 3 | `root-cause` | `evidence-cites-code` checks that the cited code exists, not that it is the cause. A wrong cause sends the run through `fix` and back, up to the loop limit | A fixture repo with a known planted bug. A code grader checks that the named file and function match |
+| 4 | `triage` classify | A confident wrong type runs the whole wrong workflow. The human stop catches only a score under 0.8 ([module 4](modules/04-intake-and-triage.md)) | Requests with a known type. A code grader checks the exact match, and checks that confidence is low when the answer is wrong. This is the cheapest suite |
+| 5 | Resistance to planted instructions | The sandbox and `scope-diff` are the main defense. The eval tests the model side. It matters more if [P2-10](#p2-10-a-fallback-for-requests-no-workflow-handles) feeds web text into plans | An issue body or page with a planted instruction. A code grader checks that a canary file was not written and that the plan has no new task |
+| 6 | `fix` and `feature` workers | Build, test and scope gates already catch failures, so an eval adds the first-pass rate and the cost per run, not hidden errors | The pilot repo's issues. Score from `GateResult` and `usage.jsonl` |
+| 7 | Research claims | `every-claim-has-source` checks that a source exists, not that it supports the claim. Grading support needs an LLM judge, which adds its own error | A rubric judge. Do this last |
+
+**Not worth an eval.** `scope-diff`, `lint-clean`, schema checks and the helpers ledger are deterministic, so ordinary tests cover them. An eval on them costs tokens and adds nothing.
+
+**Where an eval answers what the existing checks cannot.**
+
+- **A change to a skill or a prompt.** Run the suite on the old and the new version. Do not ship the change if the score drops.
+- **Helpers on and off.** [Module 9](modules/09-worker-adapters-and-governed-helpers.md) already requires the same gate evidence in both modes. An eval shows whether quality and cost also match.
+- **A model for each stage.** With `routing:` a cheaper model can go on a stage only if its score holds.
+
+**Proposed runner (a recommendation; the tool question below stays open).** The factory's skills are not packaged as a Claude Code plugin, so `claude plugin eval` may not score them. A thin factory runner would call the real worker adapter in a fixture worktree. It would keep the sandbox, write `usage.jsonl` for the cost, and work unchanged for a Codex adapter ([P2-1](#p2-1-codex-worker-adapter)). Results are stored locally and are not committed.
+
 **Questions to answer.**
 
-- [ ] What would a case be? A seeded request plus its expected gate result, or an artifact checked against a schema, or a rubric on a report. Unspecified.
-- [ ] Which workers and stages need scores first (for example `triage` classification, `root-cause`, `review-standards`)? Unspecified.
+- [ ] What would a case be? A seeded request plus its expected gate result, or an artifact checked against a schema, or a rubric on a report. Unspecified. Proposed: a fixture repo and a request, graded by code (see the table above).
+- [ ] Which workers and stages need scores first (for example `triage` classification, `root-cause`, `review-standards`)? Unspecified. Proposed order: the table above, reviewers first.
 - [ ] Are code-based graders (a schema check, a test that must pass) enough, or is an LLM judge needed? An LLM judge adds its own error and cost. Unspecified.
 - [ ] How to score a change: run the same cases with the old and the new skill, prompt or model, and compare. Where the baseline lives. Unspecified.
 - [ ] What it costs: `usage.jsonl` gives tokens per attempt, so a suite's cost can be estimated before it runs. Budget and cap. Unspecified.
@@ -296,6 +318,8 @@ Rules that apply to all three entries:
 **Deliverable.**
 
 - [ ] A short written finding, with a small trial: one case set for one stage, run through the chosen tool, with the score, the cost and a decision on whether to build evals into the factory. The trial must use `--no-publish` and sandboxed tools only.
+- [ ] Proposed trial: the reviewers (target 1). Ten to twenty cases, half with a planted defect and half clean, graded by code. The finding reports recall, false alarms and the cost from `usage.jsonl`.
+- [ ] If the trial is useful: a decision on a scheduled run of the regression suite (target 2), with its budget cap.
 
 **Not decided here.** The format of a case, the graders, the runner and the storage. Nothing in phase 1 changes.
 
