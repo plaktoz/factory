@@ -1,0 +1,19 @@
+name: java
+detect: {any_file: [pom.xml, build.gradle, build.gradle.kts]}
+files: ["**/*.java"]
+practices: own:practices/java
+variants:
+  maven:
+    when: {file: pom.xml}
+    format:       [mvn, -q, spotless:apply]
+    format_check: [mvn, -q, spotless:check]
+    lint:         [mvn, -q, checkstyle:check]
+    test:         [mvn, -q, test]
+    build:        [mvn, -q, -DskipTests, package]
+  gradle:
+    when: {any_file: [build.gradle, build.gradle.kts]}
+    format:       [gradlew, spotlessApply]
+    format_check: [gradlew, spotlessCheck]
+    lint:         [gradlew, checkstyleMain]
+    test:         [gradlew, test]
+    build:        [gradlew, assemble]

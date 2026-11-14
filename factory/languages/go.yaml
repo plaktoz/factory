@@ -1,0 +1,12 @@
+name: go
+detect: {any_file: [go.mod]}
+files: ["**/*.go"]
+practices: own:practices/go
+variants:
+  go:
+    when: {file: go.mod}
+    format:       [gofmt, -w]
+    format_check: [gofmt, -l]
+    lint:         [golangci-lint, run]
+    test:         [go, test, ./...]
+    build:        [go, build, ./...]
