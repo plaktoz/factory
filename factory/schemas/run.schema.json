@@ -125,6 +125,12 @@
           "type": "null"
         }
       ]
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
     }
   },
   "required": [
@@ -146,7 +152,8 @@
     "signals",
     "heartbeat",
     "kit_hash",
-    "infra_wait"
+    "infra_wait",
+    "paths"
   ],
   "additionalProperties": false,
   "$defs": {

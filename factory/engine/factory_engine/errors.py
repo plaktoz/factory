@@ -26,6 +26,7 @@ class CatalogueEntry:
 # Every FactoryError.code is listed here. A module adds its rows in the wave that builds it.
 CATALOGUE: dict[str, CatalogueEntry] = {
     "config.invalid": CatalogueEntry("fail_fast", "Name the file, the line and the form to write"),
+    "intake.invalid": CatalogueEntry("fail_fast", "The request is not usable: name the missing or bad field in the reason"),
     "config.no_credentials": CatalogueEntry(
         "fail_fast",
         "Set ANTHROPIC_API_KEY, or ANTHROPIC_AUTH_TOKEN with ANTHROPIC_BASE_URL; "

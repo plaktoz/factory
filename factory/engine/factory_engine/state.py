@@ -135,7 +135,8 @@ def init_run(home: Path, repo: Path, key: str, run_id: str, request: Request, *,
     write_json_atomic(d / "request.json", {"schema_version": SCHEMA_VERSION, **_dataclass_doc(request)})
     run = Run(run_id=run_id, repo=repo.name, repo_key=key, repo_path=repo, request=request, workflow=None,
               branch=branch, worktree=worktree, status="pending", stage=None, stages=[], loops={}, attention=None,
-              pr=None, signals=None, heartbeat=_now(), kit_hash=kit_hash, infra_wait=None)
+              pr=None, signals=None, heartbeat=_now(), kit_hash=kit_hash, infra_wait=None,
+              paths={"run_dir": str(d), "repo": str(repo), "worktree": str(worktree)})
     write_json_atomic(d / "run.json", _run_to_doc(run))
     append_event(d, "run_created", run_id=run_id)
     return RunRef(repo=repo, repo_key=key, run_id=run_id, run_dir=d)
@@ -183,7 +184,8 @@ def _run_from_doc(doc: dict) -> Run:
     return Run(run_id=doc["run_id"], repo=doc["repo"], repo_key=doc["repo_key"], repo_path=Path(doc["repo_path"]),
                request=req, workflow=doc["workflow"], branch=doc["branch"], worktree=Path(doc["worktree"]),
                status=doc["status"], stage=doc["stage"], stages=stages, loops=doc["loops"], attention=attention,
-               pr=pr, signals=signals, heartbeat=doc["heartbeat"], kit_hash=doc["kit_hash"], infra_wait=infra)
+               pr=pr, signals=signals, heartbeat=doc["heartbeat"], kit_hash=doc["kit_hash"], infra_wait=infra,
+               paths=doc.get("paths") or {})
 
 
 def write_run(run_dir: Path, run: Run, *, lock: Lock) -> None:
