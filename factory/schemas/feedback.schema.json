@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/feedback.schema.json",
+  "title": "feedback",
+  "description": "A rework feedback record (module 8). Written by hand from module 8's example; no shared dataclass backs it.",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "from_stage": {"type": "string"},
+    "to_stage": {"type": "string"},
+    "loop": {"type": "integer", "minimum": 1},
+    "max": {"type": "integer", "minimum": 1},
+    "gate": {"type": "string"},
+    "exit_code": {"type": ["integer", "null"]},
+    "failed_tests": {"type": "array", "items": {"type": "string"}},
+    "output_tail": {"type": "string"},
+    "changed_files": {"type": "array", "items": {"type": "string"}},
+    "at": {"type": "string"}
+  },
+  "required": ["schema_version", "from_stage", "to_stage", "loop", "max", "gate", "exit_code",
+               "failed_tests", "output_tail", "changed_files", "at"],
+  "additionalProperties": false
+}

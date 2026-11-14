@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/task.schema.json",
+  "title": "task",
+  "description": "Generated from factory_engine.types.TaskState by factory_engine.schemagen; do not edit by hand.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "stage": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "waiting",
+        "running",
+        "restarting",
+        "interrupted",
+        "done",
+        "failed"
+      ]
+    },
+    "attempt": {
+      "type": "integer"
+    },
+    "restarts": {
+      "type": "integer"
+    },
+    "task_base": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "worktree": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "checkpoints": {
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "task_id",
+    "stage",
+    "status",
+    "attempt",
+    "restarts",
+    "task_base",
+    "worktree",
+    "checkpoints"
+  ],
+  "additionalProperties": false
+}

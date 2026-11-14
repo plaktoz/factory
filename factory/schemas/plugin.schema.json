@@ -1,0 +1,331 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/plugin.schema.json",
+  "title": "plugin",
+  "description": "A plugin manifest plugin.yaml (module 5). insert.stage is a workflow stage.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "requires": {
+      "type": "object",
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "applies_to": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "when": {
+      "type": "object"
+    },
+    "os": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "linux",
+          "macos",
+          "windows"
+        ]
+      }
+    },
+    "insert": {
+      "type": "object",
+      "properties": {
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "type": "string"
+        },
+        "stage": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "needs": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "tasks": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "skill": {
+                    "type": "string"
+                  },
+                  "cmd": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "run": {
+                    "type": "object",
+                    "properties": {
+                      "script": {
+                        "type": "string"
+                      },
+                      "python": {
+                        "type": "string"
+                      },
+                      "args": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "scope": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "deny": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "needs": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "helpers": {
+                    "type": "object",
+                    "properties": {
+                      "mode": {
+                        "enum": [
+                          "auto",
+                          "native",
+                          "off"
+                        ]
+                      },
+                      "max": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "split_hints": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "timeout_minutes": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "out": {
+                    "type": "string"
+                  },
+                  "timeout_minutes": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "retries": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "when": {
+                    "type": "object"
+                  }
+                },
+                "additionalProperties": false,
+                "required": [
+                  "id"
+                ]
+              }
+            },
+            "join": {
+              "type": "string"
+            },
+            "gate": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "cmd": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "cmd"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "check": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "check"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "schema": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                      "schema"
+                    ]
+                  }
+                ]
+              }
+            },
+            "on_fail": {
+              "type": "object",
+              "properties": {
+                "goto": {
+                  "type": "string"
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "goto",
+                "max"
+              ]
+            },
+            "on_conflict": {
+              "type": "object",
+              "properties": {
+                "goto": {
+                  "type": "string"
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "goto",
+                "max"
+              ]
+            },
+            "approval": {
+              "type": "string"
+            },
+            "on_reject": {
+              "type": "object",
+              "properties": {
+                "goto": {
+                  "type": "string"
+                },
+                "max": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "goto",
+                "max"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "id"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "stage"
+      ]
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "on": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "run": {
+            "type": "object",
+            "properties": {
+              "script": {
+                "type": "string"
+              },
+              "python": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "on",
+          "run"
+        ]
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "version",
+    "applies_to",
+    "insert"
+  ]
+}

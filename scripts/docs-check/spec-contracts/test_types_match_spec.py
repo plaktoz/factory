@@ -6,7 +6,7 @@ import pytest
 
 from factory_engine import types as T
 
-from .spec_blocks import spec_fields
+from spec_blocks import spec_fields
 
 SPEC = spec_fields()
 # Classes the spec shows only in prose, or that are not plain dataclasses.

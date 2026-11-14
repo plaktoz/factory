@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/decision.schema.json",
+  "title": "decision",
+  "description": "A decision file decisions/<stage>.<n>.yaml (module 11): the packet and the answer block.",
+  "type": "object",
+  "properties": {
+    "packet": {
+      "$ref": "packet.schema.json"
+    },
+    "decision": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "pending",
+            "question",
+            "approved"
+          ]
+        },
+        "choices": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "questions": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "string"
+        },
+        "by": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "channel": {
+          "anyOf": [
+            {
+              "enum": [
+                "dashboard",
+                "cli",
+                "chat",
+                "file"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "choices",
+        "questions",
+        "notes",
+        "by",
+        "channel",
+        "at"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "packet",
+    "decision"
+  ]
+}

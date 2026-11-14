@@ -119,7 +119,7 @@ factory decide new-color-q1w2e --packet 661cb74d --question D2="Can option B add
 
 Every route ends in the engine's `evaluate()`:
 
-- It loads the file with a safe YAML loader, validates the schema and checks the packet hash.
+- It loads the file with the factory's safe YAML loader ([module 3](03-kit-and-configuration.md), YAML 1.2 booleans), validates the schema and checks the packet hash.
 - It checks that every decision has a valid choice.
 - It logs the outcome once per distinct file content.
 
