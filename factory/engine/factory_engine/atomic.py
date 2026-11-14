@@ -12,8 +12,12 @@ from typing import Any
 def write_json_atomic(path: Path, doc: Any) -> None:
     """Write through a temporary file in the same folder, fsync, then rename. A reader sees the old file or the
     new one, never half of either. A crash leaves at most a stray temp file, which is removed on the next write."""
+    write_text_atomic(path, json.dumps(doc, indent=2, sort_keys=False) + "\n")
+
+
+def write_text_atomic(path: Path, data: str) -> None:
+    """The same rule as write_json_atomic, for any text (decision files and pages, module 11)."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    data = json.dumps(doc, indent=2, sort_keys=False) + "\n"
     fd, tmp = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=str(path.parent))
     try:
         with os.fdopen(fd, "w") as f:
