@@ -1,5 +1,4 @@
-"""Module 6A acceptance criteria. The rebuild criterion is marked xfail: the spec's event catalogue cannot yet
-rebuild a run (see docs/tasks.md, W1 module 6A); the test states the requirement so it fails when the gap is closed."""
+"""Module 6A acceptance criteria, including the rebuild rule of decision E1 (run_snapshot)."""
 
 import json
 import os
@@ -15,7 +14,7 @@ from factory_engine import atomic, state
 from factory_engine.config import Config
 from factory_engine.errors import FactoryError
 from factory_engine.lock import acquire_lock, heartbeat, lock_status, release
-from factory_engine.types import Request, Source
+from factory_engine.types import AttentionItem, Request, Source, StageState
 
 
 def req(title="Login fails", ref="gh-42", sha="c91e07"):
@@ -295,14 +294,74 @@ def test_history_append_writes_one_line(tmp_path):
     assert len(atomic.read_jsonl(tmp_path / "history.jsonl")) == 1
 
 
-# --- rebuild: BLOCKED by the spec gap ---
+# --- rebuild from the last run_snapshot (decision E1, [snapshot-event]) ---
 
-@pytest.mark.xfail(strict=True, reason="spec gap: the event catalogue cannot rebuild a run's stages, loops and attention; see tasks.md")
-def test_rebuild_from_events_gives_the_same_state_as_the_engine_wrote(tmp_path):
-    home, ref = make_run(tmp_path)
+def _mid_run(ref):
+    """Make a run with stages, loops and attention, written the way the engine writes it: under the lock."""
     run = state.read_run(ref.run_dir)
-    lock = acquire_lock(ref.run_dir, "e")
+    run.status = "running"
+    run.stage = "fix"
+    run.stages = [StageState("propose", 1, "done", ["plan"], "t0", "t1"),
+                  StageState("fix", 1, "running", ["backend", "frontend"], "t1", None)]
+    run.loops = {"verify->fix": 1}
+    run.attention = AttentionItem("approval", "new-color-q1w2e", "propose", "t2", "approve the plan", None,
+                                  "factory decide new-color-q1w2e")
+    lock = acquire_lock(ref.run_dir, "engine")
     state.write_run(ref.run_dir, run, lock=lock)
     release(lock)
+    return run
+
+
+def test_every_change_writes_a_run_snapshot(tmp_path):
+    home, ref = make_run(tmp_path)
+    before = [e.type for e in state.read_events(ref.run_dir)]
+    _mid_run(ref)
+    after = [e.type for e in state.read_events(ref.run_dir)]
+    assert after[len(before):].count("run_snapshot") == 1
+
+
+def test_rebuild_gives_the_same_state_the_engine_wrote(tmp_path):
+    home, ref = make_run(tmp_path)
+    run = _mid_run(ref)
     rebuilt = state.rebuild_run(ref.run_dir)
-    assert rebuilt.status == run.status and rebuilt.stages == run.stages and rebuilt.loops == run.loops
+    assert rebuilt.status == run.status and rebuilt.stage == run.stage
+    assert rebuilt.stages == run.stages and rebuilt.loops == run.loops and rebuilt.attention == run.attention
+    assert rebuilt.heartbeat == "" and rebuilt.signals is None
+
+
+def test_rebuild_replays_only_the_last_snapshot(tmp_path):
+    """Acceptance: an earlier snapshot is ignored, so the last one wins. The first snapshot says loops 0 and the
+    last says loops 1, so a rebuild that takes the first one fails here."""
+    home, ref = make_run(tmp_path)
+    run = _mid_run(ref)                      # snapshot 1: loops {'verify->fix': 1}
+    older = state.read_run(ref.run_dir)
+    older.loops = {"verify->fix": 0}
+    lock = acquire_lock(ref.run_dir, "e")
+    state.write_run(ref.run_dir, older, lock=lock)  # snapshot 2: loops {'verify->fix': 0}, the one written first
+    release(lock)
+    # the newest change, after the older one
+    newest = state.read_run(ref.run_dir)
+    newest.loops = {"verify->fix": 2}
+    lock = acquire_lock(ref.run_dir, "e")
+    state.write_run(ref.run_dir, newest, lock=lock)  # snapshot 3: the last one
+    release(lock)
+    rebuilt = state.rebuild_run(ref.run_dir)
+    assert rebuilt.loops == {"verify->fix": 2}, "a rebuild must take the last snapshot, not the first or the middle"
+
+
+def test_rebuild_reads_no_other_events(tmp_path):
+    home, ref = make_run(tmp_path)
+    run = _mid_run(ref)
+    events = ref.run_dir / "events.jsonl"
+    kept = [l for l in events.read_text().splitlines() if '"type":"run_snapshot"' in l.replace(" ", "")]
+    events.write_text("\n".join(kept) + "\n")  # every other event removed
+    assert state.rebuild_run(ref.run_dir).stages == run.stages
+
+
+def test_rebuild_without_a_snapshot_fails_and_leaves_run_json(tmp_path):
+    home, ref = make_run(tmp_path)
+    (ref.run_dir / "events.jsonl").write_text('{"type": "run_created"}\n')
+    before = (ref.run_dir / "run.json").read_bytes()
+    with pytest.raises(FactoryError, match="no run_snapshot"):
+        state.rebuild_run(ref.run_dir)
+    assert (ref.run_dir / "run.json").read_bytes() == before

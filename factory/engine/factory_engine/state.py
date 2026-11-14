@@ -194,6 +194,9 @@ def write_run(run_dir: Path, run: Run, *, lock: Lock) -> None:
     doc = _run_to_doc(run)
     validate(doc, "run", file=str(run_dir / "run.json"))
     write_json_atomic(run_dir / "run.json", doc)
+    # Decision E1 [snapshot-event]: a run_snapshot event follows each change and carries the whole run.
+    # Its payload is Unspecified in the spec; this code uses the same run document under "run".
+    append_event(run_dir, "run_snapshot", run=doc)
 
 
 def _owns(lock: Lock, run_dir: Path) -> bool:
@@ -259,18 +262,16 @@ def lock_status(run_dir: Path) -> LockState:
 
 
 def rebuild_run(run_dir: Path) -> Run:
-    """Replay events.jsonl. Module 6A: the rebuilt run has the same status, stage, stages, loops and attention as
-    the engine wrote. Heartbeat and conflict signals are not events, so they are left empty."""
-    events = read_events(run_dir)
-    if not events:
-        raise FactoryError("config.invalid", f"{run_dir}: no events to rebuild from", hint="the run is unrecoverable")
+    """Decision E1 [snapshot-event]: rebuild from the last run_snapshot in events.jsonl. The other events are not
+    read to rebuild. Heartbeat and conflict signals are not part of a rebuild and are left empty."""
     last_doc = None
-    for e in events:
-        if e.type == "run_snapshot":  # the engine writes this after each change; replay from the last one
-            last_doc = e.data["run"]
+    for rec in reversed(read_jsonl(run_dir / "events.jsonl")):
+        if rec.get("type") == "run_snapshot":
+            last_doc = rec["data"]["run"]
+            break
     if last_doc is None:
-        raise FactoryError("config.invalid", f"{run_dir}: events do not hold a run snapshot",
-                           hint="the engine writes run_snapshot events; rebuild needs them")
+        raise FactoryError("config.invalid", f"{run_dir}: events.jsonl holds no run_snapshot",
+                           hint="a rebuild needs a run_snapshot event; the engine writes one after each change")
     doc = dict(last_doc)
     doc["heartbeat"] = ""
     doc["signals"] = None
