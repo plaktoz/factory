@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Phase 1 decisions</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--mute:#666660;--line:#dcdcd6;--accent:#2b5fd9;--accent-bg:#e8eefc;--pro:#1b7a3e;--con:#b3261e;--rec:#8a5a00;--rec-bg:#fdf1d6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f2c260;--rec-bg:#3a2f12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 120px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.card h2{font-size:17px;margin:0 0 2px}
+.tag{font-size:12px;color:var(--mute);margin:0 0 10px}
+.ctx{margin:0 0 12px}
+.ctx b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.opts{display:grid;gap:8px}
+label.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+label.opt:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}
+label.opt input{margin-right:8px}
+.name{font-weight:600}
+.rec{font-size:11px;font-weight:600;color:var(--rec);background:var(--rec-bg);border-radius:4px;padding:1px 6px;margin-left:6px}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 0 24px;font-size:13px}
+@media(max-width:560px){.pc{grid-template-columns:1fr;margin-left:0}}
+.pc ul{margin:0;padding-left:16px}
+.pro li::marker{color:var(--pro)} .con li::marker{color:var(--con)}
+.why{font-size:13px;color:var(--mute);margin:10px 0 0}
+textarea{width:100%;min-height:54px;margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
+button{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+#out{display:none;margin-top:24px}
+#out textarea{min-height:320px;font:13px/1.45 ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1>Phase 1 decisions</h1>
+<p class="sub">Spec: <code>docs/design/phase-1.md</code>. Every mechanical fix is already applied. These need your call. Recommended options are preselected. Pick one per card, add a question if you are unsure, then press <b>Generate prompt</b> and paste it back into Claude Code.</p>
+<div id="list"></div>
+<section id="out" class="card">
+  <h2>Prompt</h2>
+  <p class="tag">Copy this and paste it into the Claude Code session.</p>
+  <textarea id="prompt" readonly></textarea>
+</section>
+</main>
+<div class="bar">
+  <span id="count"></span>
+  <button id="gen">Generate prompt</button>
+  <button id="copy" class="alt">Copy</button>
+  <button id="reset" class="alt">Reset to recommended</button>
+</div>
+
+<script>
+const D = [
+{id:"D1",title:"How a run's lock is owned",ref:"Module 6A, lock and recovery",
+ context:"The lock goes stale after 60 s without a heartbeat. A sleeping laptop looks the same as a dead engine, so a tick can start a second engine on a run whose first engine wakes up and keeps writing, with its workers still editing the same worktree.",
+ options:[
+  {id:"os-lock",name:"OS file lock held for the process lifetime",rec:1,pro:["A crash releases it; a sleeping process keeps it","Takeover is atomic","Heartbeat stays for display only"],con:["Needs a local disk (already required)","Per-OS locking code (fcntl, msvcrt)"]},
+  {id:"fence",name:"Keep heartbeat locks, add a fencing token checked on every write",pro:["No OS-specific code","Old engine's writes are rejected"],con:["Old engine's workers still edit the worktree","More logic in every write path"]}],
+ why:"The OS lock removes the race instead of detecting it."},
+{id:"D2",title:"What a non-zero exit means for a command task",ref:"Module 5, exit codes",
+ context:"Today 1 means the check found a problem (rework) and 2 or more means the task broke (no retries). `make` exits 2 when a recipe fails, and pytest uses 2 for errors, so a failing `make test-api` in bug-fix is treated as a broken task.",
+ options:[
+  {id:"any-nonzero",name:"Any non-zero exit from a cmd task is a check failure",rec:1,pro:["Matches how make, npm and pytest behave","Simple to explain"],con:["A missing binary also looks like a failure unless the engine checks the binary first"],},
+  {id:"per-task",name:"Each task declares which codes mean what (fail_codes, error_codes)",pro:["Exact","Handles odd tools"],con:["Every workflow line gets longer","Easy to get wrong"]},
+  {id:"junit",name:"Decide from the JUnit result, exit code only as a fallback",pro:["Most accurate for test tasks"],con:["Does not cover lint or build commands"]}],
+ why:"The engine can check that the binary exists and starts before running, which leaves exit codes to mean the check failed. Python plugin tasks keep 0, 1, 2."},
+{id:"D3",title:"A task that needs another task in the same stage",ref:"Module 7, join",
+ context:"frontend needs backend in the fix stage, but task worktrees branch from the run branch and the join happens only when the whole stage is done. So frontend starts without backend's changes.",
+ options:[
+  {id:"chain",name:"A dependent task branches from its dependency's task branch",rec:1,pro:["No extra joins","Stage still joins once"],con:["Rework of the dependency invalidates the dependent task","Branch chains in cleanup"]},
+  {id:"join-each",name:"Join each task into the run branch as soon as it finishes",pro:["Simple mental model","Dependent task sees real run branch"],con:["More commits on the run branch","A later failing task leaves joined work behind"]},
+  {id:"forbid",name:"Disallow needs between tasks in one stage; use separate stages",pro:["Nothing to build"],con:["Workflows get longer","Loses the parallel-then-dependent pattern"]}],
+ why:"Chaining keeps the stage as the unit of joining and rework."},
+{id:"D4",title:"Approvals when a run loops back",ref:"Module 11, decision files",
+ context:"There is one decision file per stage, and an approved one is locked. When fix routes back to root-cause, the propose stage needs a fresh approval, but its file is already approved and locked.",
+ options:[
+  {id:"per-loop",name:"One file per stage and visit: decisions/<stage>.<n>.yaml",rec:1,pro:["Full history kept","No special unlock rule"],con:["Dashboard and page paths carry a visit number"]},
+  {id:"auto-reopen",name:"Rework resets the stage and reopens its decision automatically",pro:["Paths stay simple"],con:["Overwrites the earlier answer; history only in events"]}],
+ why:"Audit trail matters more than short paths."},
+{id:"D5",title:"Dashboard write protection",ref:"Module 15, rules",
+ context:"Host and Origin checks are now in the spec. They stop another website posting to the dashboard. The question is whether to also require a secret.",
+ options:[
+  {id:"token",name:"Per-session token in the URL that `factory dashboard` prints and opens",rec:1,pro:["Blocks other local users and scripts","Cheap"],con:["Bookmarked URLs stop working after restart","Decision pages opened from disk need the token only to Submit"]},
+  {id:"origin-only",name:"Host and Origin checks only",pro:["Zero friction"],con:["Any local process can post commands, including a worker that can reach localhost"]}],
+ why:"Workers run on the same machine and can call localhost."},
+{id:"D6",title:"Operating systems in phase 1",ref:"Modules 3, 6A, 16",
+ context:"Windows adds retrying atomic replaces, Task Scheduler install, .bat vs .sh scripts and path rules, which the spec already promises in several acceptance tests.",
+ options:[
+  {id:"mac-linux",name:"macOS and Linux in phase 1, Windows in phase 2",rec:1,pro:["Fewer acceptance tests","Faster first release"],con:["Spec text for Windows must be marked phase 2"]},
+  {id:"all",name:"All three from the start",pro:["Matches the vision text"],con:["Largest test matrix before the core loop is proven"]}],
+ why:"You are on macOS now, and the core loop is unproven."},
+{id:"D7",title:"How strongly workers are isolated from your machine",ref:"Module 9, write boundary",
+ context:"Workers read untrusted issue text and have a shell. The write boundary limits writes, not reads. A worker can read ~/.factory/env, gh's token, and your SSH keys. Claude's permission rules are not a sandbox for Bash.",
+ options:[
+  {id:"allowlist",name:"Permission allowlist, scrubbed environment, deny-read on factory secrets; document the residual risk",rec:1,pro:["Works today on both CLIs","Low effort"],con:["Not a real sandbox","A determined injection can still reach files"]},
+  {id:"os-sandbox",name:"OS sandbox per worker (macOS sandbox-exec / Linux bubblewrap)",pro:["Real read and write limits"],con:["Platform-specific; harness CLIs may need network and config paths","Slows the first release"]},
+  {id:"container",name:"Container per worker",pro:["Strongest isolation"],con:["Requires Docker; worktree and auth plumbing","Heavy for phase 1"]}],
+ why:"Take the cheap option first, but write the threat model into the spec."},
+{id:"D8",title:"Keeping your personal Claude setup out of workers",ref:"Module 9, Connecting to the LLMs",
+ context:"Workers still load your global CLAUDE.md, plugins and hooks. In your setup that means session-start hooks and Telegram notifications firing per worker. The login session also lives in the config folder.",
+ options:[
+  {id:"flags",name:"Use CLI flags: strict MCP config, limited setting sources, no plugins",rec:1,pro:["Keeps your login","No second config to maintain"],con:["Flag names change between releases; adapter must check --help"]},
+  {id:"config-dir",name:"A factory-owned config directory per harness (CLAUDE_CONFIG_DIR, CODEX_HOME)",pro:["Complete separation","Predictable"],con:["Must log in separately, or use API keys","Another folder to manage"]}],
+ why:"Flags are lighter; fall back to the config directory if flags prove leaky."},
+{id:"D9",title:"Skills behind each stage",ref:"Module 10, stages.map.yaml",
+ context:"The installed upstream skills are interactive: grill-me interviews a human and is not model-invocable, code-review asks for a fixed point and starts its own subagents, research starts a background agent and writes into the repo. pstack:tests does not exist.",
+ options:[
+  {id:"own",name:"Write the factory's own headless skill for every stage; upstream ones are reference only",rec:1,pro:["Predictable","Outputs match the schemas","No license questions"],con:["More to write and maintain"]},
+  {id:"wrap",name:"Wrap upstream skills with a thin factory prompt layer",pro:["Reuses good practice"],con:["Behavior shifts with upstream; hard to gate on"]},
+  {id:"mixed",name:"Own for gated stages (reproduce, fix, review); upstream for creative ones (scope, gather)",pro:["Half the work"],con:["Two behaviors to debug"]}],
+ why:"Skills decide pass or fail inputs; the spec already says the factory owns those."},
+{id:"D10",title:"What goes into the first release",ref:"Section 1 and 20",
+ context:"Phase 1 lists 18 modules, 2 harnesses, 3 OSes, plugins, MCP, practice packs, 5 toolchains, a React dashboard and OS scheduler install.",
+ options:[
+  {id:"skeleton",name:"Walking skeleton first (phase 1a), the rest as 1b",rec:1,pro:["Core loop proven early","Smaller test surface"],con:["Two milestones to plan"]},
+  {id:"full",name:"Everything as written",pro:["One plan"],con:["Late feedback; large integration risk"]}],
+ prefix:"If skeleton: Claude only; file tracker plus GitHub issues; bug-fix and chore; macOS and Linux; read-only dashboard; no plugins, MCP, practice packs or Codex until 1b.",
+ why:"Wave order stays the same; this only decides what is cut from each wave."},
+{id:"D11",title:"Which kit and config a run uses",ref:"Module 3 and 6B",
+ context:"The engine runs from the repo's checkout, and workflows and config are read live. A branch switch, pull or edit in the main checkout changes engine code or `cmd:` lines under a running run.",
+ options:[
+  {id:"snapshot",name:"Snapshot the kit and config at run creation into $FACTORY_HOME/kits/<hash>",rec:1,pro:["Run is reproducible","Edits cannot change a running run","Also fixes plugin trust"],con:["Disk copy per kit version","Upgrades do not affect existing runs"]},
+  {id:"pin-commit",name:"Record the kit commit in run.json and refuse to continue if the checkout moved",pro:["No copies"],con:["Runs stall when you switch branches"]}],
+ why:"Matches the design principle that the engine decides, not the working tree."},
+{id:"D12",title:"A crashed attempt's uncommitted edits",ref:"Module 6B, resume",
+ context:"After a crash, the spec resumes from the last checkpoint but does not say what happens to edits made after it.",
+ options:[
+  {id:"reset",name:"Reset the task worktree to the last checkpoint",rec:1,pro:["Deterministic","No half-written files"],con:["Loses up to one checkpoint interval of work"]},
+  {id:"keep",name:"Keep the worktree as it is and tell the worker via progress.md",pro:["No lost work"],con:["Worker may build on a half-finished edit"]}],
+ why:"Shorter checkpoint intervals limit the loss."},
+{id:"D13",title:"GitHub or network outage",ref:"Module 8, error classes",
+ context:"Three retries (5 s, 30 s, 2 min) and then the run is blocked. A 3-minute outage would block every active run and need a human for each.",
+ options:[
+  {id:"defer",name:"After three tries, mark the run waiting and let each tick retry for a set time (default 6 h) before blocking",rec:1,pro:["Outages heal themselves","No human noise"],con:["New status or sub-status to show"]},
+  {id:"block",name:"Keep as written",pro:["Simple"],con:["Many runs blocked by one outage"]}],
+ why:"Use the existing tick; no new loop needed."},
+{id:"D14",title:"How a steering note reaches a running worker",ref:"Module 12",
+ context:"Notes stop the worker at a checkpoint and start a new attempt with progress.md. Session context is lost. Both CLIs can resume a session.",
+ options:[
+  {id:"restart",name:"Restart with progress.md (as written)",rec:1,pro:["Same path as crash recovery","Works on any harness"],con:["Loses the worker's session context"]},
+  {id:"resume",name:"Resume the harness session with the note appended",pro:["Keeps context"],con:["Different per harness","Helper sessions and sandboxes complicate it"]}],
+ why:"Keep one recovery path in phase 1."}
+];
+
+const KEY="factory-phase1-decisions-v1";
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function recOf(d){return (d.options.find(o=>o.rec)||d.options[0]).id}
+
+const list=document.getElementById("list");
+D.forEach(d=>{
+  const cur=(state[d.id]&&state[d.id].choice)||recOf(d);
+  const el=document.createElement("section");el.className="card";
+  el.innerHTML=
+   `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   `<div class="ctx"><b>Context</b>${esc(d.context)}${d.prefix?"<br><i>"+esc(d.prefix)+"</i>":""}</div>`+
+   `<div class="opts">`+d.options.map(o=>
+     `<label class="opt"><input type="radio" name="${d.id}" value="${o.id}" ${o.id===cur?"checked":""}>`+
+     `<span class="name">${esc(o.name)}</span>${o.rec?'<span class="rec">Recommended</span>':""}`+
+     `<div class="pc"><ul class="pro">${o.pro.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.con.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div></label>`).join("")+
+   `<label class="opt"><input type="radio" name="${d.id}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
+   `<p class="why">Why recommended: ${esc(d.why)}</p>`+
+   `<textarea data-q="${d.id}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;
+  list.appendChild(el);
+});
+list.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.type==="radio"){state[t.name]=Object.assign(state[t.name]||{},{choice:t.value})}
+  else if(t.dataset.q){state[t.dataset.q]=Object.assign(state[t.dataset.q]||{},{note:t.value})}
+  save();
+});
+
+function build(){
+  const lines=["Decisions on docs/design/phase-1.md (from docs/reviews/phase-1-decisions.html).","Apply each choice to the spec, update the affected module contracts and acceptance criteria, and keep section 20 consistent. Where I asked a question, answer it and wait for me before applying that item.",""];
+  let unsure=0;
+  D.forEach(d=>{
+    const s=state[d.id]||{};const ch=s.choice||recOf(d);const note=(s.note||"").trim();
+    if(ch==="unsure"){unsure++;lines.push(`${d.id} ${d.title}: NOT SURE.`+(note?` Question: ${note}`:" (no question written)"))}
+    else{
+      const o=d.options.find(x=>x.id===ch);
+      lines.push(`${d.id} ${d.title}: ${o.name} [${o.id}]`+(o.rec?" (recommended)":" (not the recommendation)")+(note?`. Note: ${note}`:""));
+    }
+  });
+  document.getElementById("count").textContent=`${D.length} decisions, ${unsure} unsure`;
+  return lines.join("\n");
+}
+const out=document.getElementById("out"),ta=document.getElementById("prompt");
+document.getElementById("gen").onclick=()=>{ta.value=build();out.style.display="block";out.scrollIntoView({behavior:"smooth"})};
+document.getElementById("copy").onclick=async()=>{
+  ta.value=build();out.style.display="block";
+  try{await navigator.clipboard.writeText(ta.value);flash("Copied")}catch(e){ta.select();flash(document.execCommand&&document.execCommand("copy")?"Copied":"Select and copy")}
+};
+document.getElementById("reset").onclick=()=>{state={};save();location.reload()};
+function flash(m){const b=document.getElementById("copy");const t=b.textContent;b.textContent=m;setTimeout(()=>b.textContent=t,1200)}
+document.getElementById("count").textContent=`${D.length} decisions`;
+</script>
+</body>
+</html>
