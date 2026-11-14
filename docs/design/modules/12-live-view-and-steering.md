@@ -12,7 +12,7 @@ You watch any running task through its live log and steer it with notes, which t
 - A restart ends any helper sessions, so helpers are started again from the ledger.
 - A note restarts the worker with `progress.md`, the same path as crash recovery. Resuming the harness's own session with the note appended is not used in phase 1; an adapter can add it later without changing how notes are stored or delivered.
 - Before a restart that delivers a note, the engine formats the task's files and makes a final WIP commit, so the restart loses no work.
-- Notes are kept with the task artifacts for audit.
+- Notes are kept with the task artifacts for audit. `notes.jsonl` is append-only: a `queued` line holds `id`, `text`, `deny`, `by` and `ts`, and a later `delivered` line with the same `id` holds the attempt. Marking a delivered note again changes nothing.
 - A run where notes were used is never auto-merged ([module 13](13-delivery.md)).
 - A note waits for the next checkpoint, so set `checkpoint_every_minutes` short for risky tasks. Takeover on demand (pause, attach, hand back) is planned for later and needs no change to checkpoints.
 
