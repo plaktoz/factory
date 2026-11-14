@@ -13,6 +13,7 @@ Items moved out of phase 1, with the design that was already written for them, s
 | P2-7 | Python application support | 2026-11-14 | The 17A toolchain profile format, with a Python profile detected by `pyproject.toml`; the practice-pack mechanism of module 10 |
 | P2-8 | Browser testing with Playwright, and UI diff | 2026-11-14 | The gate shape (`GateSpec`, `check`), the `run` step for the target app (P2-5 to P2-7), and the dashboard's Playwright tests in module 15 |
 | P2-9 | Explore evals for workers, skills and workflows | 2026-11-14 | Fake adapters and recorded results for every module; the `helpers off` fallback that gives the same gate evidence; token and model records in `usage.jsonl` |
+| P2-10 | A fallback for requests no workflow handles | 2026-11-14 | `tasks_from` and the check that generated tasks match the workflow schema (module 5); the `_triage` human stop with candidate workflows (module 4); gates, scope and the sandbox for every task |
 
 Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-split) table of the main spec. Phase 2 is after phase 1b.
 
@@ -297,3 +298,62 @@ Rules that apply to all three entries:
 - [ ] A short written finding, with a small trial: one case set for one stage, run through the chosen tool, with the score, the cost and a decision on whether to build evals into the factory. The trial must use `--no-publish` and sandboxed tools only.
 
 **Not decided here.** The format of a case, the graders, the runner and the storage. Nothing in phase 1 changes.
+
+## Fallback workflow: P2-10
+
+### P2-10 A fallback for requests no workflow handles
+
+**Why.** Phase 1 has five built-in workflows (bug-fix, feature, new-app, chore, research) and the plugins a repo enables ([module 5](modules/05-workflows-and-plugins.md)). A request that fits none of them has no path today: triage cannot resolve a type, and the run stops at a human with the candidate workflows as options ([module 4](modules/04-intake-and-triage.md)). The factory should still be able to take on future kinds of work that no workflow was written for.
+
+**What phase 1 keeps so this is cheap to add.**
+
+- `tasks_from` builds a stage's task list from an earlier artifact at run time, and the engine checks the generated tasks against the workflow schema before any worker starts ([module 5](modules/05-workflows-and-plugins.md)). A proposed process is the same kind of generated list.
+- Every task, however it was made, runs with its scope, deny paths, gates and the sandbox ([module 9](modules/09-worker-adapters-and-governed-helpers.md)). A proposed process gets no exception.
+- The `_triage` stage already ends at a human stop when it is unsure ([module 4](modules/04-intake-and-triage.md)). That stop is where the fallback starts.
+
+**Two forms, to choose between or to offer both.**
+
+| Form | What happens | Good for | Cost |
+| --- | --- | --- | --- |
+| Single LLM step | One task with one generic skill does the whole request in the run worktree, then the usual gates run (scope, build if any, review) | Small, one-off work | Least structure: one long attempt, one artifact |
+| Proposed process | A planning task writes a process (stages, tasks, scopes, gates) as an artifact. The engine checks it against the workflow schema, a human approves it, then the run continues with those stages | Larger or repeated work | A planning step and an approval before any change |
+
+```mermaid
+flowchart TD
+  t["_triage: no workflow fits"] --> h{"Human stop:<br/>pick a workflow, or fall back?"}
+  h -- workflow --> wf["Run the chosen workflow"]
+  h -- fallback --> f{"Which form?"}
+  f -- single step --> s["One generic LLM task<br/>in the run worktree"]
+  f -- proposed process --> p["Planning task writes<br/>a process artifact"]
+  p --> v{"Valid against the<br/>workflow schema?"}
+  v -- no --> h
+  v -- yes --> a["Human approves<br/>the process"]
+  a --> r["Engine runs the<br/>proposed stages"]
+  s --> g["Usual gates: scope, build if any, review"]
+  r --> g
+  g --> d["Pull request, human merge"]
+```
+
+**Rules any fallback must keep.**
+
+- The fallback starts only from the human stop, never by itself. A request that a workflow can handle never takes the fallback.
+- A proposed process is data, not code. It is a list of stages and tasks in the workflow format, checked by the same schema and `validate_workflow` rules. It cannot add a check, a script or a plugin that is not already enabled.
+- Every proposed task has a scope. A task with no scope is refused.
+- The run always ends with a human merge. A fallback run never auto-merges ([module 13](modules/13-delivery.md)).
+- The process a human approved is stored with the run, so the run can be replayed and audited.
+
+**Turning a fallback into a workflow.** When the same kind of request takes the fallback more than once, the approved process is a draft for a new workflow or plugin. How it is promoted, and by whom, is Unspecified.
+
+**Questions to answer.**
+
+- [ ] Whether to build one form, the other, or both, and how a human chooses at the stop. Unspecified.
+- [ ] The generic skill for the single step: its instructions, its output schema and its gates. Unspecified.
+- [ ] The planning skill for the proposed process, and the schema of its artifact. Whether it is the workflow schema itself or a subset. Unspecified.
+- [ ] Which gates are always added to a fallback run, whatever the plan says (for example scope-diff and a review stage). Unspecified.
+- [ ] Limits: the most stages and tasks a proposed process may have, and its timeout and token budget. Unspecified.
+- [ ] How the fallback appears on the dashboard and in the run summary. Unspecified.
+
+**Deliverables.**
+
+- [ ] A fallback path from the `_triage` human stop, with the chosen form or forms.
+- [ ] Tests that a request no workflow handles reaches the fallback only through the human stop, that a proposed process failing the schema returns to the stop, and that a fallback run never auto-merges.
