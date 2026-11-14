@@ -1,0 +1,471 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/run.schema.json",
+  "title": "run",
+  "description": "Generated from factory_engine.types.Run by factory_engine.schemagen; do not edit by hand.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "repo": {
+      "type": "string"
+    },
+    "repo_key": {
+      "type": "string"
+    },
+    "repo_path": {
+      "type": "string"
+    },
+    "request": {
+      "$ref": "#/$defs/Request"
+    },
+    "workflow": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "branch": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "worktree": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "running",
+        "retrying",
+        "awaiting_approval",
+        "blocked",
+        "done",
+        "failed",
+        "aborted"
+      ]
+    },
+    "stage": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "stages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StageState"
+      }
+    },
+    "loops": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "attention": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AttentionItem"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "pr": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PrRef"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "signals": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Signals"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "heartbeat": {
+      "type": "string"
+    },
+    "kit_hash": {
+      "type": "string"
+    },
+    "infra_wait": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/InfraWait"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "repo",
+    "repo_key",
+    "repo_path",
+    "request",
+    "workflow",
+    "branch",
+    "worktree",
+    "status",
+    "stage",
+    "stages",
+    "loops",
+    "attention",
+    "pr",
+    "signals",
+    "heartbeat",
+    "kit_hash",
+    "infra_wait"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "AttentionItem": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "approval",
+            "decision",
+            "triage",
+            "blocked",
+            "merge_review",
+            "request_changed"
+          ]
+        },
+        "run_id": {
+          "type": "string"
+        },
+        "stage": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "since": {
+          "type": "string"
+        },
+        "summary": {
+          "type": "string"
+        },
+        "page": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "command": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "kind",
+        "run_id",
+        "stage",
+        "since",
+        "summary",
+        "page",
+        "command"
+      ],
+      "additionalProperties": false
+    },
+    "InfraWait": {
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string"
+        },
+        "tries": {
+          "type": "integer"
+        },
+        "last_error": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "since",
+        "tries",
+        "last_error"
+      ],
+      "additionalProperties": false
+    },
+    "PrRef": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer"
+        },
+        "url": {
+          "type": "string"
+        },
+        "head": {
+          "type": "string"
+        },
+        "base": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "number",
+        "url",
+        "head",
+        "base"
+      ],
+      "additionalProperties": false
+    },
+    "Request": {
+      "type": "object",
+      "properties": {
+        "request_id": {
+          "type": "string"
+        },
+        "source": {
+          "$ref": "#/$defs/Source"
+        },
+        "body_sha": {
+          "type": "string"
+        },
+        "repo": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "type_source": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "priority": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "request_id",
+        "source",
+        "body_sha",
+        "repo",
+        "title",
+        "type",
+        "type_source",
+        "priority",
+        "acceptance"
+      ],
+      "additionalProperties": false
+    },
+    "Signals": {
+      "type": "object",
+      "properties": {
+        "behind_base": {
+          "type": "integer"
+        },
+        "overlaps": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            ],
+            "minItems": 2,
+            "maxItems": 2
+          }
+        }
+      },
+      "required": [
+        "behind_base",
+        "overlaps"
+      ],
+      "additionalProperties": false
+    },
+    "Source": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "cli",
+            "markdown",
+            "github"
+          ]
+        },
+        "ref": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "labels": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "author": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "type",
+        "ref",
+        "title",
+        "body",
+        "labels",
+        "author",
+        "files"
+      ],
+      "additionalProperties": false
+    },
+    "StageState": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "visit": {
+          "type": "integer"
+        },
+        "status": {
+          "enum": [
+            "pending",
+            "running",
+            "awaiting_approval",
+            "done",
+            "failed",
+            "skipped"
+          ]
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "started": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ended": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "visit",
+        "status",
+        "tasks",
+        "started",
+        "ended"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

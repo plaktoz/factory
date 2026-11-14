@@ -1,0 +1,111 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/merge-policy.schema.json",
+  "title": "merge-policy",
+  "description": "The repo's auto-merge rules merge-policy.yaml (module 13).",
+  "type": "object",
+  "properties": {
+    "default": {
+      "enum": [
+        "human"
+      ]
+    },
+    "auto": {
+      "type": "object",
+      "properties": {
+        "workflows": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "type_source": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "explicit",
+              "label",
+              "front_matter",
+              "keyword",
+              "llm"
+            ]
+          }
+        },
+        "require": {
+          "type": "object",
+          "properties": {
+            "gates": {
+              "enum": [
+                "all_passed"
+              ]
+            },
+            "ci": {
+              "enum": [
+                "green"
+              ]
+            },
+            "max_files": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "max_lines": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "gates",
+            "ci",
+            "max_files",
+            "max_lines"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "workflows",
+        "type_source",
+        "require"
+      ]
+    },
+    "never_auto_if": {
+      "type": "object",
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dependency_manifests_changed": {
+          "type": "boolean"
+        },
+        "architecture_decision": {
+          "type": "boolean"
+        },
+        "review_findings_at_or_above": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "notes_used": {
+          "type": "boolean"
+        },
+        "rework_loops_used_at_least": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "default",
+    "auto",
+    "never_auto_if"
+  ]
+}

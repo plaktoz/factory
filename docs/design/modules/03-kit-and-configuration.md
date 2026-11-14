@@ -15,6 +15,9 @@ factory/                    the kit: replaced whole on update, never edited
   schemas/                  request, run, task, usage, event, decision, feedback, merge, triage, plugin, packet,
                             stage-report, test-report, source-notes, review-findings,
                             factory-config (factory.yaml), merge-policy
+                            (12 are written in wave 0; `merge`, `stage-report`, `test-report`, `source-notes` and
+                            `review-findings` have no fields in the spec yet, so the module that produces each defines it:
+                            13 for `merge`, 5 and 10 for the four reports)
   policies/                 default scope and protected-path rules
   engine/                   Python engine and the factory CLI
   adapters/tracker/         file, github
@@ -50,6 +53,8 @@ factory/                    the kit: replaced whole on update, never edited
 ```
 
 `.factory/.gitignore` ignores everything except `config/`, so the factory never edits the repo's own `.gitignore`.
+
+**YAML is read with YAML 1.2 booleans** (found in wave 0, 2026-11-14). A plain `yaml.safe_load` reads `off`, `on`, `yes` and `no` as booleans, so `helpers: {mode: off}` becomes `False` and a plugin hook key `on:` becomes `True`. Both appear in the spec's own examples ([module 5](05-workflows-and-plugins.md)). Every YAML file the factory reads (config, workflows, plugins, decision files) goes through one safe loader in `config.py` that treats only `true` and `false` as booleans. The loader is a subclass of `SafeLoader` and never runs code. Test: the spec's own examples load with `mode == "off"`.
 
 **Settings**
 
@@ -222,6 +227,7 @@ Acceptance criteria:
 - [ ] A literal value under `env` in `.factory/config/` is refused; in the machine file it warns when readable by others.
 - [ ] Precedence: flag > env var > machine file (machine keys) or repo file (repo keys) > default.
 - [ ] `load_config(None)` returns a `Config` whose `.repo` is `None` and whose `.machine` keys are set; `load_config(repo)` sets both parts.
+- [ ] Every YAML file is read by one safe loader that treats only `true` and `false` as booleans: `helpers: {mode: off}` loads as the string `off`, and a hook key `on:` loads as the string `on`.
 - [ ] `factory.yaml` and `merge-policy.yaml` are each validated against a schema in `factory/schemas/` at load (`factory-config` and `merge-policy`); a file that fails fails fast with `config.invalid`, the file and the fix.
 - [ ] `worktree_path` renders the template and refuses a path inside the repo (except `.factory/worktrees`) or an existing path.
 - [ ] `init_repo` creates the layout and `.factory/.gitignore`, never edits the root `.gitignore`, and a second run changes nothing.

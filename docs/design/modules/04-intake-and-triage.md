@@ -14,12 +14,13 @@ Every source is converted into the same `request.json` at pick-up, before the ru
 {
   "schema_version": 1,
   "request_id": "gh-42",
-  "source": {"type": "github", "ref": "owner/payments-api#42", "body_sha": "c91e07", "author": "alice"},
+  "source": {"type": "github", "ref": "owner/payments-api#42", "title": "Login fails on expired token",
+             "body": "Steps to reproduce...", "labels": ["bug"], "author": "alice", "files": []},
+  "body_sha": "c91e07",
   "repo": "payments-api",
   "title": "Login fails on expired token",
-  "body": "Steps to reproduce...",
   "type": null,
-  "labels": ["bug"],
+  "type_source": null,
   "priority": "high",
   "acceptance": ["Expired token returns 401 with a refresh hint"]
 }

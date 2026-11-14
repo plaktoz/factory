@@ -9,7 +9,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[4]
+REPO = Path(__file__).resolve().parents[3]
 SPEC_FILES = [
     REPO / "docs/design/shared/18-shared-contracts.md",
     REPO / "docs/design/modules/05-workflows-and-plugins.md",

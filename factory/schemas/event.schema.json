@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/event.schema.json",
+  "title": "event",
+  "description": "Generated from factory_engine.types.Event by factory_engine.schemagen; do not edit by hand.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "seq": {
+      "type": "integer"
+    },
+    "ts": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string"
+    },
+    "run_id": {
+      "type": "string"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "seq",
+    "ts",
+    "type",
+    "run_id",
+    "data"
+  ],
+  "additionalProperties": false
+}

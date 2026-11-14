@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/factory-config.schema.json",
+  "title": "factory-config",
+  "description": "The repo's .factory/config/factory.yaml (modules 3, 9, 10).",
+  "type": "object",
+  "properties": {
+    "base_branch": {
+      "type": "string"
+    },
+    "tracker": {
+      "enum": [
+        "file",
+        "github"
+      ]
+    },
+    "harness": {
+      "enum": [
+        "claude"
+      ]
+    },
+    "concurrency": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "repo_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "notify": {
+      "type": "object",
+      "properties": {
+        "github_mention": {
+          "type": "string"
+        },
+        "desktop": {
+          "type": "boolean"
+        },
+        "webhook": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "remind_after_hours": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "retention": {
+      "type": "object",
+      "properties": {
+        "archive_after_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "delete_archive_after_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "keep_failed_days": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "worker_log_max_mb": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "auto_gc": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "infra_wait_hours": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "serialize_overlapping_runs": {
+      "type": "boolean"
+    },
+    "cleanup_check": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "routing": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "string"
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "harness": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "harness"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "mcp": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stages": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "practices": {
+      "type": "object",
+      "properties": {
+        "max_lines": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "base_branch",
+    "tracker",
+    "harness"
+  ]
+}

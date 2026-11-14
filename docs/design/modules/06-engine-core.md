@@ -170,24 +170,37 @@ The dashboard derives one more, `stale`, when a run's status is `running` but no
   "schema_version": 1,
   "run_id": "new-color-q1w2e",
   "repo": "payments-api",
-  "request": {"id": "gh-42", "source": "github", "title": "Login fails on expired token"},
+  "repo_key": "github.com/acme/payments-api",
+  "repo_path": "/home/me/dev/payments-api",
+  "request": {
+    "request_id": "gh-42",
+    "source": {"type": "github", "ref": "owner/payments-api#42", "title": "Login fails on expired token",
+               "body": "Steps to reproduce...", "labels": ["bug"], "author": "alice", "files": []},
+    "body_sha": "c91e07", "repo": "payments-api", "title": "Login fails on expired token",
+    "type": "bug", "type_source": "label", "priority": "high",
+    "acceptance": ["Expired token returns 401 with a refresh hint"]
+  },
   "workflow": "bug-fix",
   "branch": "new-color-q1w2e",
   "worktree": "/home/me/dev/worktree/payments-api/new-color-q1w2e",
   "status": "running",
   "stage": "fix",
-  "loops": {"verify->fix": 1},
   "stages": [
-    {"id": "propose", "status": "done", "approval": "approved"},
-    {"id": "fix", "status": "running", "tasks": [
-      {"id": "backend", "status": "running", "attempts": 2, "helpers": {"used": 2, "max": 2}},
-      {"id": "frontend", "status": "waiting", "needs": ["backend"]}]},
-    {"id": "verify", "status": "pending"}
+    {"id": "propose", "visit": 1, "status": "done", "tasks": ["plan"], "started": "2026-11-14T10:02:00+08:00", "ended": "2026-11-14T10:09:00+08:00"},
+    {"id": "fix", "visit": 1, "status": "running", "tasks": ["backend", "frontend"], "started": "2026-11-14T10:10:00+08:00", "ended": null},
+    {"id": "verify", "visit": 1, "status": "pending", "tasks": [], "started": null, "ended": null}
   ],
+  "loops": {"verify->fix": 1},
   "attention": null,
-  "heartbeat": "2026-11-14T10:20:12+08:00"
+  "pr": null,
+  "signals": null,
+  "heartbeat": "2026-11-14T10:20:12+08:00",
+  "kit_hash": "ab12cd",
+  "infra_wait": null
 }
 ```
+
+The example above is the frozen `Run` type of [section 18](../shared/18-shared-contracts.md) written to `run.json`. Per-task detail (attempts, helpers used, `needs`) is not in `run.json`: it is in each `task.json` and in `usage.jsonl`, so the run file stays one shape. The earlier example of this file nested task detail under each stage and used a short `request` object; section 18 supersedes it (decision R1).
 
 **Scheduler**
 
