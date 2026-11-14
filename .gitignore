@@ -1,0 +1,38 @@
+# Created by `factory init` in a repo that uses the factory; never committed here (AGENTS.md).
+.factory/
+
+# Local state of the Claude Code session. The factory's own skills live in .claude/skills and are committed.
+.claude/settings.local.json
+.claude/worktrees/
+
+# Secrets and machine files
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+# The engine's lock is factory/requirements.lock (module 3), not uv's.
+uv.lock
+
+# Node (the mermaid check, the decision-page browser check, the dashboard build)
+node_modules/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
