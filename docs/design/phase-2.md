@@ -14,6 +14,7 @@ Items moved out of phase 1, with the design that was already written for them, s
 | P2-8 | Browser testing with Playwright, and UI diff | 2026-11-14 | The gate shape (`GateSpec`, `check`), the `run` step for the target app (P2-5 to P2-7), and the dashboard's Playwright tests in module 15 |
 | P2-9 | Explore evals for workers, skills and workflows | 2026-11-14 | Fake adapters and recorded results for every module; the `helpers off` fallback that gives the same gate evidence; token and model records in `usage.jsonl` |
 | P2-10 | A fallback for requests no workflow handles, including work that is not software (a wireframe, a customer slide deck) | 2026-11-14 | `tasks_from` and the check that generated tasks match the workflow schema (module 5); the `research` workflow; MCP web search per stage (module 9); `skills.lock` (module 10); the `sink` key; the `_triage` human stop with candidate workflows (module 4); gates, scope and the sandbox for every task |
+| P2-11 | Architecture review: assess whether more deterministic layers are needed | 2026-11-15 | The engine as a deterministic driver; gates (`GateSpec`, `check`), the sandbox and scope rules, schema-checked state files, human stops, fakes for every module |
 
 Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-split) table of the main spec. Phase 2 is after phase 1b.
 
@@ -414,3 +415,51 @@ flowchart TD
 - [ ] If the researched process is built: a saved draft workflow is found by triage on a second request of the same kind and runs without the fallback.
 - [ ] A trial on one non-software request (a wireframe, then a short customer slide deck) that ends with a rendered output, its sources and a human approval, with the cost from `usage.jsonl`.
 - [ ] A new ADR for the wider scope, written before the build starts.
+
+## Architecture review: P2-11
+
+### P2-11 Review the architecture for more deterministic layers
+
+**What this is.** A review and an assessment, not a build. The factory's premise is a deterministic engine with LLM workers doing bounded tasks. The question is whether the design leaves places where a worker's output is trusted without a deterministic check, or where a worker does a job that code could do. For each place found, the review decides whether to add a deterministic layer. Nothing in phase 1 changes while this item is open.
+
+**Why it is a backlog item.** Phase 1 was built to prove the core loop. Its deterministic parts are already in the spec: schema-checked state files, scope and deny rules, the sandbox, gates such as `scope-diff`, `lint-clean`, `no-blocking-findings`, `every-claim-has-source` and `evidence-cites-code` ([module 8](modules/08-gates-error-handling-and-rework.md)), and checks that run in a separate process ([module 5](modules/05-workflows-and-plugins.md)). Nobody has yet looked across all modules for what is still left to a worker's judgment. The review is better done after phase 1 runs on the pilot repo, because real runs show where a worker's output was wrong and no gate saw it.
+
+**What phase 1 keeps so this is cheap to add.**
+
+- A gate is a `GateSpec` with a `check` or a `cmd` ([section 18](shared/18-shared-contracts.md)), so a new deterministic check needs no new gate kind.
+- Every module has a fake, so a new layer can be tested without a model.
+- The decision log in [phase 1 decisions](../reviews/phase-1-decisions.md) records why each rule exists, so the review does not reopen a settled decision without a new ADR.
+
+**Where to look (candidates, not findings).** This list is a starting point from reading the module titles. It has not been assessed, and some items may already be covered.
+
+| Area | Question for the review |
+| --- | --- |
+| Worker output, trusted as written | Which artifacts does the engine accept after a schema check only? Is a check of meaning also possible by code (for example, a cited file and line exists in the diff)? |
+| Jobs a worker does that code could do | Which stages use an LLM for a step with a rule that decides it (a type, a label, a branch name, a PR body from fields)? Module 4 already uses keyword rules before the `classify` task; are there others? |
+| Checks before a worker starts | Is the request, the scope and the toolchain checked by code before tokens are spent? |
+| Checks after a worker stops | Beyond scope and lint, is there a check for a change with no test, a changed dependency file, a secret in the diff, a generated file, or an edit to the factory's own files? |
+| Review stages | A reviewer's findings feed the `no-blocking-findings` gate. Can a deterministic cross-check catch a reviewer that reports nothing on a diff that the checks flag? |
+| Loops and limits | Are retry counts, timeouts, cost caps and rework limits all enforced by the engine and not left to a worker? |
+| State and recovery | Does every state change pass through the one lock holder and a schema? Is there a check that run state and git state agree after a crash? |
+| Human stops | Is each stop opened by a rule, and is the reason always one the engine can state? |
+
+**Method.**
+
+1. Read the module contracts and the acceptance criteria. For each LLM task, write down its input, its output and what the engine does with the output.
+2. Mark each output as *checked by code*, *checked by schema only* or *not checked*.
+3. Use the `usage.jsonl` and gate records from pilot runs ([P2-4](#p2-4-pilot-repo-plaktoztest-adapters)) to find real cases where a bad output passed. Weigh a proposed layer by those cases, not by what could go wrong.
+4. For each proposed layer, state what it catches, what it costs (code, run time, false alarms) and whether it blocks or only reports.
+5. Check the proposals against [P2-9](#p2-9-explore-the-use-of-evals). A layer code can check belongs here; a quality question that needs scored cases belongs there.
+
+**Deliverables.**
+
+- [ ] A short written finding that lists each LLM task, how its output is checked today, and the gap if there is one.
+- [ ] A ranked list of proposed deterministic layers, each with what it catches, its cost, and blocks or reports.
+- [ ] A decision for each proposal: build in phase 1b, build later, or reject with a reason. A proposal that changes a settled decision needs a new ADR first.
+- [ ] For each layer chosen: the module file change and the acceptance criterion that tests it, written as for any other module.
+
+**To decide.**
+
+- Whether the review runs once, or on a schedule as the workflows grow. Unspecified.
+- Who owns the finding (the owner, or a review agent with the owner's decision on each proposal). Unspecified.
+- Whether a layer that blocks is allowed to be switched off per repo. Unspecified; D12 shows the cost of that kind of switch.
