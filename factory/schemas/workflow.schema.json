@@ -1,0 +1,274 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/workflow.schema.json",
+  "title": "workflow",
+  "description": "A workflow file in factory/workflows/ or .factory/config/workflows/ (module 5). Only stages is required, because the spec shows bug-fix without policy and defaults and _triage with only stages. Plugin manifests have their own schema, plugin.schema.json. tasks_from and run tasks are phase 1b and are not accepted here.",
+  "type": "object",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]*$"
+    },
+    "command": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    },
+    "stringList": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "goto": {
+      "type": "object",
+      "properties": {
+        "goto": {
+          "$ref": "#/$defs/id"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["goto", "max"],
+      "additionalProperties": false
+    },
+    "reject": {
+      "type": "object",
+      "properties": {
+        "goto": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": ["goto"],
+      "additionalProperties": false
+    },
+    "helpers": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": ["auto", "native", "off"]
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "split_hints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]*$"
+          }
+        },
+        "timeout_minutes": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "gate": {
+      "type": "object",
+      "oneOf": [
+        {
+          "properties": {
+            "cmd": {
+              "$ref": "#/$defs/command"
+            }
+          },
+          "required": ["cmd"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "check": {
+              "type": "string"
+            }
+          },
+          "required": ["check"],
+          "additionalProperties": false
+        },
+        {
+          "properties": {
+            "schema": {
+              "type": "string"
+            }
+          },
+          "required": ["schema"],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "task": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "skill": {
+          "type": "string"
+        },
+        "cmd": {
+          "$ref": "#/$defs/command"
+        },
+        "scope": {
+          "$ref": "#/$defs/stringList"
+        },
+        "deny": {
+          "$ref": "#/$defs/stringList"
+        },
+        "needs": {
+          "$ref": "#/$defs/stringList"
+        },
+        "helpers": {
+          "$ref": "#/$defs/helpers"
+        },
+        "out": {
+          "type": "string"
+        },
+        "timeout_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "model": {
+          "type": "string"
+        },
+        "when": {
+          "type": "object"
+        }
+      },
+      "required": ["id"],
+      "additionalProperties": false
+    },
+    "stage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/id"
+        },
+        "needs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/id"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "tasks_from": {
+          "type": "string"
+        },
+        "join": {
+          "type": "string",
+          "pattern": "^(all|any|quorum:[1-9][0-9]*)$"
+        },
+        "gate": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/gate"
+          }
+        },
+        "on_fail": {
+          "$ref": "#/$defs/goto"
+        },
+        "on_conflict": {
+          "$ref": "#/$defs/goto"
+        },
+        "approval": {
+          "enum": ["none", "human", "when-low-confidence"]
+        },
+        "on_reject": {
+          "$ref": "#/$defs/reject"
+        },
+        "sync_base": {
+          "type": "boolean"
+        }
+      },
+      "required": ["id"],
+      "anyOf": [
+        {"required": ["tasks"]},
+        {"required": ["tasks_from"]}
+      ],
+      "additionalProperties": false
+    }
+  },
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^_?[a-z][a-z0-9_-]*$"
+    },
+    "type": {
+      "type": "string"
+    },
+    "sink": {
+      "enum": ["pull_request", "doc", "comment"]
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "write": {
+          "type": "boolean"
+        },
+        "deny_paths": {
+          "$ref": "#/$defs/stringList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaults": {
+      "type": "object",
+      "properties": {
+        "retries": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "timeout_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "checkpoint_every_minutes": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_restarts": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "regenerate_at_join": {
+      "$ref": "#/$defs/stringList"
+    },
+    "join_cmd": {
+      "$ref": "#/$defs/command"
+    },
+    "shared_files": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/id"
+      }
+    },
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/stage"
+      }
+    }
+  },
+  "required": ["stages"],
+  "additionalProperties": false
+}
