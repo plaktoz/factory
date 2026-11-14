@@ -90,7 +90,8 @@ def add(repo: Path, cfg: Config, title: str, *, type: str | None = None,
         body: str | None = None, files: list[Path] | None = None) -> RunRef
 # triage.py
 def triage_rules(request: Request, cfg: Config) -> TriageResult
-    """type, workflow, confidence, type_source: explicit | label | front_matter | keyword."""
+    """type, workflow, confidence, type_source: explicit | label | front_matter | keyword. The rules never return `llm`:
+    the classify task writes `type_source: llm`, which the merge policy never auto-merges (module 13)."""
 def check_type_resolved(spec: GateSpec, ctx: GateContext) -> GateResult      # used by 8
 ```
 

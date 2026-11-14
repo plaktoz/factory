@@ -6,20 +6,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
-from ...types import CheckResult, McpServer, HelperPolicy, Request
+from ...skills import SkillRef  # noqa: F401  (module 10 defines it; wave 0 had a stand-in here)
+from ...types import CheckResult, HelperPolicy, McpServer, Request
 
 AttemptExit = Literal["ok", "failed", "timeout", "killed"]
 ErrorKindWorker = Literal["auth", "rate_limit", "binary_missing", "model_not_found", "crash"]
-
-
-@dataclass
-class SkillRef:
-    """Defined by module 10; wave 1 replaces this with the real one. Fields from module 10's contract."""
-
-    name: str
-    source: Literal["override", "locked", "own"]
-    path: Path
-    args: dict
 
 
 @dataclass

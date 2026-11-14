@@ -50,6 +50,7 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     ),
     "sandbox.srt_missing": CatalogueEntry("fail_fast", "srt is not installed; give the install command"),
     "sandbox.node_old": CatalogueEntry("fail_fast", "Node is older than 22.12, which srt needs"),
+    "skills.unknown": CatalogueEntry("fail_fast", "No override, locked skill or own skill matches the name; add one"),
     "git.network": CatalogueEntry("transient", "A GitHub or network call failed on a rate limit, a timeout or a lost connection; retry with backoff"),
     "git.index_locked": CatalogueEntry("transient", "index.lock is held by another git process; retry"),
     "git.push_rejected": CatalogueEntry("human", "The push was rejected after one base sync and one retry; show the rejection"),

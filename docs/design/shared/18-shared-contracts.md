@@ -208,6 +208,7 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `config.invalid` | `fail_fast` | Name the file, the line and the form to write |
 | `state.locked` | `fail_fast` | Another engine holds the run; exit 5 |
 | `git.hook_failed` | `human` | Show the hook output |
+| `skills.unknown` | `fail_fast` | No override, locked skill or own skill matches the name; add one (module 10: with no fallback it fails fast at workflow load) |
 | `git.network` | `transient` | A GitHub or network call failed on a rate limit, a timeout or a lost connection; retry with backoff (module 7) |
 | `git.index_locked` | `transient` | `index.lock` is held by another git process; retry with backoff (module 7) |
 | `git.push_rejected` | `human` | A push was rejected after one base sync and one retry; show the rejection (module 7) |
