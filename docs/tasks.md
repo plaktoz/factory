@@ -6,7 +6,7 @@ Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it wa
 
 ## Resume here
 
-Next: **W0.1**. The spec is merged to `main` (PR #1, merge `f59b80f`). Owner approved wave 0 with autonomy (see Rules). **Blocked before W0.1 on one owner decision:** commit authorship (see Log, 2026-11-14 final pass). R1, R2, R3, D7 and Q1 to Q4 are decided and applied (`docs/reviews/open-decisions.md`). Q5 does not block wave 0.
+Next: **W0.2**. The spec is merged to `main` (PR #1, merge `f59b80f`). Owner approved wave 0 with autonomy (see Rules). Authorship was decided by the owner as option B (keep current authors, no history rewrite). Known: commit `6a6ff04` carries the owner's work email in the public repo; removing it needs a force push, which the owner has not approved. New commits use the noreply identity set in this repo's local git config. R1, R2, R3, D7 and Q1 to Q4 are decided and applied (`docs/reviews/open-decisions.md`). Q5 does not block wave 0.
 
 Pending owner request, before or alongside W0.1: (1) drop OAuth, state "key or gateway token only", and keep Linux as a pre-pilot check: **done** (module 9 Login and Linux note; `open-decisions.md`, Round 3, item 1); (2) drop `sandbox-exec` only if no alternative exists and it is not a project requirement: **done, kept** (`open-decisions.md`, Round 3); (3) use Node 26, not Node 25 (owner's choice): **done**, tested on Node 26.13.0 (`open-decisions.md`, Round 3); (4) define a distinct `failIfUnavailable` error code for each failure type: **done** (section 18 `sandbox.*` rows; module 9 criteria; tests in `open-decisions.md`, Round 3, item 4); (5) explain and decide G2, G3 and G9: **G3 and G9 done**; **G2 open** (a wave-by-wave fix, names listed in `open-decisions.md`, Round 3, item 5). Decide at the recommendation (rule in `.claude/skills/decision-page/SKILL.md`, step 1). Build a page only for what is left.
 
@@ -73,7 +73,7 @@ Report: `docs/reviews/ready-for-development.md`. Verdict: not ready until the sh
 
 Procedure: `AGENTS.md`, "Building one module". The spec is `docs/design/shared/18-shared-contracts.md` and `docs/design/shared/20-dependencies-and-plan.md`. Wave 0 is done when the shared types, the schemas, the error and exit codes, and the four fakes exist, and the contract tests pass. Starts only after R2, because the contracts must be frozen first.
 
-- [ ] **W0.1 Package skeleton.** `factory/engine/pyproject.toml`, `factory_engine/__init__.py`, test runner (`pytest` is not installed here; `uv` is). Python 3.15 is on this machine; the target version is not yet written in the spec, so state it in the file and in module 3.
+- [x] **W0.1 Package skeleton.** `factory/engine/pyproject.toml` (Python >=3.10, PyYAML, jsonschema, pytest in the dev group), `factory_engine/__init__.py`, `tests/test_package.py`. Checked: `uv run --python 3.10 --group dev pytest` and `--python 3.15` each pass 2 tests, so G9 holds for the skeleton (3.10 and 3.15 both run). `uv.lock` is not committed; the spec's lock is `factory/requirements.lock`.
 - [ ] **W0.2 `errors.py`.** `FactoryError` with `code`, `message`, `hint`, `kind`; the five handling kinds from section 19; exit-code constants from section 18.
 - [ ] **W0.3 `types.py`.** The shared types in section 18, plus `Workflow`, `Stage`, `TaskSpec`, `GateSpec`, `OnFail`.
 - [ ] **W0.4 Schemas.** `factory/schemas/*.schema.json` for the files module 3 lists; the dataclasses mirror them; a test checks both stay in step. `usage` carries the P4 `models` list.
