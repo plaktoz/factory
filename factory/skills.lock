@@ -1,0 +1,7 @@
+# Pinned upstream skills and allowlist (module 10). Ships empty: it is used only by plugins and overrides that
+# name an upstream skill. An example entry:
+#   sources: {example: {repo: owner/skills, ref: <pinned-commit>}}
+#   allow:   {example: [skill-name]}
+sources: {}
+allow: {}
+deny: {}

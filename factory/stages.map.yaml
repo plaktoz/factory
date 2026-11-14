@@ -1,0 +1,14 @@
+# Stage name to skill reference (module 10). Additions go in .factory/config/overrides/stages.map.yaml.
+classify:          {skill: own:classify}
+reproduce:         {skill: own:reproduce}
+root-cause:        {skill: own:root-cause}
+propose:           {skill: own:propose}
+architect:         {skill: own:architect}
+implement:         {skill: own:implement}
+fix:               {skill: own:fix}
+review-standards:  {skill: own:review-standards}
+review-spec:       {skill: own:review-spec}
+scope:             {skill: own:scope}
+gather:            {skill: own:gather}
+synthesize:        {skill: own:synthesize}
+critique:          {skill: own:critique}
