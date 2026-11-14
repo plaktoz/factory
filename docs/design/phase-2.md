@@ -13,7 +13,7 @@ Items moved out of phase 1, with the design that was already written for them, s
 | P2-7 | Python application support | 2026-11-14 | The 17A toolchain profile format, with a Python profile detected by `pyproject.toml`; the practice-pack mechanism of module 10 |
 | P2-8 | Browser testing with Playwright, and UI diff | 2026-11-14 | The gate shape (`GateSpec`, `check`), the `run` step for the target app (P2-5 to P2-7), and the dashboard's Playwright tests in module 15 |
 | P2-9 | Explore evals for workers, skills and workflows | 2026-11-14 | Fake adapters and recorded results for every module; the `helpers off` fallback that gives the same gate evidence; token and model records in `usage.jsonl` |
-| P2-10 | A fallback for requests no workflow handles | 2026-11-14 | `tasks_from` and the check that generated tasks match the workflow schema (module 5); the `_triage` human stop with candidate workflows (module 4); gates, scope and the sandbox for every task |
+| P2-10 | A fallback for requests no workflow handles, including work that is not software (a wireframe, a customer slide deck) | 2026-11-14 | `tasks_from` and the check that generated tasks match the workflow schema (module 5); the `research` workflow; MCP web search per stage (module 9); `skills.lock` (module 10); the `sink` key; the `_triage` human stop with candidate workflows (module 4); gates, scope and the sandbox for every task |
 
 Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-split) table of the main spec. Phase 2 is after phase 1b.
 
@@ -305,18 +305,25 @@ Rules that apply to all three entries:
 
 **Why.** Phase 1 has five built-in workflows (bug-fix, feature, new-app, chore, research) and the plugins a repo enables ([module 5](modules/05-workflows-and-plugins.md)). A request that fits none of them has no path today: triage cannot resolve a type, and the run stops at a human with the candidate workflows as options ([module 4](modules/04-intake-and-triage.md)). The factory should still be able to take on future kinds of work that no workflow was written for.
 
+**Scope: work that is not software.** The fallback is also how the factory covers work outside software development. Two examples: a design task that needs a wireframe, and a customer slide deck. No built-in workflow covers either. The factory researches the industry process for that kind of work, proposes a workflow, and a human approves it. The approved workflow can then be saved and reused. Widening the factory from software work to any work is a change of scope, so it needs a new ADR before it is built (see Questions). Until that ADR exists, nothing here is built.
+
 **What phase 1 keeps so this is cheap to add.**
 
 - `tasks_from` builds a stage's task list from an earlier artifact at run time, and the engine checks the generated tasks against the workflow schema before any worker starts ([module 5](modules/05-workflows-and-plugins.md)). A proposed process is the same kind of generated list.
+- The built-in `research` workflow (scope, gather, synthesize, critique, with an `every-claim-has-source` gate) is the base of the research step. MCP servers such as Tavily are allowed per stage and work with the sandbox on ([module 9](modules/09-worker-adapters-and-governed-helpers.md)), so a planning task can search the web with no new network rule.
+- `skills.lock` is the one way an upstream skill enters, with a pinned ref and an allowlist ([module 10](modules/10-skills.md)). Skills that make a wireframe or a slide deck enter the same way.
+- Workflows are looked up in `.factory/config/workflows/` before `factory/workflows/` ([module 5](modules/05-workflows-and-plugins.md)), so an approved process saved there is found by the next triage with no engine change.
+- The workflow `sink` key has the values `pull_request`, `doc` and `comment`. A new value is a small addition.
 - Every task, however it was made, runs with its scope, deny paths, gates and the sandbox ([module 9](modules/09-worker-adapters-and-governed-helpers.md)). A proposed process gets no exception.
 - The `_triage` stage already ends at a human stop when it is unsure ([module 4](modules/04-intake-and-triage.md)). That stop is where the fallback starts.
 
-**Two forms, to choose between or to offer both.**
+**Three forms, to choose between or to offer together.**
 
 | Form | What happens | Good for | Cost |
 | --- | --- | --- | --- |
 | Single LLM step | One task with one generic skill does the whole request in the run worktree, then the usual gates run (scope, build if any, review) | Small, one-off work | Least structure: one long attempt, one artifact |
-| Proposed process | A planning task writes a process (stages, tasks, scopes, gates) as an artifact. The engine checks it against the workflow schema, a human approves it, then the run continues with those stages | Larger or repeated work | A planning step and an approval before any change |
+| Proposed process | A planning task writes a process (stages, tasks, scopes, gates) as an artifact. The engine checks it against the workflow schema, a human approves it, then the run continues with those stages | Larger or repeated work in a kind of work the factory already has skills for | A planning step and an approval before any change |
+| Researched process | The planning task first researches the industry process for this kind of work on the web, with sources. It writes a process artifact and lists any skill it needs that is not yet in `skills.lock`. A human approves the process and each new skill, then the run continues. The approved process can be saved as a workflow | Work the factory has no workflow or skill for, such as a wireframe or a customer slide deck | A research step, an approval, and a review of each new skill before any change |
 
 ```mermaid
 flowchart TD
@@ -325,28 +332,50 @@ flowchart TD
   h -- fallback --> f{"Which form?"}
   f -- single step --> s["One generic LLM task<br/>in the run worktree"]
   f -- proposed process --> p["Planning task writes<br/>a process artifact"]
+  f -- researched process --> rs["Research task finds the industry<br/>process on the web, with sources"]
+  rs --> p
   p --> v{"Valid against the<br/>workflow schema?"}
   v -- no --> h
-  v -- yes --> a["Human approves<br/>the process"]
+  v -- yes --> a["Human approves the process<br/>and each new skill"]
   a --> r["Engine runs the<br/>proposed stages"]
   s --> g["Usual gates: scope, build if any, review"]
   r --> g
-  g --> d["Pull request, human merge"]
+  g --> d["Delivery through the sink,<br/>human approval"]
+  r -. "same kind of request again" .-> sv["Save the approved process<br/>as a draft workflow"]
 ```
+
+**The wireframe and slide deck examples.** The research step can find a process such as discover, define, sketch, review and deliver. The workflow only puts skills in order. No skill in phase 1 makes a wireframe or a `.pptx` file, so these requests need three things that a software workflow does not:
+
+- **Skills for the output.** A skill that writes the file. It enters through `skills.lock` with a human approval of the pinned ref. Check each license yourself. Unspecified which upstream skills to use.
+- **Gates that fit the output.** Scope-diff, build and tests mean little for a slide deck. Candidate gates: a schema check on the plan, a check that the file opens and renders to images, and a human review of the rendered pages. The rendering step may share work with [P2-8](#p2-8-playwright-browser-tests-and-ui-diff). Unspecified.
+- **A place to deliver to.** A customer slide deck usually does not belong in the code repo. Phase 1 has the sinks `pull_request`, `doc` and `comment`. A new sink, for example a folder outside the repo or an upload to a drive, is Unspecified.
 
 **Rules any fallback must keep.**
 
 - The fallback starts only from the human stop, never by itself. A request that a workflow can handle never takes the fallback.
 - A proposed process is data, not code. It is a list of stages and tasks in the workflow format, checked by the same schema and `validate_workflow` rules. It cannot add a check, a script or a plugin that is not already enabled.
+- A proposed process may name a skill that is not in `skills.lock`, but only as a request. The skill is not used until a human approves its pinned ref and allowlist, in the same way as any other upstream skill ([module 10](modules/10-skills.md)). A process cannot carry its own skill text or script.
 - Every proposed task has a scope. A task with no scope is refused.
-- The run always ends with a human merge. A fallback run never auto-merges ([module 13](modules/13-delivery.md)).
+- The run always ends with a human approval. A fallback run never auto-merges ([module 13](modules/13-delivery.md)). For a sink that is not a pull request, the human approves the delivery itself.
 - The process a human approved is stored with the run, so the run can be replayed and audited.
 
-**Turning a fallback into a workflow.** When the same kind of request takes the fallback more than once, the approved process is a draft for a new workflow or plugin. How it is promoted, and by whom, is Unspecified.
+**Rules for the research step.** Web pages are untrusted input. A page can contain text that tells the worker what to do, and the result feeds a plan that the engine then runs.
+
+- The research and planning tasks have no write access outside `$FACTORY_TASK_DIR`. They search through MCP only. The sandbox network rules of [module 9](modules/09-worker-adapters-and-governed-helpers.md) stay as they are.
+- The plan is data, checked against the schema, so a page cannot add a script or a check through it.
+- Every step of the plan lists its sources. The `every-claim-has-source` gate of the `research` workflow applies, and the approval screen shows the sources next to the plan.
+- A human approves the plan before any stage that writes starts. This approval is not optional for this form.
+
+**Turning a fallback into a workflow.** When the same kind of request takes the fallback more than once, the approved process is a draft for a new workflow or plugin. The draft is saved to `.factory/config/workflows/` only after a human approves it, with its sources and the date of the research stored beside it. A saved workflow is found by triage on the next request of the same kind, and a source can go out of date, so the draft records when it was researched. Who promotes a draft from one repo into the shipped `factory/workflows/`, and when, is Unspecified.
 
 **Questions to answer.**
 
-- [ ] Whether to build one form, the other, or both, and how a human chooses at the stop. Unspecified.
+- [ ] Whether the factory takes on work that is not software at all. This changes the stated purpose of the factory ("a reusable software factory" in `AGENTS.md`), so it needs a new ADR in [phase 1 decisions](../reviews/phase-1-decisions.md) before any of this is built. The ADR should say which kinds of non-software work are in scope (wireframes and design work, customer slide decks, other documents) and which are not. Unspecified.
+- [ ] Which upstream skills make a wireframe or a slide deck, their licenses, and whether the factory ships its own instead. Unspecified.
+- [ ] The gates for output that is not code (a plan schema, a render check, a human review of the rendered pages), and which of them block. Unspecified.
+- [ ] The sink for output that does not go in the code repo, and where the file is stored. Unspecified.
+- [ ] Which search tools the research step may use, how many sources it needs for each step, and how it ranks them. Unspecified.
+- [ ] Whether to build one form, two, or all three, and how a human chooses at the stop. Unspecified.
 - [ ] The generic skill for the single step: its instructions, its output schema and its gates. Unspecified.
 - [ ] The planning skill for the proposed process, and the schema of its artifact. Whether it is the workflow schema itself or a subset. Unspecified.
 - [ ] Which gates are always added to a fallback run, whatever the plan says (for example scope-diff and a review stage). Unspecified.
@@ -357,3 +386,7 @@ flowchart TD
 
 - [ ] A fallback path from the `_triage` human stop, with the chosen form or forms.
 - [ ] Tests that a request no workflow handles reaches the fallback only through the human stop, that a proposed process failing the schema returns to the stop, and that a fallback run never auto-merges.
+- [ ] If the researched process is built: a test that text planted in a fetched page cannot add a task, a skill, a check or a script to the plan, and that a plan naming a skill that is not in `skills.lock` waits for approval.
+- [ ] If the researched process is built: a saved draft workflow is found by triage on a second request of the same kind and runs without the fallback.
+- [ ] A trial on one non-software request (a wireframe, then a short customer slide deck) that ends with a rendered output, its sources and a human approval, with the cost from `usage.jsonl`.
+- [ ] A new ADR for the wider scope, written before the build starts.
