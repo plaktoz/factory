@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/test-report.schema.json",
+  "title": "test-report",
+  "description": "DRAFT, NOT SPEC-BACKED, FOR OWNER REVIEW. The test result of a verify stage, read from the JUnit files the tasks write (the verify gate). Same numbers as parse_junit in module 8. The spec gives no fields.",
+  "x-status": "draft",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "total": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "failed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "names of the failed test cases"
+    }
+  },
+  "required": [
+    "schema_version",
+    "total",
+    "failed"
+  ],
+  "additionalProperties": false
+}

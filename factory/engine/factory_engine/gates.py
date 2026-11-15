@@ -171,12 +171,85 @@ def _unbuilt(check: str, schema: str) -> FactoryError:
                         hint=f"define {schema} in the module that produces it before a gate uses {check}")
 
 
+def _stage_artifacts(ctx: GateContext) -> list[Path]:
+    """The artifact of the task being gated, or the JSON files in every task folder of the stage's latest visit."""
+    if ctx.artifact is not None:
+        return [ctx.artifact]
+    run_dir = Path(ctx.run.paths.get("run_dir", ""))
+    visits = [s for s in ctx.run.stages if s.id == ctx.stage]
+    if not visits:
+        return []
+    found: list[Path] = []
+    for task_id in visits[-1].tasks:
+        found += sorted(p for p in (run_dir / "tasks" / task_id).glob("*.json")
+                        if p.name not in ("task.json", "progress.json") and not p.name.startswith("ledger"))
+    return found
+
+
+def _read_artifacts(ctx: GateContext, schema: str, gate: str) -> tuple[list[tuple[Path, dict]], GateResult | None]:
+    docs: list[tuple[Path, dict]] = []
+    paths = _stage_artifacts(ctx)
+    if not paths:
+        return [], GateResult(passed=False, gate=gate, code="gate.no_artifact",
+                              output_tail="the stage wrote no artifact", details={})
+    for path in paths:
+        try:
+            doc = json.loads(path.read_text())
+            validate(doc, schema, file=str(path))
+        except (OSError, ValueError) as e:
+            return [], GateResult(passed=False, gate=gate, code="gate.schema",
+                                  output_tail=f"{path.name} is not JSON: {e}", details={})
+        except FactoryError as e:
+            return [], GateResult(passed=False, gate=gate, code="gate.schema", output_tail=e.message, details={})
+        docs.append((path, doc))
+    return docs, None
+
+
+# DRAFT (owner review): the spec does not say what "blocking" means. A finding with severity medium or high blocks.
+BLOCKING_SEVERITIES = ("medium", "high")
+
+
 def check_findings(spec: GateSpec, ctx: GateContext) -> GateResult:
-    raise _unbuilt("no-blocking-findings", "review-findings")
+    """no-blocking-findings: every review-findings artifact of the stage has no finding of medium or high severity."""
+    gate = "no-blocking-findings"
+    docs, bad = _read_artifacts(ctx, "review-findings", gate)
+    if bad:
+        return bad
+    blocking = [f for _, d in docs for f in d["findings"] if f["severity"] in BLOCKING_SEVERITIES]
+    if blocking:
+        tail_text = "\n".join(f"{f['severity']} {f['file']}:{f['line']} {f['rule']}" for f in blocking)
+        return GateResult(passed=False, gate=gate, code="gate.blocking_findings", output_tail=tail(tail_text),
+                          details={"blocking": len(blocking)})
+    return GateResult(passed=True, gate=gate, code="ok", output_tail="", details={"blocking": 0})
 
 
 def check_evidence(spec: GateSpec, ctx: GateContext) -> GateResult:
-    raise _unbuilt("evidence-cites-code", "stage-report")
+    """evidence-cites-code: the stage report has at least one claim, and every claim cites a line that exists in a
+    file of the worktree. It checks that the cited code exists, not that it is the cause (phase 2 item 3)."""
+    gate = "evidence-cites-code"
+    docs, bad = _read_artifacts(ctx, "stage-report", gate)
+    if bad:
+        return bad
+    claims = [c for _, d in docs for c in d.get("claims", [])]
+    problems = [] if claims else ["the report has no claims that cite code"]
+    root = ctx.worktree.resolve()
+    for c in claims:
+        target = (ctx.worktree / c["file"]).resolve()
+        if root not in target.parents or not target.is_file():
+            problems.append(f"{c['file']}:{c['line']}: no such file in the worktree")
+        elif c["line"] > len(target.read_text(errors="replace").splitlines()):
+            problems.append(f"{c['file']}:{c['line']}: the file has fewer lines")
+    if problems:
+        return GateResult(passed=False, gate=gate, code="gate.evidence", output_tail=tail("\n".join(problems)),
+                          details={"problems": len(problems)})
+    return GateResult(passed=True, gate=gate, code="ok", output_tail="", details={"claims": len(claims)})
+
+
+def write_test_report(junit: list[Path], out: Path) -> Path:
+    """Write the test-report artifact a `{schema: test-report}` gate reads, from the tasks' JUnit files."""
+    report = parse_junit(junit)
+    out.write_text(json.dumps({"schema_version": 1, "total": report.total, "failed": report.failed}, indent=2) + "\n")
+    return out
 
 
 def check_sources(spec: GateSpec, ctx: GateContext) -> GateResult:

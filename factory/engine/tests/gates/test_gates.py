@@ -225,13 +225,20 @@ def test_an_unknown_check_name_is_refused(tmp_path):
         resolve("made-up-check")
 
 
-def test_the_review_checks_refuse_to_pass_an_artifact_the_spec_has_not_defined(tmp_path):
+def test_the_source_check_refuses_to_pass_because_the_spec_does_not_say_how_a_claim_is_checked(tmp_path):
     worktree, base = make_repo(tmp_path)
     _, run = make_run(tmp_path, worktree)
-    for name in ("no-blocking-findings", "evidence-cites-code", "every-claim-has-source"):
-        with pytest.raises(FactoryError) as err:
-            run_gates([check(name)], ctx_for(run, worktree, task_base=base))
-        assert err.value.code == "config.invalid", name
+    with pytest.raises(FactoryError) as err:
+        run_gates([check("every-claim-has-source")], ctx_for(run, worktree, task_base=base))
+    assert err.value.code == "config.invalid"
+
+
+def test_a_review_check_with_no_artifact_fails_the_gate_and_never_passes(tmp_path):
+    worktree, base = make_repo(tmp_path)
+    _, run = make_run(tmp_path, worktree)
+    for name in ("no-blocking-findings", "evidence-cites-code"):
+        (r,) = run_gates([check(name)], ctx_for(run, worktree, task_base=base))
+        assert (r.passed, r.code) == (False, "gate.no_artifact"), name
 
 
 def test_gate_commands_are_argument_lists(tmp_path):
@@ -239,3 +246,82 @@ def test_gate_commands_are_argument_lists(tmp_path):
     _, run = make_run(tmp_path, worktree)
     with pytest.raises(FactoryError, match="non-empty command list"):
         run_gates([GateSpec(kind="cmd", cmd=[], check=None, schema=None, args={})], ctx_for(run, worktree))
+
+
+# --- Draft schemas (not spec-backed, for owner review): the gates that read them, and bug-fix at run time -------
+
+def _stage_ctx(tmp_path, worktree, artifact_name, doc, *, stage="review"):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    run_dir, run = make_run(tmp_path, worktree)
+    task_dir = run_dir / "tasks" / "t1"
+    task_dir.mkdir(parents=True)
+    artifact = task_dir / artifact_name
+    artifact.write_text(doc if isinstance(doc, str) else __import__("json").dumps(doc))
+    return ctx_for(run, worktree, artifact=artifact, task_dir=task_dir)
+
+
+def test_a_schema_gate_for_each_draft_schema_passes_a_good_artifact_and_fails_a_bad_one(tmp_path):
+    worktree, _ = make_repo(tmp_path)
+    good = {"stage-report": {"schema_version": 1, "stage": "fix", "summary": "done"},
+            "test-report": {"schema_version": 1, "total": 3, "failed": []},
+            "source-notes": {"schema_version": 1, "sources": [{"address": "u", "says": "s", "trust": "high"}]},
+            "review-findings": {"schema_version": 1, "findings": []}}
+    for name, doc in good.items():
+        ctx = _stage_ctx(tmp_path / name, worktree, "a.json", doc)
+        (r,) = run_gates([GateSpec(kind="schema", cmd=None, check=None, schema=name, args={})], ctx)
+        assert r.passed, (name, r.output_tail)
+        ctx = _stage_ctx(tmp_path / (name + "-bad"), worktree, "a.json", {"not": "it"})
+        (r,) = run_gates([GateSpec(kind="schema", cmd=None, check=None, schema=name, args={})], ctx)
+        assert (r.passed, r.code) == (False, "gate.schema"), name
+
+
+def test_no_blocking_findings_fails_on_medium_or_high_and_passes_on_low(tmp_path):
+    worktree, _ = make_repo(tmp_path)
+    f = lambda sev: {"file": "services/auth.py", "line": 1, "severity": sev, "rule": "r"}
+    for sev, passes in (("low", True), ("medium", False), ("high", False)):
+        ctx = _stage_ctx(tmp_path / sev, worktree, "standards.json", {"schema_version": 1, "findings": [f(sev)]})
+        r = resolve("no-blocking-findings")(check("no-blocking-findings"), ctx)
+        assert r.passed is passes, sev
+        if not passes:
+            assert r.code == "gate.blocking_findings" and "services/auth.py:1" in r.output_tail
+
+
+def test_evidence_cites_code_needs_claims_that_point_at_real_lines(tmp_path):
+    worktree, _ = make_repo(tmp_path)                                  # services/auth.py has one line
+    report = lambda *claims: {"schema_version": 1, "stage": "root-cause", "summary": "s",
+                              "claims": [{"claim": "c", "file": f, "line": n} for f, n in claims]}
+    cases = [([("services/auth.py", 1)], True), ([], False), ([("services/auth.py", 9)], False),
+             ([("services/missing.py", 1)], False), ([("../outside.py", 1)], False)]
+    for i, (claims, passes) in enumerate(cases):
+        ctx = _stage_ctx(tmp_path / str(i), worktree, "cause.json", report(*claims))
+        r = resolve("evidence-cites-code")(check("evidence-cites-code"), ctx)
+        assert r.passed is passes, claims
+
+
+def test_write_test_report_turns_junit_into_the_artifact_the_test_report_schema_accepts(tmp_path):
+    from factory_engine.gates import write_test_report
+    junit = tmp_path / "be.junit.xml"
+    junit.write_text(JUNIT)
+    out = write_test_report([junit], tmp_path / "test-report.json")
+    doc = __import__("json").loads(out.read_text())
+    assert doc == {"schema_version": 1, "total": 3, "failed": ["test_refresh_token_expired"]}
+    from factory_engine.validate import validate
+    validate(doc, "test-report")
+
+
+def test_bug_fix_no_longer_fails_with_config_invalid_at_its_schema_and_check_gates(tmp_path):
+    """Before the drafts, bug-fix's {schema: stage-report} and {schema: test-report} gates and its two checks raised
+    config.invalid at run time. Now each gate evaluates the artifact it is given."""
+    from factory_engine.workflow import load_workflow
+    worktree, _ = make_repo(tmp_path)
+    wf = load_workflow(tmp_path, Config(machine={}, repo={}), "bug-fix")
+    report = {"schema_version": 1, "stage": "root-cause", "summary": "s",
+              "claims": [{"claim": "c", "file": "services/auth.py", "line": 1}]}
+    ctx = _stage_ctx(tmp_path / "rc", worktree, "cause.json", report, stage="root-cause")
+    root_cause = next(s for s in wf.stages if s.id == "root-cause")
+    results = run_gates(root_cause.gate, ctx)
+    assert [r.passed for r in results] == [True, True] and not any(r.code == "config.invalid" for r in results)
+    verify = next(s for s in wf.stages if s.id == "verify")
+    test_gate = next(g for g in verify.gate if g.kind == "schema")
+    ctx = _stage_ctx(tmp_path / "v", worktree, "test-report.json", {"schema_version": 1, "total": 1, "failed": []})
+    assert run_gates([test_gate], ctx)[0].passed

@@ -15,9 +15,9 @@ factory/                    the kit: replaced whole on update, never edited
   schemas/                  request, run, task, usage, event, decision, feedback, merge, triage, plugin, packet,
                             stage-report, test-report, source-notes, review-findings,
                             factory-config (factory.yaml), merge-policy
-                            (12 are written in wave 0; `merge`, `stage-report`, `test-report`, `source-notes` and
-                            `review-findings` have no fields in the spec yet, so the module that produces each defines it:
-                            13 for `merge`, 5 and 10 for the four reports)
+                            (12 are written in wave 0. `stage-report`, `test-report`, `source-notes` and `review-findings` have no fields in the
+                            spec, so wave 3 ships them as **drafts for owner review** (`x-status: draft`, see
+                            [module 5](05-workflows-and-plugins.md#draft-report-schemas)). `merge` is written with module 13)
   policies/                 default scope and protected-path rules
   engine/                   Python engine and the factory CLI
   adapters/tracker/         file, github

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/stage-report.schema.json",
+  "title": "stage-report",
+  "description": "DRAFT, NOT SPEC-BACKED, FOR OWNER REVIEW. A stage task's artifact (reproduce, root-cause, propose, fix, implement). Drafted from the skills and the evidence-cites-code gate: a summary, plus claims that each cite a file and line. The spec gives no fields.",
+  "x-status": "draft",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "stage": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "claim": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        "required": [
+          "claim",
+          "file",
+          "line"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "files_changed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "stage",
+    "summary"
+  ],
+  "additionalProperties": true
+}
