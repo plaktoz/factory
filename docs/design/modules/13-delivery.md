@@ -113,10 +113,10 @@ class MergeDecision: auto: bool; rules: list[RuleResult]; reason: str
 
 Acceptance criteria:
 
-- [ ] The summary contains request, stages, evidence, decisions, notes, usage and merge result, all from state.
-- [ ] A small chore with an explicit type and green CI gives `auto: true`; the same change typed by the triage LLM gives `auto: false`.
-- [ ] Any protected path, dependency change, used note, architecture decision or skipped gate gives `auto: false` with that rule named.
-- [ ] Auto-merge uses GitHub's auto-merge, so branch protection still applies.
-- [ ] With `auto.workflows: []`, a small chore with an explicit type and green CI gives `auto: false` with the reason "chore is not in the auto workflows".
-- [ ] A read-only run with an in-repo doc sink creates its branch only at delivery and opens a PR.
-- [ ] ADR and report names contain the run id, never a counter.
+- [x] The summary contains request, stages, evidence, decisions, notes, usage and merge result, all from state. (test: factory/engine/tests/delivery/test_delivery.py::test_the_summary_has_request_stages_evidence_decisions_notes_usage_and_merge_result_from_state)
+- [x] A small chore with an explicit type and green CI gives `auto: true`; the same change typed by the triage LLM gives `auto: false`. (test: factory/engine/tests/delivery/test_delivery.py::test_a_small_explicit_chore_with_green_ci_is_auto_and_the_same_change_typed_by_llm_is_not)
+- [x] Any protected path, dependency change, used note, architecture decision or skipped gate gives `auto: false` with that rule named. (test: factory/engine/tests/delivery/test_delivery.py::test_any_protected_path_dependency_change_used_note_architecture_decision_or_skipped_gate_gives_auto_false_with_that_rule_named)
+- [ ] Auto-merge uses GitHub's auto-merge, so branch protection still applies. (not ticked: the test checks that merge is called with auto=True and squash, the request the factory makes; branch protection is enforced by GitHub, which a fake cannot model)
+- [x] With `auto.workflows: []`, a small chore with an explicit type and green CI gives `auto: false` with the reason "chore is not in the auto workflows". (test: factory/engine/tests/delivery/test_delivery.py::test_with_no_auto_workflows_a_small_chore_is_not_auto_with_the_reason_named)
+- [x] A read-only run with an in-repo doc sink creates its branch only at delivery and opens a PR. (test: factory/engine/tests/delivery/test_delivery.py::test_a_read_only_run_with_an_in_repo_doc_sink_creates_its_branch_only_at_delivery_and_opens_a_pr)
+- [x] ADR and report names contain the run id, never a counter. (test: factory/engine/tests/delivery/test_delivery.py::test_adr_and_report_names_contain_the_run_id_never_a_counter, ::test_the_research_report_name_is_the_run_id)
