@@ -6,24 +6,31 @@ Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it wa
 
 ## Resume here
 
-**State at 2026-11-15 (wave 3, 6B open).** `main` is at `1358825`. Merged: waves 0 to 2 (modules 3, 4, 5, 6A, 7, 8, 9, 10, 11, 12, 14, 17, 17A), module 13 (PR #37), module 15 (PR #36), the draft report schemas (PR #35), and the waves 1 and 2 criteria audit (PR #38). Full engine suite after the audit: 703 passed, 16 skipped on 3.10 and on 3.15. Module 13 branch: 720 passed, 16 skipped on both. Module 15 launcher suite: 54 passed on both.
+**State at 2026-11-15 (wave 3, 6B open).** `main` is at `1358825`. Merged: waves 0 to 2 (modules 3, 4, 5, 6A, 7, 8, 9, 10, 11, 12, 14, 17, 17A), module 13 (PR #37), module 15 (PR #36), the report schemas (PR #35), and the waves 1 and 2 criteria audit (PR #38). Full engine suite after the audit: 703 passed, 16 skipped on 3.10 and on 3.15. Module 13 branch: 720 passed, 16 skipped on both. Module 15 launcher suite: 54 passed on both.
 
 **Not done:**
 
 1. **Module 6B (engine loop) is not merged.** The `factory-40` session builds it on `wave3/m06b-engine` and reports 9 of 9 criteria with a test, but it has not opened a PR. Its user approved the push. Review it against `docs/design/modules/06-engine-core.md`, run 3.10 then 3.15, then merge. Do not start a second 6B build.
 2. **Module 16 (drivers) and the integration tests** start only after 6B is merged.
 3. **The tutorial** (new project, dashboard progress, fixing an issue in an existing project) is not written. It needs 16.
-4. **Owner review of drafts (not spec-backed):** `stage-report`, `test-report`, `source-notes` and `review-findings` in `factory/schemas/`, each marked `x-status: draft`. `merge` has no schema; module 13 writes `merge.json` with `auto`, `reason` and `rules` (each `{rule, passed, detail}`). Module 5 has the draft table. `no-blocking-findings` treats medium and high as blocking, a draft choice. `every-claim-has-source` is still unbuilt. The `scope` skill says `questions.json` has the `source-notes` schema, but `tasks_from` reads it as a task list, so the two disagree.
+4. **Report schemas (decision D1, accepted).** `stage-report`, `test-report`, `source-notes` and `review-findings` are the phase 1 schemas. They are untested against live model output, so the first live run may need a field change. `merge` still has no schema; module 13 writes `merge.json` with `auto`, `reason` and `rules` (each `{rule, passed, detail}`), which is a guess the owner has not reviewed. `every-claim-has-source` is unbuilt, since the spec does not say how a claim matches a source. The `scope` skill vs `tasks_from` conflict is open (see module 5).
 5. **Code gaps the audit found, not fixed** (PR #38 body): `RunScanner.scan` re-reads every run file; `mark_run` is not called in production; `doctor_checks` is not wired into `kit.doctor`; `init_run` writes no snapshot; `expand_tasks_from` and `pending_notes` have no engine caller (6B should call them); the engine-crash row is unclassified.
 6. **Module 15's page is a minimal placeholder**, not the designed React UI. It never called the real `factory` CLI, because 16 does not exist. Playwright UI tests are not written.
 7. **Not installed, so untested:** Gradle, golangci-lint, dotnet, prettier, eslint (and `srt`, which blocks the sandbox criteria).
 8. **Commit `6a6ff04`** carries the owner's work email. Removing it needs a force push, which is not approved.
-9. **PRs #39 and #40** (phase 2 reviewer evals) were merged to `main` by other sessions. Phase 1 rules say phase 2 is not built; the owner should decide whether to keep them.
+9. **PRs #39 and #40 (phase 2 reviewer evals) are kept on `main` (decision D3).** They ship `factory/workflows/reviewer-eval.yaml` in the phase 1 kit. Still open: starting it is by hand until module 16 is built; no real reviewer has run through the runner yet; comment-review flags (`run_gates` list vs `[-1]`, `GateContext.run` typing, `sys.path` hack) are not acted on. Details in `docs/design/phase-2.md`, P2-9.
+11. **PR #43 (Codex worker adapter, P2-1) is open and not merged. It needs your decision under D7.** It changes the sandbox promise in two ways: (a) Codex runs with `-s danger-full-access`, so `srt` is the only sandbox layer; (b) `srt` gets `allowMachLookup: ["com.apple.trustd.agent"]` for Codex's TLS, which the srt docs flag as a possible exfiltration route. The PR is also `CONFLICTING` with `main` in `docs/design/modules/09-worker-adapters-and-governed-helpers.md`. Its own open items: criterion 20 (same gate evidence on both harnesses) unproven; the module 9 doctor canary, gate-command srt check, and cache tests not done; the `api.openai.com` default untested; no MCP isolation test for Codex; srt pinned at 0.0.83 and tested on macOS only. Reported smoke results (Codex and Claude live, run alone) are the author's, not reproduced here.
 10. Module 13 writes ADRs and research reports to `docs/adr` and `docs/research`. These are paths in the target repo, as the spec says, not this repo's `docs/`. A literal grep of `factory/` matches them, so the "no `docs/`" rule needs a ruling.
 
-**Decided in wave 3** (owner and `factory-40`'s user; applied in code and docs):
+**Decided in wave 3** (owner; applied in code and docs, see `docs/reviews/wave3-decisions.md`):
 
-- `max` on `on_fail` and `on_conflict` is the number of loops allowed. The shipped `max` of 1 and 2 are valid under it, and a test pins them (`test_the_shipped_workflows_max_values_are_loops_allowed_so_max_2_routes_twice_then_blocks`). The module 8 walkthrough uses 3 as an example; `bug-fix` ships 2 for `verify->fix`. I did not raise it.
+- D1: the four report schemas are the phase 1 schemas. Their `DRAFT` marker is removed.
+- D2: `bug-fix` `verify->fix` is `max: 3` (above).
+- D3: PRs #39 and #40 stay on `main`; `reviewer-eval.yaml` ships in the kit.
+
+**Also decided in wave 3** (`factory-40`'s user; applied in code and docs):
+
+- `max` on `on_fail` and `on_conflict` is the number of loops allowed. Owner decision D2: `bug-fix` `verify->fix` is `max: 3`, matching the module 8 walkthrough (`factory/workflows/bug-fix.yaml`, and the module 5 `bug-fix` example). The other shipped edges keep their values. `test_the_shipped_workflows_max_values_are_loops_allowed_so_verify_max_3_routes_three_times_then_blocks` pins them.
 - Workers are supervised with threads, and a failed gate resets the run branch to its pre-join commit (decided by `factory-40`'s user; recorded in module 6; both were Unspecified in modules 6 to 8).
 - Backoff is three tries with waits of 5 s and 30 s. There is no 2 min wait.
 - When a rule changes, change every doc that states it in the same pass, then grep for the old wording.
@@ -110,6 +117,8 @@ Procedure: `AGENTS.md`, "Building one module". The spec is `docs/design/shared/1
 Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
+
+- 2026-11-15 (wave 3, owner decisions applied): D1 accepted the four drafts as the phase 1 schemas (`DRAFT` text and `x-status` removed; `test_the_four_report_schemas_are_accepted_phase_1_schemas_with_no_draft_marker`). D2 raised `bug-fix` `verify->fix` to `max: 3` in the shipped file and the module 5 example, and changed the module 8 stage-strip example to `1/3` and the pinning test to three loops. D3 kept PRs #39 and #40 and folded the worktree input into `docs/design/phase-2.md` (P2-9): the ADR, workflow, runner and test, plus the open items. Not claimed: no real reviewer run through the runner, no automatic start, and the full engine suite was not rerun after the comment-only edits.
 
 - 2026-11-15 (wave 3): merged the four draft report schemas with their gates (#35), module 15 (#36, 54 launcher tests), module 13 (#37, 26 delivery tests, 720 engine tests passed on 3.10 and 3.15), and the waves 1 and 2 criteria audit (#38: 14 tests added, 4 ticks removed, 703 passed on both). `bug-fix` no longer fails with `config.invalid` at its schema and check gates (`test_bug_fix_no_longer_fails_with_config_invalid_at_its_schema_and_check_gates`). Module 6B was started twice: a second build was stopped before it wrote any file, because `factory-40` already had one with all 9 criteria tested. Module 13's agent was marked completed. Lesson: a wave 3 loop waited on a peer for hours; the rule is now in the global `CLAUDE.md`.
 

@@ -22,3 +22,17 @@ Page: `docs/reviews/wave3-decisions.html`. Data: `docs/reviews/wave3-decisions.j
 ## Open question for the `docs/` rule
 
 `delivery.py` writes ADRs to `docs/adr/` and research reports to `docs/research/` in the **target** repo, as module 7 and 13 specify. AGENTS.md says `factory/` must not reference this repo's `docs/`. These are different `docs/` folders, so the code does not break the rule, but a literal grep does match. Resolve by adding a line to AGENTS.md that says so, or by moving the two constants to a config key. Not put on the page: the owner can settle it in one word when reviewing.
+
+## Owner's answers (applied 2026-11-15)
+
+| Decision | Choice | Recommended? | Applied in |
+| --- | --- | --- | --- |
+| D1 Draft report schemas and `merge.json` | `accept-drafts` | Yes | `factory/schemas/{stage-report,test-report,source-notes,review-findings}.schema.json` (draft marker removed); module 3 and module 5 (Report schemas); `docs/tasks.md` |
+| D2 Loop count on `bug-fix` verify to fix | `raise-to-3` | No | `factory/workflows/bug-fix.yaml`; module 5 `bug-fix` example; module 8 stage-strip example and wave 2 note; `test_rework.py`; `docs/tasks.md` |
+| D3 Phase 2 evals on `main` | `keep-both` | No | `docs/design/phase-2.md` (P2-9, what landed and what is open); `docs/tasks.md` |
+
+D3 carries a cost the owner accepted: the kit copies `reviewer-eval.yaml` into every repo that runs `factory init`. The ADR lists this under "Known limits".
+
+## Open escalation (not decided here)
+
+**PR #43, Codex worker adapter (P2-1).** Not merged. It changes D7 in two ways: Codex's own sandbox is off (`danger-full-access`, so `srt` is the only layer), and `srt` allows the Mach service `com.apple.trustd.agent` for Codex's TLS, which srt flags as a possible exfiltration route. The PR also conflicts with `main` in module 09. Decide: accept both changes under D7, accept only one, or reject both. Until then P2-1 is not complete.

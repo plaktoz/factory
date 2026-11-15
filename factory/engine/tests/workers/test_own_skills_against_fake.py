@@ -118,11 +118,13 @@ def test_every_own_skill_asks_nothing_and_says_so_in_its_rules():
         assert "Never ask a question" in text, stage
 
 
-def test_the_schemas_with_no_spec_fields_are_marked_draft_for_owner_review():
-    """stage-report, review-findings, source-notes and test-report have no fields in the spec. They exist as drafts,
-    and each says so in its description and x-status, so nobody takes them for spec-backed."""
+def test_the_four_report_schemas_are_accepted_phase_1_schemas_with_no_draft_marker():
+    """The owner accepted the drafts as the phase 1 schemas (wave 3, D1). Each file exists, is a valid schema, and no
+    longer says it is a draft, so nobody mistakes an accepted schema for one under review."""
+    import jsonschema
     schema_dir = KIT / "schemas"
     for name in ("stage-report", "review-findings", "source-notes", "test-report"):
         doc = json.loads((schema_dir / f"{name}.schema.json").read_text())
-        assert doc["x-status"] == "draft", name
-        assert "NOT SPEC-BACKED" in doc["description"], name
+        jsonschema.Draft202012Validator.check_schema(doc)
+        assert "x-status" not in doc, name
+        assert "DRAFT" not in doc["description"] and "NOT SPEC-BACKED" not in doc["description"], name
