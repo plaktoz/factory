@@ -74,7 +74,7 @@ class CodexAdapter(WorkerAdapter): ...           # name = "codex"
 
 **Acceptance criteria to add back to phase 1 modules**
 
-- [x] (9) Both adapters run headless in the task worktree, with only the declared environment plus `FACTORY_TASK_DIR`. Codex: `tests/workers/test_codex_adapter.py::test_the_worker_runs_headless_in_the_task_worktree`, `::test_the_child_gets_only_the_declared_variables_and_the_folders_the_adapter_sets`. Claude: `test_claude_adapter.py` of the same name. Both run against stubs, not the live CLI.
+- [x] (9) Both adapters run headless in the task worktree, with only the declared environment plus `FACTORY_TASK_DIR`. Codex: `tests/workers/test_codex_adapter.py::test_the_worker_runs_headless_in_the_task_worktree`, `::test_the_child_gets_only_the_declared_variables_and_the_folders_the_adapter_sets`. Claude: `factory/engine/tests/workers/test_claude_adapter.py::test_the_worker_runs_headless_in_the_task_worktree` and `::test_the_child_gets_only_the_declared_variables_and_the_task_dir`. Both run against stubs, not the live CLI.
 - [ ] (9) The same request on Claude and Codex gives gate evidence of the same shape, with helpers off and on.
 - [ ] (20) A live smoke test on Claude, then Codex, with `FACTORY_LIVE=1`: the same seeded request gives gate evidence of the same shape.
 - [ ] (16) The router skill works from Codex as well as Claude Code.
