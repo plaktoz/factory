@@ -312,7 +312,6 @@ Acceptance criteria:
 - The helpers ledger is requested in every helper mode, so the gate can check that a helper-off task wrote none. With no file changed, the gate passes without a ledger.
 - The `helpers-ledger` gate reads the ledger from the task's `work/` folder, which the spec does not name for `GateContext.task_dir`.
 - `plugin_runner.main()` takes no arguments and reads `sys.argv`, to match the spec's `main() -> int`.
-- `FakeWorkerAdapter` is in `adapters/worker/fake.py`. The spec's signature block names `claude.py` for it, which is a mislabel; the code is unchanged.
 
 **Verified live (Claude Code 2.1.325, gateway token, 2026-11-15).** The optional smoke runs one attempt through the adapter and checks the real result shape. The canary passes with the verdicts the settings require: the Read tool, `cat` and an interpreter are blocked from the factory home, the worktree and task-folder writes are allowed, and the write outside both is blocked. The isolation probe loads no personal plugin, MCP server or hook. `git status`, `git add` and `git diff` work in the worktree under `srt`, `progress.md` is readable, and the factory home's `config.yaml` is refused.
 
