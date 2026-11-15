@@ -6,6 +6,26 @@ Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it wa
 
 ## Resume here
 
+**State at 2026-11-15 (wave 2, paused).** `main` is at `e6ed3af`. Modules 3, 6A, 7, 10, 14 and 17A (wave 1) and modules 4, 5, 9, 11, 12 and 17 (wave 2) are merged. P2-11 (architecture review, phase 2 backlog) is merged.
+
+**Not done in wave 2:**
+
+1. **Module 8 (gates, errors, rework) is not merged.** PR #29 was closed at 00:31:32Z by the `plaktoz` account, and its remote branch `wave2/m08-gates` was force-pushed back to the old commit `984cb92`. The owner did not say why. The rebased work is a local branch at `7d6f44f` in worktree `.claude/worktrees/agent-a55c1e451b3af7fb3`: 3 commits on `main` `c22ba62`, 588 tests pass on 3.10 and 3.15. Ask the owner whether to reopen. Do not push over the remote branch without their word.
+2. **Acceptance-criteria ticks are not written.** Every `- [ ]` in the module files is still unticked, though modules 3, 4, 6A, 7, 9, 10, 11, 12, 14, 17 and 17A have merged tests. Two agents stopped before committing (the second on a network error), so nothing is saved. Method: tick a criterion only when a merged test asserts it, append ` (test: <file>::<name>)`, and leave the rest with ` (not ticked: <reason>)`. First pass counts, unverified: 65 ticked and 26 not, across 10 files. Do module 8 after it is merged.
+
+**Decided in wave 2** (applied in the code and in every doc that states it):
+
+- `on_fail.max` and `on_conflict.max` are the number of loops an edge allows. `max: 3` routes failures 1 to 3 and blocks the fourth. Module 8 and the walkthrough use 3. The shipped workflow files and module 5 examples still use `max` of 1 and 2, so check them against this when module 8 lands.
+- Backoff is three tries with waits of 5 s and 30 s. There is no 2 min wait.
+- When a rule changes, change every doc that states it in the same pass, then grep for the old wording.
+- Run test suites one at a time per worktree. Two runs in one `.venv` broke it once.
+
+**Next, in order:** settle module 8 with the owner, then tick the criteria, then wave 3 (6B, 13, 15), then wave 4 (16 and the integration tests), then the tutorial.
+
+**Still open from before:** five schemas (`merge`, `stage-report`, `test-report`, `source-notes`, `review-findings`) have no fields in the spec. The `bug-fix` workflow gates on `stage-report` and `test-report`, so a run fails at run time with `config.invalid` until they exist. Commit `6a6ff04` carries the owner's work email, and removing it needs a force push, which is not approved.
+
+**Older notes below are history.**
+
 Next: **wave 1** (modules 3, 6A, 7, 10, 14, 17A), phase 1a first. Module 3 is done. Module 6A is done: the rebuild gap was closed by decision E1 (`run_snapshot`), in the spec (PR #16) and the code. Module 3 is done except one criterion: part 1 (config layer, PR #12) and part 2 (`init_repo`, `upgrade`, `doctor`) are merged. The kit-snapshot criterion (`snapshot_kit`) belongs to module 7 and is tested there. Wave 1 next: 14, 17A. Modules 3, 6A, 7 and 10 are done (10 with the two limits in the log). Wave 0 is done; see `docs/reviews/wave-0-report.md`. The spec is merged to `main` (PR #1, merge `f59b80f`). Owner approved wave 0 with autonomy (see Rules). Authorship was decided by the owner as option B (keep current authors, no history rewrite). Known: commit `6a6ff04` carries the owner's work email in the public repo; removing it needs a force push, which the owner has not approved. New commits use the noreply identity set in this repo's local git config. R1, R2, R3, D7 and Q1 to Q4 are decided and applied (`docs/reviews/open-decisions.md`). Q5 does not block wave 0.
 
 Pending owner request, before or alongside W0.1: (1) drop OAuth, state "key or gateway token only", and keep Linux as a pre-pilot check: **done** (module 9 Login and Linux note; `open-decisions.md`, Round 3, item 1); (2) drop `sandbox-exec` only if no alternative exists and it is not a project requirement: **done, kept** (`open-decisions.md`, Round 3); (3) use Node 26, not Node 25 (owner's choice): **done**, tested on Node 26.13.0 (`open-decisions.md`, Round 3); (4) define a distinct `failIfUnavailable` error code for each failure type: **done** (section 18 `sandbox.*` rows; module 9 criteria; tests in `open-decisions.md`, Round 3, item 4); (5) explain and decide G2, G3 and G9: **G3 and G9 done**; **G2 open** (a wave-by-wave fix, names listed in `open-decisions.md`, Round 3, item 5). Decide at the recommendation (rule in `.claude/skills/decision-page/SKILL.md`, step 1). Build a page only for what is left.
