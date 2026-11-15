@@ -1,0 +1,86 @@
+{
+  "title": "Wave 3 owner decisions",
+  "intro": "Waves 0 to 3 are merged except 6B. Five other items were settled without you (listed in the notes file). Three need your call.",
+  "target": "docs/tasks.md",
+  "storage_key": "wave3-decisions-2026-11-15",
+  "decisions": [
+    {
+      "id": "D1",
+      "title": "Draft report schemas and merge.json",
+      "ref": "factory/schemas/*.schema.json; module 5, Draft report schemas; module 13",
+      "context": "The spec gave no fields for stage-report, test-report, source-notes and review-findings, so wave 3 shipped drafts marked x-status: draft. merge.json (module 13) has no schema and is written as auto, reason and rules[{rule, passed, detail}]. The bug-fix gates run on these today. A finding of medium or high severity blocks, which matches review_findings_at_or_above: medium in module 13.",
+      "options": [
+        {
+          "id": "accept-drafts",
+          "name": "Accept the drafts as the phase 1 schemas",
+          "recommended": true,
+          "pros": ["bug-fix runs now with no change", "The shapes are the smallest the skills and gates need", "Changing a field later is a schema edit plus tests"],
+          "cons": ["Real model output may not fit; there has been no live run", "Each draft's x-status and DRAFT text must be removed by hand"]
+        },
+        {
+          "id": "accept-after-live-run",
+          "name": "Keep them as drafts until the first live run, then freeze",
+          "pros": ["Fields come from real artifacts, not guesses", "No premature freeze"],
+          "cons": ["The drafts stay unsettled during the tutorial test", "Needs a live run, which needs 6B and 16"]
+        },
+        {
+          "id": "write-merge-schema",
+          "name": "Accept the drafts and also write a merge schema now",
+          "pros": ["merge.json is validated like every other state file", "The dashboard can reject a bad merge.json"],
+          "cons": ["Fixes the guessed merge.json fields into a schema before module 15 reads them for real", "More files to keep in sync with module 13"]
+        }
+      ],
+      "why": "The drafts are the smallest shape that makes bug-fix run, and a live run will show whether any field is wrong."
+    },
+    {
+      "id": "D2",
+      "title": "Loop count on bug-fix verify to fix",
+      "ref": "factory/workflows/bug-fix.yaml; module 8, rework walkthrough",
+      "context": "max is the number of loops allowed. bug-fix ships verify->fix with max: 2, so the third failure blocks. The module 8 walkthrough and its sample feedback record say loop 1 of 3 and block on the fourth failure. The code and a test follow the shipped file.",
+      "options": [
+        {
+          "id": "keep-2-fix-doc",
+          "name": "Keep max: 2 and change the walkthrough to 2",
+          "recommended": true,
+          "pros": ["No behavior change", "The test pinning the shipped values stays true", "Fewer wasted worker runs before a human is asked"],
+          "cons": ["Two tries may be too few for a flaky e2e test", "Changes a decided example in module 8"]
+        },
+        {
+          "id": "raise-to-3",
+          "name": "Raise the shipped file to max: 3 to match the walkthrough",
+          "pros": ["The doc and the shipped value agree", "One more chance to fix a failing verify"],
+          "cons": ["Changes behavior you did not choose", "More worker cost on a stuck run", "Needs the pinning test updated"]
+        }
+      ],
+      "why": "The shipped value is the one the tests pin, and an example in a walkthrough is the easier thing to change."
+    },
+    {
+      "id": "D3",
+      "title": "Phase 2 evals on main (PRs #39 and #40)",
+      "ref": "AGENTS.md, Build order; phase-2.md P2-9",
+      "context": "Another session merged two phase 2 PRs to main: #39 (docs/research/p2-9 trial, scripts/evals/reviewers) and #40 (factory/workflows/reviewer-eval.yaml, a test, an ADR). AGENTS.md says do not build phase 2 in phase 1. #40 puts reviewer-eval into the kit that gets copied to other repos, and adds a test to the engine suite.",
+      "options": [
+        {
+          "id": "keep-move-out-of-kit",
+          "name": "Keep #39, and move reviewer-eval.yaml out of the shipped kit",
+          "recommended": true,
+          "pros": ["Keeps the eval research and scripts", "The kit stays phase 1 only", "The kit copied into other repos has no eval workflow"],
+          "cons": ["A follow-up PR is needed, including the test", "The other session's tests may expect the workflow in factory/workflows"]
+        },
+        {
+          "id": "keep-both",
+          "name": "Keep both as merged",
+          "pros": ["No work", "The eval workflow is already tested"],
+          "cons": ["Breaks the phase 1 rule in AGENTS.md", "The eval workflow ships to every repo that runs factory init"]
+        },
+        {
+          "id": "revert-both",
+          "name": "Revert #39 and #40",
+          "pros": ["main is phase 1 only again", "Matches AGENTS.md exactly"],
+          "cons": ["Loses research someone did on purpose", "Reverting a merged PR from another session needs that session's owner to agree"]
+        }
+      ],
+      "why": "The research and scripts are outside the kit and harmless, while a workflow in the kit reaches other repos."
+    }
+  ]
+}
