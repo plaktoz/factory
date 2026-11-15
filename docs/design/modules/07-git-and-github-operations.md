@@ -125,20 +125,20 @@ Implementations: `FileTracker`, `GitHubTracker` (`gh`), `GitHubPullRequests` (`g
 
 Acceptance criteria:
 
-- [ ] Worktrees are created at `worktree_path`; read-only runs are detached and get a branch only through `create_delivery_branch`.
-- [ ] `checkpoint` commits product files only, never anything from `$FACTORY_TASK_DIR` or shims.
-- [ ] `join` commits each task's own change once, in `needs` order; two tasks adding dependencies end with one regenerated lockfile.
-- [ ] A task with `needs` inside its stage starts from its dependency's branch and sees that dependency's changes; after the join the run branch holds one commit per task and no change twice.
-- [ ] When a task is reworked, tasks that need it are reset and recreated from its new branch.
-- [ ] Chained task branches are deleted after the join, dependents first.
-- [ ] A conflicting join leaves the run branch at its last good commit and returns the files.
-- [ ] The engine never force-pushes and never pushes to the base branch.
-- [ ] `check_scope_diff` fails on any file outside scope or inside task-level deny paths, including deny paths added by notes.
-- [ ] With the file tracker, no GitHub call is made.
-- [ ] Every worktree it creates contains `.factory-run.json` pointing to the run folder, excluded from git, and no other factory file except the shims.
-- [ ] Checkpoint commits skip repo hooks; the task commits at join and the push run them.
-- [ ] A hook that edits files is retried once with its changes staged; a second failure is returned as `hook_failed`.
-- [ ] Task branches are never pushed.
-- [ ] After a run with several checkpoints per task, the pushed run branch holds only `task(<task>): ...` join commits: no `wip(...)` commit is reachable from it, and no ref on the remote except the run branch exists.
-- [ ] Checkpoints exist only on local task branches; after a run, `git ls-remote` shows no task branch.
-- [ ] A worker that runs `git commit` or `git push` changes nothing the engine uses: the engine's checkpoint and join commits are the only ones counted.
+- [x] Worktrees are created at `worktree_path`; read-only runs are detached and get a branch only through `create_delivery_branch`. (test: factory/engine/tests/gitops/test_gitops.py::test_run_worktree_is_created_at_worktree_path_on_a_run_branch, ::test_read_only_run_is_detached_and_gets_a_branch_only_at_delivery)
+- [x] `checkpoint` commits product files only, never anything from `$FACTORY_TASK_DIR` or shims. (test: factory/engine/tests/gitops/test_gitops.py::test_checkpoint_commits_product_files_and_never_the_marker)
+- [x] `join` commits each task's own change once, in `needs` order; two tasks adding dependencies end with one regenerated lockfile. (test: factory/engine/tests/gitops/test_gitops.py::test_join_commits_each_task_once_in_order, ::test_two_tasks_adding_dependencies_end_with_one_regenerated_lockfile)
+- [x] A task with `needs` inside its stage starts from its dependency's branch and sees that dependency's changes; after the join the run branch holds one commit per task and no change twice. (test: factory/engine/tests/gitops/test_gitops.py::test_a_chained_task_never_reapplies_its_dependency_and_the_run_branch_holds_one_commit_per_task)
+- [x] When a task is reworked, tasks that need it are reset and recreated from its new branch. (test: factory/engine/tests/gitops/test_gitops.py::test_a_reworked_task_resets_and_recreates_the_tasks_that_need_it, ::test_a_task_that_does_not_need_the_reworked_one_is_left_alone)
+- [x] Chained task branches are deleted after the join, dependents first. (test: factory/engine/tests/gitops/test_gitops.py::test_chained_task_branches_are_deleted_after_the_join_dependents_first)
+- [x] A conflicting join leaves the run branch at its last good commit and returns the files. (test: factory/engine/tests/gitops/test_gitops.py::test_a_conflicting_join_leaves_the_run_branch_at_its_last_good_commit)
+- [ ] The engine never force-pushes and never pushes to the base branch. (not ticked: push() has no force path, but no test asserts that the engine never force-pushes; the never-pushes-base half is tested (test_the_engine_refuses_to_push_the_base_branch))
+- [x] `check_scope_diff` fails on any file outside scope or inside task-level deny paths, including deny paths added by notes. (test: factory/engine/tests/gitops/test_gitops.py::test_scope_gate_fails_outside_scope_and_inside_deny_and_passes_otherwise, ::test_deny_wins_over_scope_including_deny_added_later)
+- [x] With the file tracker, no GitHub call is made. (test: factory/engine/tests/tracker/test_gh.py::test_the_file_tracker_reads_markdown_front_matter_and_makes_no_github_call)
+- [ ] Every worktree it creates contains `.factory-run.json` pointing to the run folder, excluded from git, and no other factory file except the shims. (not ticked: test_run_marker_is_written_and_excluded_from_git covers the marker and its git exclusion; no test lists the worktree to show no other factory file, and the shims are not generated in any gitops test)
+- [ ] Checkpoint commits skip repo hooks; the task commits at join and the push run them. (not ticked: test_checkpoint_skips_repo_hooks and test_a_failing_repo_hook_on_a_task_commit_is_returned_as_hook_failed cover the checkpoint and join halves; no test installs a pre-push hook, so 'the push runs them' is untested)
+- [x] A hook that edits files is retried once with its changes staged; a second failure is returned as `hook_failed`. (test: factory/engine/tests/gitops/test_gitops.py::test_a_hook_that_edits_files_is_retried_once_with_its_changes_staged, ::test_a_second_hook_failure_is_returned_as_hook_failed)
+- [x] Task branches are never pushed. (test: factory/engine/tests/gitops/test_gitops.py::test_push_sends_only_the_run_branch_with_join_commits_and_no_wip (a task branch exists locally and the remote ends with only main and run-1), ::test_checkpoints_stay_local_and_are_never_pushed)
+- [x] After a run with several checkpoints per task, the pushed run branch holds only `task(<task>): ...` join commits: no `wip(...)` commit is reachable from it, and no ref on the remote except the run branch exists. (test: factory/engine/tests/gitops/test_gitops.py::test_push_sends_only_the_run_branch_with_join_commits_and_no_wip)
+- [x] Checkpoints exist only on local task branches; after a run, `git ls-remote` shows no task branch. (test: factory/engine/tests/gitops/test_gitops.py::test_the_engine_pushes_only_the_run_branch_and_nothing_else_reaches_the_remote)
+- [x] A worker that runs `git commit` or `git push` changes nothing the engine uses: the engine's checkpoint and join commits are the only ones counted. (test: factory/engine/tests/gitops/test_gitops.py::test_a_worker_that_commits_does_not_change_what_the_engine_counts)
