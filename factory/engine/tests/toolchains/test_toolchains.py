@@ -158,6 +158,19 @@ def test_a_lint_violation_fails_lint_clean_and_lists_file_line_and_rule(tmp_path
     assert (f["file"], f["line"], f["rule"]) == ("app.py", 4, "F401")
 
 
+def test_a_lint_violation_reaches_the_feedback_record_with_file_line_and_rule(tmp_path, path_with):
+    import json
+    from factory_engine.rework import build_feedback
+    stub(path_with, "ruff", "echo 'app.py:4:1: F401 `os` imported but unused'; exit 1")
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "app.py": "import os\n"})
+    res = toolchains.check_lint_clean(GateSpec(kind="check", cmd=None, check="lint-clean", schema=None, args={}), ctx(w))
+    assert not res.passed
+    path = build_feedback(tmp_path / "run", from_stage="verify", to_stage="fix", result=res, loop=1, max_loops=2,
+                          task_ids=["backend"])
+    doc = json.loads(path.read_text())
+    assert doc["gate"] == "lint-clean" and "app.py:4: F401" in doc["output_tail"]
+
+
 def test_clean_lint_passes(tmp_path, path_with):
     stub(path_with, "ruff", "exit 0")
     w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "app.py": "x = 1\n"})

@@ -355,6 +355,28 @@ def test_a_missing_binary_is_binary_missing(machine, make_ctx, tmp_path):
     assert (result.exit, result.error_kind) == ("failed", "binary_missing")
 
 
+def test_start_stops_before_the_worker_runs_when_the_settings_file_is_not_json(stub, machine, make_ctx, tmp_path,
+                                                                              factory_home, monkeypatch):
+    monkeypatch.setattr(C, "render_settings", lambda *a, **k: "{not json")
+    with pytest.raises(FactoryError) as e:
+        gateway_adapter(machine).start(make_ctx(), GW_CONF, tmp_path / "worker.log")
+    assert e.value.code == "sandbox.settings_unparseable"
+    assert not (stub.record / "argv.txt").exists()  # the stub claude never ran
+    tmp = factory_home / "tmp"
+    assert not tmp.exists() or list(tmp.iterdir()) == []
+
+
+def test_the_probe_fails_when_a_hook_runs_in_the_worker(stub, machine, worktree, task_dir, tmp_path, factory_home):
+    init = {"type": "system", "subtype": "init", "plugins": [], "mcp_servers": []}
+    hook = {"type": "system", "subtype": "hook_started", "hook_name": "SessionStart"}
+    events = tmp_path / "probe-events.jsonl"
+    events.write_text(json.dumps(init) + "\n" + json.dumps(hook) + "\n")
+    stub.set(result=str(events))
+    check = C.probe_isolation(harness(str(stub.exe), GW_CONF.env), worktree, task_dir,
+                              environ={**machine, **ENV_GW}, factory=factory_home)
+    assert check.ok is False and "hook" in check.detail
+
+
 def test_doctor_fails_with_no_credentials_and_names_the_variables(stub, machine):
     adapter = ClaudeAdapter(machine)  # no key, no token
     check = adapter.check(harness(str(stub.exe), {}))
