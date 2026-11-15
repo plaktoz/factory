@@ -67,9 +67,9 @@ How they stay small:
 def practice_packs(languages: list[str], stage: str, repo: Path, cfg: Config) -> list[SkillRef]
 ```
 
-- [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both.
-- [ ] A team override in `.factory/config/overrides/practices/` is used in place of, or merged with, the shipped pack.
-- [ ] A pack over `max_lines` is reported by `factory doctor`.
+- [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (not ticked: practice_packs is tested with a language list the test passes in, but no production code calls it, so no task ever gets a pack from its files)
+- [x] A team override in `.factory/config/overrides/practices/` is used in place of, or merged with, the shipped pack. (test: factory/engine/tests/skills/test_skills.py::test_a_team_override_replaces_the_shipped_pack, ::test_a_team_override_can_be_merged_over_the_shipped_pack)
+- [ ] A pack over `max_lines` is reported by `factory doctor`. (not ticked: oversized_packs is tested (test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable) but no code calls it, so factory doctor never reports a pack over its limit)
 
 **Module contract: 10 Skills**
 
@@ -96,9 +96,9 @@ class SkillRef: name: str; source: Literal["override", "locked", "own"]; path: P
 
 Acceptance criteria:
 
-- [ ] Resolution order is override, then locked, then own.
-- [ ] A skill not in the allowlist is never fetched; denied entries are never installed.
-- [ ] Shims appear in a new worktree and never show in `git status`.
-- [ ] A changed upstream ref is reported by `verify_lock`.
-- [ ] With an empty `skills.lock`, every stage of every built-in workflow resolves to an `own` skill.
-- [ ] Each own skill asks no question: run against `FakeWorkerAdapter` fixtures, it writes an artifact that passes its schema or a decision packet.
+- [x] Resolution order is override, then locked, then own. (test: factory/engine/tests/skills/test_skills.py::test_resolution_order_is_override_then_locked_then_own)
+- [x] A skill not in the allowlist is never fetched; denied entries are never installed. (test: factory/engine/tests/skills/test_skills.py::test_a_denied_locked_skill_is_not_used, ::test_only_allowed_skills_are_fetched_and_denied_ones_are_never_installed)
+- [x] Shims appear in a new worktree and never show in `git status`. (test: factory/engine/tests/skills/test_skills.py::test_shims_appear_in_a_new_worktree_and_never_show_in_git_status, ::test_shims_in_a_second_worktree_are_also_hidden)
+- [x] A changed upstream ref is reported by `verify_lock`. (test: factory/engine/tests/skills/test_skills.py::test_a_changed_upstream_ref_is_reported_by_verify_lock)
+- [x] With an empty `skills.lock`, every stage of every built-in workflow resolves to an `own` skill. (test: factory/engine/tests/skills/test_skills.py::test_with_an_empty_lock_every_stage_resolves_to_an_own_skill)
+- [ ] Each own skill asks no question: run against `FakeWorkerAdapter` fixtures, it writes an artifact that passes its schema or a decision packet. (not ticked: tests/workers/test_own_skills_against_fake.py proves wiring only (its docstring says so): it scripts each skill's artifact instead of running the skill, so no test shows a skill writes its own artifact on the fake)
