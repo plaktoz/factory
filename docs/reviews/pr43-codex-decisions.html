@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>PR #43 Codex adapter: two decisions under D7</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--mute:#666660;--line:#dcdcd6;--accent:#2b5fd9;--accent-bg:#e8eefc;--pro:#1b7a3e;--con:#b3261e;--rec:#8a5a00;--rec-bg:#fdf1d6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f2c260;--rec-bg:#3a2f12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 120px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.card h2{font-size:17px;margin:0 0 2px}
+.tag{font-size:12px;color:var(--mute);margin:0 0 10px}
+.ctx{margin:0 0 12px}
+.ctx b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.opts{display:grid;gap:8px}
+label.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+label.opt:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}
+label.opt input{margin-right:8px}
+.name{font-weight:600}
+.rec{font-size:11px;font-weight:600;color:var(--rec);background:var(--rec-bg);border-radius:4px;padding:1px 6px;margin-left:6px}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 0 24px;font-size:13px}
+@media(max-width:560px){.pc{grid-template-columns:1fr;margin-left:0}}
+.pc ul{margin:0;padding-left:16px}
+.pro li::marker{color:var(--pro)} .con li::marker{color:var(--con)}
+.why{font-size:13px;color:var(--mute);margin:10px 0 0}
+textarea{width:100%;min-height:54px;margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
+button{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+#out{display:none;margin-top:24px}
+#out textarea{min-height:320px;font:13px/1.45 ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1 id="h1"></h1>
+<p class="sub" id="intro"></p>
+<div id="list"></div>
+<section id="out" class="card">
+  <h2>Prompt</h2>
+  <p class="tag">Copy this and paste it into the Claude Code session.</p>
+  <textarea id="prompt" readonly></textarea>
+</section>
+</main>
+<div class="bar">
+  <span id="count"></span>
+  <button id="gen">Generate prompt</button>
+  <button id="copy" class="alt">Copy</button>
+  <button id="reset" class="alt">Reset to recommended</button>
+</div>
+<script id="data" type="application/json">{"title": "PR #43 Codex adapter: two decisions under D7", "intro": "PR #43 adds a Codex worker (phase 2, P2-1) under srt. Two facts were checked by running them. Codex's own sandbox fails inside srt, and Codex needs the trustd Mach grant to reach the gateway. The PR is not merged and conflicts with main in module 09.", "target": "docs/design/modules/09-worker-adapters-and-governed-helpers.md", "storage_key": "pr43-codex-2026-11-15", "decisions": [{"id": "D1", "title": "Sandbox promise for Codex workers under D7", "ref": "D7 worker isolation; module 9 Sandbox; PR #43", "context": "Checked on this machine with srt 0.0.83 and codex-cli 0.164.0: Codex with -s workspace-write fails inside srt (sandbox-exec: sandbox_apply: Operation not permitted), so the adapter uses -s danger-full-access and srt is the only layer. Codex also needs allowMachLookup com.apple.trustd.agent: without it a Codex run through srt timed out (exit 124), with it the run replied ok (exit 0). srt's README says that grant opens a potential data exfiltration route through trustd. The grant is in the Codex settings only; main has none.", "options": [{"id": "accept-both-codex-only", "name": "Accept both for Codex workers only, and record them in D7 as residual risk", "recommended": true, "pros": ["Both changes are verified to be needed, not optional", "Claude workers keep the stricter settings; main has no trustd grant", "The risk is written down in D7 where the owner can see it", "Reversible: rejecting later only removes the Codex adapter"], "cons": ["Codex runs get weaker isolation than Claude runs: one OS layer, and a Mach route srt itself warns about", "The exfiltration route is documented by srt but not tested here", "D7 now has two isolation levels to keep straight"]}, {"id": "reject-keep-codex-out", "name": "Reject both: Codex workers are not allowed in phase 1 or 2 until a stronger sandbox exists", "pros": ["D7 stays exactly as decided: one sandbox level for every worker", "No new exfiltration route"], "cons": ["P2-1 stays incomplete and Codex cannot be used", "Throws away verified work and live smoke runs", "No stronger sandbox is planned, so this may be permanent"]}, {"id": "accept-sandbox-only-probe-trustd", "name": "Accept the disabled Codex sandbox, but hold the trustd grant until a probe shows what can leave through it", "pros": ["Keeps the unverified route closed until it is measured", "Gives a test to cite in D7"], "cons": ["Without the grant Codex cannot reach the gateway on macOS, so this is the same as rejecting Codex for now", "The probe is new work with no spec behind it", "Linux behavior is a separate unknown"]}], "why": "Both changes were shown to be required, they apply to Codex only, and writing the residual risk into D7 keeps the decision visible and reversible."}, {"id": "D2", "title": "What happens to PR #43 now", "ref": "PR #43; docs/design/phase-2.md P2-1; module 9", "context": "PR #43 is open, not merged, and CONFLICTING with main in module 09. Its author reports 749 passed and 2 skipped (not reproduced here) and live Codex and Claude smokes run one at a time. Still open in the PR: the same gate evidence on both harnesses (criterion 20), the doctor canary, the gate-command srt check, cache tests, the api.openai.com default, MCP isolation for Codex, and Linux. Phase 1 rules say phase 2 is not built in phase 1.", "options": [{"id": "hold-resolve-conflict", "name": "Keep the PR open, have the author resolve the module 09 conflict, and merge only after D1 is recorded in D7", "recommended": true, "pros": ["The decision and the merge stay in order", "The conflict is small and in one file", "Nothing on main changes until D7 says what Codex workers may do"], "cons": ["P2-1 stays unmerged for now", "Needs a rebase and a rerun of both suites"]}, {"id": "merge-after-rebase", "name": "Rebase, rerun both suites, merge now, and open the missing items as tasks", "pros": ["The adapter and the ~/.codex deny-read fix reach main", "Open items become tracked tasks"], "cons": ["Merges a weaker isolation level before D7 records it", "Criterion 20 and the doctor canary are unproven at merge time", "Adds a phase 2 adapter to main during phase 1, as PR #39 and #40 did"]}, {"id": "split-deny-read-fix", "name": "Merge only the ~/.codex deny-read fix now, and hold the rest", "pros": ["The real gap (the gateway key readable under srt) is closed at once", "No new isolation level on main"], "cons": ["The fix lives in shared sandbox code and the PR author must split it", "The adapter work waits for D1"]}], "why": "The deny-read fix is valuable and the adapter is not urgent, so the order that keeps D7 honest is decision first, merge second."}]}</script>
+<script>
+const P=JSON.parse(document.getElementById("data").textContent), D=P.decisions;
+const KEY="decision-page:"+P.storage_key;
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function recOf(d){return d.options.find(o=>o.recommended).id}
+document.getElementById("h1").textContent=P.title;
+document.getElementById("intro").innerHTML=esc(P.intro)+" Spec: <code>"+esc(P.target)+"</code>. Recommended options are preselected. Pick one per card, add a question if you are unsure, then press <b>Generate prompt</b> and paste it back into Claude Code.";
+const list=document.getElementById("list");
+D.forEach(d=>{
+  const cur=(state[d.id]&&state[d.id].choice)||recOf(d);
+  const el=document.createElement("section");el.className="card";
+  el.innerHTML=
+   `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`+
+   `<div class="opts">`+d.options.map(o=>
+     `<label class="opt"><input type="radio" name="${esc(d.id)}" value="${esc(o.id)}" ${o.id===cur?"checked":""}>`+
+     `<span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">Recommended</span>':""}`+
+     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div></label>`).join("")+
+   `<label class="opt"><input type="radio" name="${esc(d.id)}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
+   `<p class="why">Why recommended: ${esc(d.why)}</p>`+
+   `<textarea data-q="${esc(d.id)}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;
+  list.appendChild(el);
+});
+list.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.type==="radio"){state[t.name]=Object.assign(state[t.name]||{},{choice:t.value})}
+  else if(t.dataset.q){state[t.dataset.q]=Object.assign(state[t.dataset.q]||{},{note:t.value})}
+  save();
+});
+function build(){
+  const lines=["Decisions on "+P.target+" (from the decision page \""+P.title+"\").","Apply each choice, update everything it touches, and keep related sections consistent. Where I asked a question, answer it and wait for me before applying that item.",""];
+  let unsure=0;
+  D.forEach(d=>{
+    const s=state[d.id]||{};const ch=s.choice||recOf(d);const note=(s.note||"").trim();
+    if(ch==="unsure"){unsure++;lines.push(`${d.id} ${d.title}: NOT SURE.`+(note?` Question: ${note}`:" (no question written)"))}
+    else{const o=d.options.find(x=>x.id===ch);
+      lines.push(`${d.id} ${d.title}: ${o.name} [${o.id}]`+(o.recommended?" (recommended)":" (not the recommendation)")+(note?`. Note: ${note}`:""))}
+  });
+  document.getElementById("count").textContent=`${D.length} decisions, ${unsure} unsure`;
+  return lines.join("\n");
+}
+const out=document.getElementById("out"),ta=document.getElementById("prompt");
+document.getElementById("gen").onclick=()=>{ta.value=build();out.style.display="block";out.scrollIntoView({behavior:"smooth"})};
+document.getElementById("copy").onclick=async()=>{
+  ta.value=build();out.style.display="block";
+  try{await navigator.clipboard.writeText(ta.value);flash("Copied")}catch(e){ta.select();flash(document.execCommand&&document.execCommand("copy")?"Copied":"Select and copy")}
+};
+document.getElementById("reset").onclick=()=>{state={};save();location.reload()};
+function flash(m){const b=document.getElementById("copy");const t=b.textContent;b.textContent=m;setTimeout(()=>b.textContent=t,1200)}
+document.getElementById("count").textContent=`${D.length} decisions`;
+</script>
+</body>
+</html>
