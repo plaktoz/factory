@@ -111,10 +111,12 @@ def test_a_missing_binary_is_reported_as_binary_missing_not_a_check_failure(cmd_
 # ---- timeout and stop -------------------------------------------------------------------------------------------
 
 @needs_srt
-def test_a_command_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home):
-    ctx = cmd_ctx(cmd=["sleep", "30"])
-    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=1)
+def test_a_command_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home, task_dir):
+    pid_file = task_dir / "child.pid"
+    ctx = cmd_ctx(cmd=["sh", "-c", f"echo $$ > {pid_file}; sleep 30"])
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=3)
     assert result.exit == "timeout"
+    assert_pid_gone(pid_file)
 
 
 @needs_srt
