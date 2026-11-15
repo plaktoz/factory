@@ -451,3 +451,26 @@ def test_infra_recovered_on_a_run_that_was_not_waiting_changes_nothing(tmp_path)
     run.status = "blocked"
     infra_recovered(run)
     assert run.status == "blocked"
+
+
+def test_the_shipped_workflows_max_values_are_loops_allowed_so_max_2_routes_twice_then_blocks(tmp_path):
+    """Checks the files in factory/workflows against the decided rule (max = loops allowed): bug-fix verify->fix is 2,
+    so the first and second failure route back and the third blocks. The values 1 and 2 are valid; none needs a change."""
+    from factory_engine.config import Config
+    from factory_engine.workflow import load_workflow
+    cfg = Config(machine={}, repo={})
+    shipped = {"bug-fix": load_workflow(tmp_path, cfg, "bug-fix"), "chore": load_workflow(tmp_path, cfg, "chore")}
+    edges = {(n, s.id, e): getattr(s, e).max for n, wf in shipped.items() for s in wf.stages
+             for e in ("on_fail", "on_conflict") if getattr(s, e)}
+    assert edges == {("bug-fix", "fix", "on_fail"): 2, ("bug-fix", "fix", "on_conflict"): 1,
+                     ("bug-fix", "verify", "on_fail"): 2, ("bug-fix", "review", "on_fail"): 1,
+                     ("chore", "implement", "on_fail"): 2, ("chore", "verify", "on_fail"): 2}
+    run_dir, run, _ = make_run(tmp_path)
+    wf = shipped["bug-fix"]
+    verify = by_id(wf, "verify")
+    run.workflow = "bug-fix"
+    outcomes = []
+    for _ in range(3):
+        run.stage = "verify"
+        outcomes.append(route(run, wf, verify, "rework").action)
+    assert outcomes == ["goto", "goto", "blocked"]

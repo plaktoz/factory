@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/review-findings.schema.json",
+  "title": "review-findings",
+  "description": "DRAFT, NOT SPEC-BACKED, FOR OWNER REVIEW. A reviewer's artifact: each finding has a file, line, severity (low, medium, high) and the rule it breaks (review-standards skill). A finding is blocking when its severity is medium or high (draft choice; the spec does not define blocking). The spec gives no fields.",
+  "x-status": "draft",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "file": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "severity": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ]
+          },
+          "rule": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file",
+          "line",
+          "severity",
+          "rule"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "findings"
+  ],
+  "additionalProperties": true
+}

@@ -171,6 +171,19 @@ insert:
 - Plugins apply in file order and never edit workflow files. Each added stage records its source, such as `plugin:frontend-review`, in `run.json`.
 - The gate reads only the findings JSON, so free-form skill output never decides pass or fail. Impeccable needs a one-time design context per repo, listed as a plugin setup step; check its license and command names before pinning.
 
+**Draft report schemas**
+
+The spec never gave fields to four report schemas, so a gate that names one could not run. Wave 3 added drafts in `factory/schemas/`. Each says "DRAFT, NOT SPEC-BACKED, FOR OWNER REVIEW" in its description and has `x-status: draft`. They are the smallest shape the skills and gates need, not a decision. Confirm or change them before a real run depends on them.
+
+| Schema | Written by | Draft fields | Read by |
+| --- | --- | --- | --- |
+| `stage-report` | reproduce, root-cause, propose, fix, implement | `stage`, `summary`; `claims[]` of `claim`, `file`, `line`; optional `files_changed` | `{schema: stage-report}`; `evidence-cites-code` requires at least one claim and checks each cited file and line exists in the worktree |
+| `test-report` | the engine, from the verify tasks' JUnit files (`write_test_report`) | `total`, `failed[]` (test names) | `{schema: test-report}` |
+| `review-findings` | review-standards, review-spec, critique, plugin reviewers | `findings[]` of `file`, `line`, `severity` (low, medium, high), `rule`, optional `message` | `no-blocking-findings`: a finding of **medium or high** blocks (a draft choice; the spec does not say what blocks) |
+| `source-notes` | gather | `sources[]` of `address`, `says`, `trust` (free text; no scale is specified) | `{schema: source-notes}`. The check `every-claim-has-source` is still unbuilt, because the spec does not say how a claim is matched to a source |
+
+Open: the `scope` skill's text says `questions.json` has the `source-notes` schema, but `tasks_from` reads that file as a list of task objects. The two cannot both hold, so no schema is drafted for `questions.json`.
+
 **Deterministic plugin tasks, checks and hooks**
 
 A plugin can add work that runs without any LLM: a command, a script file or a Python function it ships. These run under the same rules as built-in tasks: a timeout, a log, an artifact and a gate. They cost no tokens.

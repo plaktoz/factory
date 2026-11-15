@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/source-notes.schema.json",
+  "title": "source-notes",
+  "description": "DRAFT, NOT SPEC-BACKED, FOR OWNER REVIEW. The gather skill's artifact: for each source its address, what it says that matters, and how far it can be trusted. The spec gives no fields, and no trust scale.",
+  "x-status": "draft",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "question": {
+      "type": "string"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "address": {
+            "type": "string",
+            "minLength": 1
+          },
+          "says": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trust": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "address",
+          "says",
+          "trust"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "sources"
+  ],
+  "additionalProperties": true
+}
