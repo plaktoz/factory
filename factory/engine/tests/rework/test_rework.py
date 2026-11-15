@@ -27,7 +27,7 @@ def stage(sid: str, *, on_fail: OnFail | None = None, on_conflict: OnFail | None
 
 def bug_fix() -> Workflow:
     stages = [stage("reproduce"), stage("root-cause"), stage("propose", on_reject="root-cause"),
-              stage("fix", on_conflict=OnFail("fix", 2)), stage("verify", on_fail=OnFail("fix", 2)),
+              stage("fix", on_conflict=OnFail("fix", 3)), stage("verify", on_fail=OnFail("fix", 3)),
               stage("review", on_fail=OnFail("fix", 1))]
     return Workflow(name="bug-fix", type="bug", sink="pull_request", policy=Policy(True, []),
                     defaults=Defaults(2, 30, 10, 3), stages=stages, regenerate_at_join=[], join_cmd=None,
@@ -248,7 +248,7 @@ def test_build_feedback_logs_routed_back_with_the_loop(tmp_path):
 def test_route_resets_the_target_stage_and_every_later_stage_and_leaves_earlier_stages_done(tmp_path):
     run_dir, run, wf = make_run(tmp_path)
     routing = route(run, wf, by_id(wf, "verify"), "rework")
-    assert (routing.action, routing.goto, routing.loop, routing.max) == ("goto", "fix", 1, 2)
+    assert (routing.action, routing.goto, routing.loop, routing.max) == ("goto", "fix", 1, 3)
     assert routing.reset == ["fix", "verify", "review"]
     status = {s.id: s.status for s in run.stages}
     assert status == {"reproduce": "done", "root-cause": "done", "propose": "done",
@@ -260,20 +260,25 @@ def test_route_resets_the_target_stage_and_every_later_stage_and_leaves_earlier_
 def test_the_run_is_blocked_with_an_attention_item_when_the_loop_maximum_is_reached(tmp_path):
     run_dir, run, wf = make_run(tmp_path)
     verify = by_id(wf, "verify")
-    assert route(run, wf, verify, "rework").action == "goto"           # verify -> fix loop 1 of 2
+    for loop in (1, 2, 3):                                              # verify -> fix loops 1 to 3 of 3
+        run.stage = "verify"
+        assert route(run, wf, verify, "rework").action == "goto"
     run.stage = "verify"
-    blocked = route(run, wf, verify, "rework")                          # the second failure is the maximum
+    blocked = route(run, wf, verify, "rework")                          # the fourth failure exceeds the maximum
     assert blocked.action == "blocked"
     assert run.status == "blocked"
     assert run.attention is not None and run.attention.kind == "blocked"
     assert run.attention.stage == "verify" and "verify->fix" in run.attention.summary
-    assert run.loops == {"verify->fix": 1}                              # no extra loop was taken
+    assert run.loops == {"verify->fix": 3}                              # no extra loop was taken
     assert run.stage == "verify"                                        # stays where it failed
 
 
-def test_a_stage_with_a_loop_maximum_of_one_blocks_on_its_first_failure(tmp_path):
+def test_a_stage_with_a_loop_maximum_of_one_routes_once_then_blocks(tmp_path):
     run_dir, run, wf = make_run(tmp_path)
-    assert route(run, wf, by_id(wf, "review"), "rework").action == "blocked"
+    review = by_id(wf, "review")
+    assert route(run, wf, review, "rework").action == "goto"           # loop 1 of 1
+    run.stage = "review"
+    assert route(run, wf, review, "rework").action == "blocked"        # the second failure exceeds the maximum
 
 
 def test_a_failed_stage_without_an_on_fail_edge_is_blocked(tmp_path):
@@ -292,7 +297,8 @@ def test_loop_counters_survive_an_engine_restart(tmp_path):
     restarted = state.read_run(run_dir)                                # a new engine process reads run.json
     assert restarted.loops == {"verify->fix": 1}
     restarted.stage = "verify"
-    assert route(restarted, wf, by_id(wf, "verify"), "rework").action == "blocked"
+    routing = route(restarted, wf, by_id(wf, "verify"), "rework")
+    assert (routing.action, routing.loop) == ("goto", 2)               # the count continues, it does not restart
 
 
 def test_loop_counters_survive_a_rebuild_from_the_last_snapshot(tmp_path):
@@ -310,8 +316,11 @@ def test_a_merge_conflict_follows_on_conflict_and_has_its_own_counter(tmp_path):
     fix = by_id(wf, "fix")
     run.stage = "fix"
     first = route_conflict(run, wf, fix)
-    assert (first.action, first.goto, first.loop, first.max) == ("goto", "fix", 1, 2)
+    assert (first.action, first.goto, first.loop, first.max) == ("goto", "fix", 1, 3)
     assert run.loops == {"fix->fix:conflict": 1}
+    for _ in (2, 3):
+        run.stage = "fix"
+        assert route_conflict(run, wf, fix).action == "goto"
     run.stage = "fix"
     assert route_conflict(run, wf, fix).action == "blocked"
 
