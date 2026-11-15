@@ -231,6 +231,15 @@ def test_a_npm_style_cache_lands_under_the_task_folder_and_a_write_to_home_npm_s
     assert not home_npm.exists()
 
 
+@needs_srt
+@pytest.mark.skipif(shutil.which("npm") is None, reason="npm is not installed")
+def test_real_npm_reports_its_cache_under_the_task_folder(cmd_ctx, tmp_path, factory_home, task_dir):
+    ctx = cmd_ctx(cmd=["npm", "config", "get", "cache"])
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "ok"
+    assert log.read_text().strip() == str(task_dir / "cache" / "npm")
+
+
 def test_a_command_with_no_srt_is_refused_before_it_runs(cmd_ctx, tmp_path, factory_home, monkeypatch):
     empty = tmp_path / "empty"
     empty.mkdir()
