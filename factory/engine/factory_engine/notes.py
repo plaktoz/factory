@@ -92,6 +92,11 @@ def delivered_notes(run_dir: Path, task_id: str) -> list[str]:
     return [n.text for n in _all(run_dir, task_id) if n.delivered_attempt is not None]
 
 
+def delivered_deny(run_dir: Path, task_id: str) -> list[str]:
+    """The deny paths of every note that has been delivered to the task. 6B adds them to the task's scope check."""
+    return [d for n in _all(run_dir, task_id) if n.delivered_attempt is not None for d in n.deny]
+
+
 def tail_log(path: Path, lines: int = 200) -> str:
     """The last `lines` lines of a file, read backwards in blocks so a large log is never loaded whole.
     A missing file gives an empty string. Bytes that are not UTF-8 are replaced, so the raw output is kept."""

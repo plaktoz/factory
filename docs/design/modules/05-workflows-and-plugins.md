@@ -84,7 +84,7 @@ stages:
       - {id: e2e, cmd: [make, e2e], needs: [be-tests, fe-tests], out: e2e.junit.xml}
     join: all
     gate: [{cmd: [scripts/repro-now-passes.sh]}, {schema: test-report}]
-    on_fail: {goto: fix, max: 2}
+    on_fail: {goto: fix, max: 3}
   - id: review
     needs: [verify]
     tasks:
@@ -171,18 +171,18 @@ insert:
 - Plugins apply in file order and never edit workflow files. Each added stage records its source, such as `plugin:frontend-review`, in `run.json`.
 - The gate reads only the findings JSON, so free-form skill output never decides pass or fail. Impeccable needs a one-time design context per repo, listed as a plugin setup step; check its license and command names before pinning.
 
-**Draft report schemas**
+**Report schemas**
 
-The spec never gave fields to four report schemas, so a gate that names one could not run. Wave 3 added drafts in `factory/schemas/`. Each says "DRAFT, NOT SPEC-BACKED, FOR OWNER REVIEW" in its description and has `x-status: draft`. They are the smallest shape the skills and gates need, not a decision. Confirm or change them before a real run depends on them.
+The spec gave no fields to four report schemas, so a gate that names one could not run. Wave 3 drafted them in `factory/schemas/`, and the owner accepted the drafts as the phase 1 schemas (wave 3, decision D1, `docs/reviews/wave3-decisions.md`). They are the smallest shape the skills and gates need. Real model output has not been run against them yet, so the first live run may show a field to change; change the schema and its tests together.
 
-| Schema | Written by | Draft fields | Read by |
+| Schema | Written by | Fields | Read by |
 | --- | --- | --- | --- |
 | `stage-report` | reproduce, root-cause, propose, fix, implement | `stage`, `summary`; `claims[]` of `claim`, `file`, `line`; optional `files_changed` | `{schema: stage-report}`; `evidence-cites-code` requires at least one claim and checks each cited file and line exists in the worktree |
 | `test-report` | the engine, from the verify tasks' JUnit files (`write_test_report`) | `total`, `failed[]` (test names) | `{schema: test-report}` |
-| `review-findings` | review-standards, review-spec, critique, plugin reviewers | `findings[]` of `file`, `line`, `severity` (low, medium, high), `rule`, optional `message` | `no-blocking-findings`: a finding of **medium or high** blocks (a draft choice; the spec does not say what blocks) |
+| `review-findings` | review-standards, review-spec, critique, plugin reviewers | `findings[]` of `file`, `line`, `severity` (low, medium, high), `rule`, optional `message` | `no-blocking-findings`: a finding of **medium or high** blocks (the owner accepted this; it matches `review_findings_at_or_above: medium` in module 13) |
 | `source-notes` | gather | `sources[]` of `address`, `says`, `trust` (free text; no scale is specified) | `{schema: source-notes}`. The check `every-claim-has-source` is still unbuilt, because the spec does not say how a claim is matched to a source |
 
-Open: the `scope` skill's text says `questions.json` has the `source-notes` schema, but `tasks_from` reads that file as a list of task objects. The two cannot both hold, so no schema is drafted for `questions.json`.
+Open: the `scope` skill's text says `questions.json` has the `source-notes` schema, but `tasks_from` reads that file as a list of task objects. The two cannot both hold, so `questions.json` has no schema. This is open and belongs to the research workflow (phase 1b).
 
 **Deterministic plugin tasks, checks and hooks**
 
@@ -281,12 +281,12 @@ class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec 
 
 Acceptance criteria:
 
-- [x] All built-in workflows and `_triage` load without problems. (test: factory/engine/tests/workflow/test_workflow.py::test_built_in_workflow_loads_without_problems for _triage, bug-fix and chore, the three that ship in phase 1a; the other built-ins are phase 1b)
+- [ ] All built-in workflows and `_triage` load without problems. (not ticked: test_built_in_workflow_loads_without_problems covers `_triage`, bug-fix and chore, the three that ship in phase 1a; the built-in feature, new-app and research workflows are phase 1b and have no file in `factory/workflows/` to load, so "all" is not yet testable)
 - [x] A cycle in `needs`, an unknown skill, an unknown check or an unknown `goto` stage are each reported with their path. (test: factory/engine/tests/workflow/test_workflow.py::test_a_needs_cycle_between_stages_is_reported_with_its_path, ::test_a_needs_cycle_between_tasks_is_reported_with_its_stage, ::test_an_unknown_skill_is_reported_with_its_path, ::test_an_unknown_check_is_reported_with_its_path, ::test_an_unknown_goto_is_reported_with_its_path)
 - [x] Two tasks that can run together with overlapping write scopes fail unless one `needs` the other or the file is in `shared_files`. (test: factory/engine/tests/workflow/test_workflow.py::test_two_parallel_tasks_with_overlapping_scopes_fail, ::test_a_needs_between_the_tasks_lifts_the_overlap, ::test_a_literal_file_in_shared_files_is_exempt)
 - [ ] A plugin inserts its stage at the right place, records `plugin:<name>` as source, and never edits a workflow file. (not ticked: plugins are phase 1b; no plugin loader exists and tests/workflow has no plugin test)
 - [x] `expand_helpers` returns sibling tasks for `none` and the task itself for `native`. (test: factory/engine/tests/workflow/test_workflow.py::test_expand_helpers_native_returns_the_task_itself, ::test_expand_helpers_none_returns_one_sibling_per_hint)
-- [x] Tasks from `tasks_from` failing the schema stop the stage before any worker starts. (test: factory/engine/tests/workflow/test_workflow.py::test_generated_tasks_that_fail_the_workflow_schema_are_refused (the check is expand_tasks_from, which returns no task on a bad item; no caller in the engine runs a worker yet, as module 6B is not merged))
+- [x] Tasks from `tasks_from` failing the schema stop the stage before any worker starts. (test: factory/engine/tests/workflow/test_workflow.py::test_generated_tasks_that_fail_the_workflow_schema_are_refused; the check is expand_tasks_from, which raises config.invalid before returning any task, so no worker can start from a bad list; the stage loop that calls it is module 6B and is not merged)
 - [ ] A plugin task with `cmd`, `script` or `python` runs without an LLM, writes its artifact and log, and follows the exit code rules. (not ticked: plugin tasks are phase 1b; no test runs a plugin cmd, script or python task)
 - [ ] A plugin whose files changed after `enable` is switched off with a message naming the changed file. (not ticked: plugin enable and file hashing are phase 1b; no test)
 - [ ] A `.sh` script on a system not listed in `os:` fails the workflow at load, not mid-run. (not ticked: plugin scripts and the os: key are phase 1b; no test or loader check for .sh scripts)

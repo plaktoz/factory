@@ -40,7 +40,7 @@ stages:
       - {id: e2e, cmd: [make, e2e], needs: [be-tests, fe-tests], out: e2e.junit.xml}
     join: all
     gate: [{cmd: [scripts/repro-now-passes.sh]}, {schema: test-report}]
-    on_fail: {goto: fix, max: 2}
+    on_fail: {goto: fix, max: 3}
   - id: review
     needs: [verify]
     tasks:

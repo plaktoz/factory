@@ -1,0 +1,6 @@
+name: reviewer-eval
+type: eval
+stages:
+  - id: review
+    tasks: [{id: standards, skill: review-standards, out: standards.json, timeout_minutes: 10}]
+    gate: [{check: no-blocking-findings}]

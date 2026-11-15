@@ -248,7 +248,7 @@ def test_gate_commands_are_argument_lists(tmp_path):
         run_gates([GateSpec(kind="cmd", cmd=[], check=None, schema=None, args={})], ctx_for(run, worktree))
 
 
-# --- Draft schemas (not spec-backed, for owner review): the gates that read them, and bug-fix at run time -------
+# --- Report schemas (accepted by the owner, wave 3 D1): the gates that read them, and bug-fix at run time ----------
 
 def _stage_ctx(tmp_path, worktree, artifact_name, doc, *, stage="review"):
     tmp_path.mkdir(parents=True, exist_ok=True)

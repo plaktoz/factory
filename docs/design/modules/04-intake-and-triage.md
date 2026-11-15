@@ -55,7 +55,7 @@ stages:
 
 **Rules**
 
-- Triage order: explicit type, then label, then front matter, then keyword rules. Only if all fail does an LLM task propose a type with a confidence score. A low score becomes a human stop with the candidate workflows as options.
+- Triage order: explicit type, then label, then front matter, then keyword rules. Only if all fail does an LLM task propose a type with a confidence score. A low score becomes a human stop with the candidate workflows as options. The candidates are the request types whose workflow loads, best keyword match first, at most four (`triage_candidates` in `triage.py`); the engine supplies the load check, and blocks the run when fewer than two load.
 - Duplicates are caught by source ref plus body hash, so the same issue never starts two runs. The check covers active runs, archived runs and `history.jsonl`. When a run ends, the engine removes the `factory` label from its GitHub issue, so a finished issue is not picked up again.
 - If a GitHub issue body changes while its run is active, the engine logs `request_changed` and raises an attention item. It does not restart the run by itself.
 - Status goes back to the source at each change: GitHub labels `factory:queued`, `factory:running`, `factory:needs-human`, `factory:blocked`, `factory:done`, `factory:failed` plus a comment at the start, at each human stop and at the end; markdown front matter `factory_status` and `factory_run`; for the CLI, printed output and `factory status`.
@@ -101,6 +101,8 @@ def add(repo: Path, cfg: Config, title: str, *, type: str | None = None,
 def triage_rules(request: Request, cfg: Config) -> TriageResult
     """type, workflow, confidence, type_source: explicit | label | front_matter | keyword. The rules never return `llm`:
     the classify task writes `type_source: llm`, which the merge policy never auto-merges (module 13)."""
+def triage_candidates(request: Request, loads: Callable[[str], bool]) -> list[tuple[str, str, str]]
+    """(workflow id, name, reason) for a triage stop: only workflows `loads` accepts, best match first, at most 4."""
 def check_type_resolved(spec: GateSpec, ctx: GateContext) -> GateResult      # used by 8
 ```
 
@@ -111,8 +113,8 @@ Acceptance criteria:
 
 - [x] An inbox folder with three markdown files gives one run; a loose file gives one run; `add --files` gives one run. (test: factory/engine/tests/intake/test_intake.py::test_inbox_folder_of_three_files_gives_one_run, ::test_loose_markdown_file_gives_one_run, ::test_add_with_files_gives_one_run)
 - [x] A folder still receiving files is not picked up until 10 seconds without new files. (test: factory/engine/tests/intake/test_intake.py::test_folder_still_receiving_files_waits_for_ten_quiet_seconds)
-- [x] The same source ref and body hash never creates a second run. (test: factory/engine/tests/intake/test_intake.py::test_same_source_ref_and_body_never_creates_a_second_run, ::test_a_duplicate_found_in_the_archive_is_skipped)
+- [ ] The same source ref and body hash never creates a second run. (not ticked: test_same_source_ref_and_body_never_creates_a_second_run and test_a_duplicate_found_in_the_archive_is_skipped cover a repeat sync and an archived duplicate, but no test syncs the same ref with a changed body and checks the body-hash half; `find_by_source` is only tested for a changed body in state, not through intake)
 - [x] A request with no title gets `factory:invalid` and a comment (GitHub) or `factory_error` (markdown), and no run. (test: factory/engine/tests/intake/test_intake.py::test_github_request_without_title_is_labelled_and_creates_no_run, ::test_markdown_request_without_title_gets_factory_error_and_no_run)
 - [x] The run id is a hyphen slug plus 5 characters and never matches an existing branch or run folder. (test: factory/engine/tests/intake/test_intake.py::test_run_id_format_is_slug_then_five_characters, ::test_run_id_avoids_an_existing_branch, ::test_run_id_never_matches_an_existing_run_folder)
-- [x] A created run has request.json, run.json with its reserved paths, a run folder in the factory home and the `factory:queued` label; its worktree, shims and branch appear only after triage. (test: factory/engine/tests/intake/test_intake.py::test_created_run_has_request_run_json_paths_and_the_queued_label, ::test_worktree_and_branch_are_not_created_until_triage (the shims live in the worktree, which the test shows is absent))
+- [ ] A created run has request.json, run.json with its reserved paths, a run folder in the factory home and the `factory:queued` label; its worktree, shims and branch appear only after triage. (not ticked: test_created_run_has_request_run_json_paths_and_the_queued_label and test_worktree_and_branch_are_not_created_until_triage cover the files, label, worktree and branch; no test checks the shims are absent before triage, because shims are generated only in a worktree that intake never creates)
 - [x] `triage_rules` follows the order explicit, label, front matter, keyword, and records `type_source`. (test: factory/engine/tests/intake/test_intake.py::test_explicit_type_wins_over_every_other_rule, ::test_a_type_label_wins_over_front_matter_and_keywords, ::test_front_matter_type_wins_over_keywords, ::test_keyword_rule_records_its_source_and_workflow)

@@ -214,6 +214,89 @@ def test_a_failing_repo_hook_on_a_task_commit_is_returned_as_hook_failed(repo, c
     assert run(rw, "rev-parse", "HEAD") == before
 
 
+def test_the_engine_pushes_with_repo_hooks_and_a_failing_pre_push_hook_stops_the_push(repo, cfg):
+    """Acceptance (module 7): repo hooks run on the push. The checkpoint skips them; the push does not."""
+    rw = start_run(repo, cfg)
+    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    a = TaskBranch("a", "run-1--a", run(rw, "rev-parse", "HEAD"))
+    assert gitops.join(rw, [a], regenerate=[], join_cmd=None).ok
+    hooks = Path(run(rw, "rev-parse", "--path-format=absolute", "--git-path", "hooks"))
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-push").write_text("#!/bin/sh\necho 'pre-push: blocked by policy' >&2\nexit 1\n")
+    (hooks / "pre-push").chmod(0o755)
+    with pytest.raises(FactoryError):
+        gitops.push(rw, "run-1")
+    assert not any(r == "refs/heads/run-1" for r in ls_remote(repo))  # nothing reached the remote
+
+
+def test_checkpoint_never_commits_shims_or_anything_in_the_task_folder(repo, cfg, tmp_path):
+    from factory_engine import shims
+    from factory_engine.skills import SkillRef
+    gitops.create_run_worktree(repo, cfg, "run-1", base="main", detached=False)
+    gitops.create_task_worktree(repo, cfg, "run-1", "backend", base_branches=["run-1"])
+    tw = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--backend"
+    skill = tmp_path / "skills" / "fix"
+    skill.mkdir(parents=True)
+    (skill / "SKILL.md").write_text("rules\n")
+    shims.generate_shims(tw, ["claude"], [SkillRef("fix", "own", skill, {})])
+    task_dir = tmp_path / "home" / "tasks" / "backend" / "work"  # $FACTORY_TASK_DIR lives in the factory home
+    task_dir.mkdir(parents=True)
+    (task_dir / "progress.md").write_text("notes\n")
+    (tw / "services" / "api.py").write_text("x = 3\n")
+    assert gitops.checkpoint(tw, "backend", 1) is not None
+    assert (tw / ".claude" / "skills" / "factory-fix").is_symlink()  # the shim is there
+    assert run(tw, "show", "--name-only", "--format=", "HEAD").splitlines() == ["services/api.py"]
+    assert run(tw, "status", "--porcelain") == ""
+
+
+def test_a_worker_that_pushes_changes_nothing_the_engine_counts(repo, cfg):
+    rw = start_run(repo, cfg)
+    t = make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    tw = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--a"
+    (tw / "web" / "app.js").write_text("y = 'worker'\n")
+    run(tw, "add", "-A"); run(tw, "commit", "-q", "-m", "worker made this commit")
+    run(tw, "push", "-q", "origin", "HEAD:refs/heads/worker-stray")  # the worker also pushes
+    assert gitops.join(rw, [t], regenerate=[], join_cmd=None).ok
+    assert run(rw, "rev-list", "--count", "main..HEAD") == "1"
+    gitops.push(rw, "run-1")
+    subjects = run(repo, "log", "--format=%s", "origin/run-1").splitlines()
+    assert any(s.startswith("task(a):") for s in subjects) and not any("worker" in s for s in subjects)
+
+
+def test_a_worktree_root_inside_the_repo_is_refused_when_a_worktree_is_created(repo, tmp_path):
+    from factory_engine.config import Config
+    inside = Config(machine={"worktree_root": str(repo / "wt-in"), "worktree_path": "{root}/{repo}/{run_id}"},
+                    repo={"base_branch": "main"})
+    with pytest.raises(FactoryError, match="inside the repo"):
+        gitops.create_run_worktree(repo, inside, "run-9", base="main", detached=False)
+    assert not (repo / "wt-in").exists()
+
+
+def test_the_engine_never_force_pushes(repo, cfg):
+    """Acceptance (module 7): no push the engine makes carries --force. The git call is observed, not the outcome."""
+    import subprocess as sp
+    rw = start_run(repo, cfg)
+    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    a = TaskBranch("a", "run-1--a", run(rw, "rev-parse", "HEAD"))
+    assert gitops.join(rw, [a], regenerate=[], join_cmd=None).ok
+    seen: list[list[str]] = []
+    real = sp.run
+
+    def spy(args, *x, **k):
+        if isinstance(args, (list, tuple)):
+            seen.append(list(args))
+        return real(args, *x, **k)
+    import factory_engine.gitops as g
+    orig = g.subprocess.run
+    g.subprocess.run = spy
+    try:
+        gitops.push(rw, "run-1")
+    finally:
+        g.subprocess.run = orig
+    pushes = [c for c in seen if "push" in c]
+    assert pushes and not any(f in c for c in pushes for f in ("--force", "-f", "--force-with-lease"))
+
+
 def test_sync_base_returns_a_conflict_and_resets(repo, cfg):
     rw = start_run(repo, cfg)
     (rw / "services" / "api.py").write_text("x = 'run'\n")
@@ -466,3 +549,38 @@ def test_a_task_that_does_not_need_the_reworked_one_is_left_alone(repo, cfg):
 def test_a_cycle_in_needs_is_refused(repo, cfg):
     with pytest.raises(FactoryError, match="cycle"):
         gitops.delete_chained_branches(repo, "run-1", {"a": ["b"], "b": ["a"]})
+
+
+# ---------------- module 8 step 3 and the 6B gate reset ----------------
+# 6B takes the run branch's HEAD before a stage's join and, when that stage's gate fails, runs
+# `git reset --hard <that commit>`. These tests use the real join and the same reset. They pin what module 8 step 3
+# ("the run branch keeps its commits") relies on. They do not run the engine; the engine-level test belongs to 6B.
+
+def test_resetting_to_the_pre_join_commit_keeps_the_commits_of_stages_that_already_passed(repo, cfg):
+    rw = start_run(repo, cfg)
+    fix = make_task(repo, cfg, "run-1", "fix", {"services/api.py": "x = 'fixed'\n"})
+    assert gitops.join(rw, [fix], regenerate=[], join_cmd=None).ok          # the fix stage joined and passed its gates
+    after_fix = run(rw, "rev-parse", "HEAD")
+
+    pre_join = run(rw, "rev-parse", "HEAD")                                  # verify's join starts here
+    verify = make_task(repo, cfg, "run-1", "verify", {"tests/test_api.py": "assert False\n"})
+    assert gitops.join(rw, [verify], regenerate=[], join_cmd=None).ok
+    assert run(rw, "rev-parse", "HEAD") != pre_join                          # the join added a commit; the gate then fails
+
+    run(rw, "reset", "--hard", pre_join)                                     # what 6B does when the gate fails
+    assert run(rw, "rev-parse", "HEAD") == after_fix                         # fix's commit is still on the run branch
+    assert (rw / "services" / "api.py").read_text() == "x = 'fixed'\n"       # so the rework continues from the fix
+    assert not (rw / "tests" / "test_api.py").exists()                       # the failed stage's own join is gone
+    assert run(rw, "status", "--porcelain") == ""                            # nothing half-applied is left behind
+
+
+def test_resetting_to_the_pre_join_commit_drops_the_failed_stages_own_commits(repo, cfg):
+    """The case step 3 does not describe: the stage whose gate fails is the stage that made the commits (a scope-diff
+    failure in fix itself). Its join is undone, so the run branch is back at the base, not 'keeping its commits'."""
+    rw = start_run(repo, cfg)
+    base = run(rw, "rev-parse", "HEAD")
+    fix = make_task(repo, cfg, "run-1", "fix", {"web/app.js": "out of scope\n"})
+    assert gitops.join(rw, [fix], regenerate=[], join_cmd=None).ok
+    run(rw, "reset", "--hard", base)
+    assert run(rw, "rev-parse", "HEAD") == base
+    assert run(rw, "rev-list", "--count", "main..HEAD") == "0"

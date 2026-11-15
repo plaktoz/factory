@@ -163,12 +163,11 @@ def _schema_gate(spec: GateSpec, ctx: GateContext) -> GateResult:
     return GateResult(passed=True, gate=name, code="ok", output_tail="", details={})
 
 
-# These checks read an artifact whose shape the spec has not defined. Each fails fast until that shape exists,
-# so a gate never passes an artifact it cannot read.
+# A check the spec does not say how to run fails fast, so a gate never passes an artifact it cannot judge.
 
 def _unbuilt(check: str, schema: str) -> FactoryError:
-    return FactoryError("config.invalid", f"check {check!r} reads {schema}, which has no fields in the spec yet",
-                        hint=f"define {schema} in the module that produces it before a gate uses {check}")
+    return FactoryError("config.invalid", f"check {check!r} reads {schema}, but the spec does not say how to run it",
+                        hint=f"define how {check} matches a claim to a source before a gate uses it")
 
 
 def _stage_artifacts(ctx: GateContext) -> list[Path]:
@@ -205,7 +204,7 @@ def _read_artifacts(ctx: GateContext, schema: str, gate: str) -> tuple[list[tupl
     return docs, None
 
 
-# DRAFT (owner review): the spec does not say what "blocking" means. A finding with severity medium or high blocks.
+# The spec does not say what "blocking" means. The owner accepted: a finding with severity medium or high blocks.
 BLOCKING_SEVERITIES = ("medium", "high")
 
 

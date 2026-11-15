@@ -11,13 +11,13 @@ A reusable software factory: a deterministic Python engine that turns a request 
 | `factory/engine/tests/<module>/` | Tests named in each module's "Run and test" line | all |
 | `factory/engine/tests/contracts/` | Checks that public signatures match the spec | 20 |
 | `factory/launcher/` | Machine launcher, `tick`, dashboard server | 15, 16 |
-| `factory/dashboard/` | Prebuilt React bundle (source lives elsewhere until built) | 15 |
+| `factory/dashboard/` | The dashboard page: plain HTML in 1a, prebuilt React bundle in 1b (no React source exists yet) | 15 |
 | `factory/{workflows,schemas,policies,languages,shims}/` | Shipped data the engine loads | 5, 17A |
 | `factory/skills/own/` | The factory's own skills, including `practices/` | 10 |
 | `docs/` | See `docs/README.md` | - |
 | `scripts/docs-check/` | Checks on the spec: links, Mermaid blocks, module contracts. See its README | - |
 
-`factory/` is the kit that gets copied into other repos, so nothing in it may reference this repo's `docs/`. `.factory/` is created by `factory init` and is not committed here.
+`factory/` is the kit that gets copied into other repos, so nothing in it may reference this repo's `docs/`. The two paths `docs/adr` and `docs/research` in `delivery.py` are not references: they name folders in the target repo where a run's deliverables go (modules 7 and 13). `.factory/` is created by `factory init` and is not committed here.
 
 ## Building one module
 

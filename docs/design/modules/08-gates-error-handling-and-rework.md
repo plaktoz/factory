@@ -18,7 +18,7 @@ The engine sorts every failure into one class, and each class has a fixed respon
 
 1. Task `be-tests` (`make test-api`) exits non-zero. For a `cmd` task that is a check failure, so the stage's `on_fail` applies. The engine logs `gate_failed`.
 2. It writes a feedback record into the fix stage's task folders and logs `routed_back` with `verify->fix` loop 1 of 3.
-3. Stages from fix onward reset to pending. Earlier stages stay done. The run branch keeps its commits, so fix continues from the current code rather than starting over.
+3. Stages from fix onward reset to pending. Earlier stages stay done. The run branch keeps the commits of every stage that already passed, so fix continues from the current code rather than starting over. The one exception is the stage whose own gate failed: the engine resets the run branch to the commit before that stage's join, so a failed stage leaves no commits behind. This reset is built in module 6B and tested there (`test_a_failed_gate_resets_the_run_branch_to_its_pre_join_commit`). Here verify's join added only tests, so fix's commits stay and verify's join is undone. If fix's own gate had failed, fix's join would be undone and fix would start again from the code before it.
 4. The fix worker's prompt includes the feedback record. It fixes the failing test, then verify runs again.
 5. Verify fails again, and each failure routes back as loop 2, then loop 3 of 3. If verify fails a fourth time, the loop maximum is exceeded. The run becomes blocked, raises an attention item and notifies you.
 
@@ -46,7 +46,7 @@ Every field is extracted by code: the gate's exit code and output, JUnit XML for
 **On the dashboard**
 
 - The run row turns amber while reworking and red when blocked or failed.
-- The stage strip draws the loop back, such as `verify → fix 1/2`.
+- The stage strip draws the loop back, such as `verify → fix 1/3`.
 - The run detail shows a failure panel with the gate, exit code, failing tests, output tail and a link to the feedback record.
 - Blocked runs count toward Needs you.
 
@@ -84,7 +84,7 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 - **Run and test:** `pytest factory/engine/tests/gates factory/engine/tests/rework` with recorded gate outputs.
 - **Errors:** a routing loop is bounded by persisted counters; at the maximum the run is blocked.
-- **Decisions taken while building (wave 2).** The backoff has three tries and two waits, 5 s and 30 s, so the default is `(5, 30)`. A third wait of 2 min is not used. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. `max` is the number of loops an edge allows: `max: 3` routes the first three failures and blocks the fourth. The module 5 workflow examples use `max` values of 1 and 2, and the bug-fix walkthrough now uses 3 as the decided value. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
+- **Decisions taken while building (wave 2).** The backoff has three tries and two waits, 5 s and 30 s, so the default is `(5, 30)`. A third wait of 2 min is not used. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. `max` is the number of loops an edge allows: `max: 3` routes the first three failures and blocks the fourth. The shipped `bug-fix.yaml` and the module 5 `bug-fix` example use 3 on `verify->fix`, the value the walkthrough uses (owner decision, wave 3). The other shipped edges keep their values: `fix->root-cause` 2, `fix` conflict 1, `review->fix` 1, and `chore` 2 on both edges. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
 
 **Gate commands run sandboxed.** A `cmd` gate such as `[make, build]` runs through `CommandAdapter`, so it runs under `srt` with the worker's read and write rules ([module 9](09-worker-adapters-and-governed-helpers.md)). A gate that needs a domain or a cache folder gets them the way a task does. The exit code is the one the command returned: 0 passes, any other value is a gate failure, and a missing binary or a sandbox that cannot start is a task error, not a gate failure.
 

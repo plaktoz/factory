@@ -4,6 +4,7 @@ bad input as HTTP 400, and the placeholder dashboard page."""
 import json
 from pathlib import Path
 
+from factory_engine import state, usage
 from factory_launcher.server import app as app_module
 
 from helpers import (HOST, ORIGIN, TOKEN, FakeLauncher, approval_page, attention_for, call, get_json, make_repo,
@@ -163,6 +164,41 @@ def test_the_placeholder_page_has_a_csp_meta_tag_that_blocks_other_origins(app):
 def test_the_placeholder_page_shows_each_required_control(app):
     body = app.handle("GET", "/", {"Host": HOST}, b"").body.decode()
     for needle in ('id="show-json"', 'id="needs"', 'id="counters"', "REFRESH_MS = 5000", 'data-copy', "Copy path"):
+        assert needle in body, needle
+
+
+# --- usage in run detail (phase 1a: read-only, per run) ---
+
+def _two_attempts(home, tmp_path):
+    ref = make_run(home, make_repo(tmp_path, "payments"), key="github.com/acme/payments", run_id="fix-a-aaaaa")
+    run = state.read_run(ref.run_dir)
+    for task, tokens in (("be", (120, 30)), ("fe", (None, None))):
+        n = usage.start_attempt(ref.run_dir, run, task, stage="fix", harness="claude", model_requested=None)
+        usage.finish_attempt(ref.run_dir, task, n, exit="ok", input_tokens=tokens[0], output_tokens=tokens[1],
+                             models=["claude-sonnet"])
+    return ref
+
+
+def test_run_detail_returns_token_totals_by_model_repo_and_day(app, home, tmp_path):
+    _two_attempts(home, tmp_path)
+    status, doc = get_json(app, "/api/runs/fix-a-aaaaa")
+    assert status == 200
+    totals = doc["usage"]["by_model"]["claude-sonnet"]
+    assert (totals["attempts"], totals["input_tokens"], totals["output_tokens"], totals["total_tokens"]) == (2, 120, 30, 150)
+    assert totals["attempts_without_count"] == 1  # the unreported count is kept apart from the tokens, not shown as 0
+    assert len(doc["usage"]["by_repo"]) == 1 and len(doc["usage"]["by_day"]) == 1
+
+
+def test_a_run_with_no_attempts_has_empty_usage_groups(app, home, tmp_path):
+    make_run(home, make_repo(tmp_path, "payments"), key="github.com/acme/payments", run_id="fix-a-aaaaa")
+    _, doc = get_json(app, "/api/runs/fix-a-aaaaa")
+    assert doc["usage"] == {"by_model": {}, "by_repo": {}, "by_day": {}}
+
+
+def test_the_page_renders_each_usage_group_and_the_empty_state(app):
+    body = app.handle("GET", "/", {"Host": HOST}, b"").body.decode()
+    for needle in ("function usageSection", "usageSection(run.usage)", '"by_model"', '"by_repo"', '"by_day"',
+                   "No usage recorded yet.", "without a count"):
         assert needle in body, needle
 
 

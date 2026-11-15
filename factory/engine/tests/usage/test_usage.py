@@ -33,10 +33,11 @@ def records(run_dir, task="backend"):
 
 def test_a_started_record_exists_before_the_worker_launches_and_the_ended_record_holds_the_facts(tmp_path):
     run_dir, run = make(tmp_path)
-    n = usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
+    n = usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested="claude-opus-5-5")
     assert [r["exit"] for r in records(run_dir)] == ["started"]   # written before any finish call
     usage.finish_attempt(run_dir, "backend", n, exit="ok", input_tokens=100, output_tokens=40, models=["claude-opus-5-5"])
     last = records(run_dir)[-1]
+    assert last["model_requested"] == "claude-opus-5-5"  # the ended record keeps the requested model
     assert last["exit"] == "ok" and last["models"] == ["claude-opus-5-5"]
     assert last["repo"] == "report" and last["branch"] == "run-1" and last["worktree"] == str(tmp_path / "wt")
     assert last["input_tokens"] == 100 and last["output_tokens"] == 40 and last["total_tokens"] == 140

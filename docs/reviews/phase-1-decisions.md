@@ -10,7 +10,7 @@ Made on 2026-11-14 from `phase-1-decisions.html`. All 14 took the recommended op
 | D4 | Approvals on rework | One decision file per stage and visit: `decisions/<stage>.<n>.yaml` |
 | D5 | Dashboard writes | Per-session token, plus Host and Origin checks |
 | D6 | Operating systems | macOS and Linux in phase 1; Windows in phase 2 |
-| D7 | Worker isolation | Changed 2026-11-14 (see below). Was: tool allowlist, scrubbed environment, denied reads, no OS sandbox. Now: those, plus Claude Code's own sandbox setting on for every worker; reads of secrets denied; writes only to the worktree and `$FACTORY_TASK_DIR`; `doctor` runs the canary each time |
+| D7 | Worker isolation | Changed 2026-11-14 (see below). Was: tool allowlist, scrubbed environment, denied reads, no OS sandbox. Now: those, plus Claude Code's own sandbox setting on for every worker; reads of secrets denied; writes only to the worktree and `$FACTORY_TASK_DIR`; `doctor` runs the canary each time. Codex workers (phase 2) carry two accepted residual risks, 2026-11-15 (see "D7 residual risk for Codex workers" below) |
 | D8 | Personal setup | CLI flags keep your plugins, hooks and MCP servers out; a `doctor` probe worker verifies it |
 | D9 | Skills | The factory writes its own headless skill for every stage; upstream skills are reference only |
 | D10 | Scope | Phase 1a walking skeleton first, 1b adds the rest |
@@ -46,6 +46,10 @@ D7 was accepted with no OS sandbox. The canary test above showed that a Read den
 Evidence from 2026-11-14, Claude Code 2.1.325, macOS, gateway token, `--permission-mode dontAsk`, a planted file outside the worktree. Without the sandbox, `python3` read it. With the sandbox settings, `python3` failed with `Operation not permitted`, and so did the Read tool (a deny rule, with the `/` and the `//` form both blocking in this test) and `cat`. The `cat` call was refused by the permission layer before it ran, so this test does not show that the sandbox alone would stop `cat`. Writes with `python3` succeeded in the worktree and the task folder and failed outside both. `git status`, `git diff` and `git add` worked in a git worktree. A path under `allowRead` was readable while its denied parent was not. An outbound request from Bash to `example.com` was blocked.
 
 Not tested: Linux (a pre-pilot check). Out of scope: an OAuth login. Tested since this note was written: MCP servers under the sandbox, and a sandbox that cannot start (see [open decisions](open-decisions.md)). The setting names exist in the 2.1.325 binary and can change between releases.
+
+## D7 residual risk for Codex workers (2026-11-15)
+
+On `pr43-codex-decisions.html` the owner chose `accept-both-codex-only` for D1 and `hold-resolve-conflict` for D2. D7 is not reopened: the Claude sandbox stays as decided on 2026-11-14. Two changes are accepted as residual risk for the phase 2 Codex adapter (PR #43, P2-1) and for no other worker: Codex's own sandbox is off (`-s danger-full-access`, so `srt` is the only layer), and `srt` allows the Mach lookup `com.apple.trustd.agent` for Codex's TLS, which `srt`'s README flags as a possible exfiltration route. The record is in [module 9](../design/modules/09-worker-adapters-and-governed-helpers.md) under "Threat model and isolation". The probes behind both changes are in [PR #43 notes](pr43-codex-decisions.md). PR #43 stays open until its author resolves the module 9 conflict, and it is merged only after this record is on `main`.
 
 ## Pilot repo decisions (P1 to P4)
 

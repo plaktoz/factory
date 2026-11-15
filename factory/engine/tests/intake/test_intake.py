@@ -257,6 +257,23 @@ def test_run_id_format_is_slug_then_five_characters(repo, cfg, home):
     assert ref.run_id.startswith("pink-header-colour-")
 
 
+def test_a_run_id_taken_under_another_repo_key_is_avoided(repo, cfg, home, monkeypatch):
+    """Acceptance (module 6A): run ids are unique across the whole factory home, not only within one repo. The
+    first candidate is held by a run folder under a different repo key; the next candidate must be used."""
+    (home / "runs" / "github.com/acme/other" / "fix-login-aaaaa").mkdir(parents=True)
+
+    class Stub:
+        def __init__(self):
+            self.n = 0
+
+        def choice(self, alphabet):
+            self.n += 1
+            return "a" if self.n <= 5 else "d"
+
+    monkeypatch.setattr(state, "secrets", Stub())
+    assert intake.add(repo, cfg, "Fix login").run_id == "fix-login-ddddd"
+
+
 def test_run_id_never_matches_an_existing_run_folder(repo, cfg, tracker, home, monkeypatch):
     (home / "runs" / KEY / "fix-login-aaaaa").mkdir(parents=True)
 
@@ -366,3 +383,63 @@ def test_type_resolved_gate_passes_only_with_a_type_and_workflow(tmp_path, cfg):
     assert not check_type_resolved(spec, ctx()).passed
     out.write_text(json.dumps({"type": "bug", "workflow": "bug-fix"}))
     assert check_type_resolved(spec, ctx()).passed
+
+
+# --- triage candidates: only workflows that load ---
+
+def _kit_loads(repo, cfg):
+    """The driver's `loads`: a workflow loads when module 5's loader accepts it. Used here to test against the real kit."""
+    from factory_engine.workflow import load_workflow
+
+    def loads(wid):
+        try:
+            load_workflow(repo, cfg, wid)
+            return True
+        except FactoryError:
+            return False
+    return loads
+
+
+def test_triage_candidates_offer_only_workflows_that_load(repo, cfg):
+    from factory_engine.triage import TYPE_WORKFLOW, triage_candidates
+    loads = _kit_loads(repo, cfg)
+    offered = [wid for wid, _, _ in triage_candidates(make_request(title="Something vague"), loads)]
+    assert offered == sorted(offered)  # equal keyword hits (none) fall back to workflow id order
+    assert offered and all(loads(wid) for wid in offered)
+    # the shipped kit has bug-fix and chore only; feature, new-app and research are phase 1b and do not load yet
+    assert set(offered) == {"bug-fix", "chore"}
+    assert set(TYPE_WORKFLOW.values()) - set(offered) == {"feature", "new-app", "research"}
+
+
+def test_a_workflow_that_does_not_load_is_never_offered_even_when_its_keywords_match(repo, cfg):
+    from factory_engine.triage import triage_candidates
+    req = make_request(title="Add support for dark mode and implement the toggle")  # feature keywords only
+    ids = [wid for wid, _, _ in triage_candidates(req, _kit_loads(repo, cfg))]
+    assert "feature" not in ids
+
+
+def test_the_better_keyword_match_is_offered_first(cfg):
+    from factory_engine.triage import triage_candidates
+    req = make_request(title="Login crash after upgrade", body="It fails with an exception on every call.")
+    first, second = triage_candidates(req, lambda wid: wid in {"bug-fix", "chore"})
+    assert first[0] == "bug-fix" and "crash" in first[2]
+    assert second[0] == "chore"
+
+
+def test_candidates_never_exceed_the_packets_four_options(cfg):
+    from factory_engine.triage import triage_candidates
+    assert len(triage_candidates(make_request(), lambda wid: True)) == 4
+
+
+def test_with_fewer_than_two_loading_workflows_the_list_is_too_short_for_a_triage_stop(cfg):
+    from factory_engine.triage import triage_candidates
+    assert len(triage_candidates(make_request(), lambda wid: wid == "bug-fix")) == 1
+    assert triage_candidates(make_request(), lambda wid: False) == []
+
+
+def test_the_candidates_make_a_valid_triage_packet(repo, cfg):
+    from factory_engine import decisions as D
+    from factory_engine.triage import triage_candidates
+    from factory_engine.validate import validate
+    packet = D.triage_packet(triage_candidates(make_request(), _kit_loads(repo, cfg)))
+    validate(packet, "packet")

@@ -40,7 +40,7 @@ Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-
 | Native helpers | Claude Code subagents | Codex subagents, on by default; spawned only when the prompt, `AGENTS.md` or a skill asks |
 | Usage data | From the JSON result | From the event stream (to confirm) |
 | Live log | Parsed into plain-text `worker.log` | Parsed into plain-text `worker.log` |
-| Write boundary | Claude Code's sandbox settings (`sandbox.filesystem.allowWrite`, D7) | Workspace-write sandbox, with `$FACTORY_TASK_DIR` as an extra writable root |
+| Write boundary | Claude Code's sandbox settings (`sandbox.filesystem.allowWrite`, D7) | `srt` only. Codex's own sandbox is off (`-s danger-full-access`), and `srt` allows the `com.apple.trustd.agent` Mach lookup. Both risks are accepted for Codex only; see the D7 record in [module 9](modules/09-worker-adapters-and-governed-helpers.md), "Threat model and isolation" |
 | MCP config | JSON MCP config per attempt | `mcp_servers` entries as `-c` config overrides per attempt |
 | Isolation from your setup | `--setting-sources project --strict-mcp-config` (verified) | A `-p` profile or a factory-owned `CODEX_HOME` (to verify) |
 
@@ -316,13 +316,27 @@ Rules that apply to all three entries:
 - [ ] Whether the existing tool (`claude plugin eval`) is enough, or the factory needs its own runner so evals also cover a future Codex adapter ([P2-1](#p2-1-codex-worker-adapter)). Unspecified.
 - [ ] How evals relate to the live smoke test (`FACTORY_LIVE=1`) and the pilot in [section 20](shared/20-dependencies-and-plan.md). Unspecified.
 
-**Deliverable.**
+**Deliverable.** Done 2026-11-15 for the trial; see the [finding](../research/p2-9-reviewer-eval-trial.md).
 
-- [ ] A short written finding, with a small trial: one case set for one stage, run through the chosen tool, with the score, the cost and a decision on whether to build evals into the factory. The trial must use `--no-publish` and sandboxed tools only.
-- [ ] Proposed trial: the reviewers (target 1). Ten to twenty cases, half with a planted defect and half clean, graded by code. The finding reports recall, false alarms and the cost from `usage.jsonl`.
-- [ ] If the trial is useful: a decision on a scheduled run of the regression suite (target 2), with its budget cap.
+- [x] A short written finding, with a small trial: one case set for one stage, with the score, the cost and a decision on whether to build evals into the factory. The trial used the factory's own runner, not `claude plugin eval`, which has no code graders and cannot run the factory's skills under its sandbox. Nothing was published and the results are not committed. (finding: `docs/research/p2-9-reviewer-eval-trial.md`; runner: `scripts/evals/reviewers/`)
+- [x] Trial: the reviewers (target 1). Twelve cases, six with a planted defect and six clean, three runs each, two arms, graded by code. Result: 18 of 18 recall and no false alarm once the prompt was fixed. As built, no run passed the schema and 20 of 36 wrote the artifact outside the folder the engine reads. Both are wiring defects in the module 9 prompt, listed in the finding.
+- [ ] A decision on a scheduled run of the regression suite (target 2), with its budget cap. Not yet: the cases are too easy to rank reviewers. Wait for real misses from pilot runs ([P2-4](#p2-4-pilot-repo-plaktoztest-adapters)).
 
-**Not decided here.** The format of a case, the graders, the runner and the storage. Nothing in phase 1 changes.
+**Not decided here.** The format of a case, the graders and the storage.
+
+**What landed on `main` (PRs #39 and #40, kept by the owner, wave 3 decision D3).** These change the phase 1 kit in one place: it now ships `factory/workflows/reviewer-eval.yaml`.
+
+- **ADR** [`2026-11-15-reviewer-eval-outside-bug-fix.md`](../adr/2026-11-15-reviewer-eval-outside-bug-fix.md): the eval stays out of `bug-fix.yaml`, for cost, fixture and recurring-run reasons, and names `reviewer-eval` as the alternative.
+- **Workflow** `factory/workflows/reviewer-eval.yaml`: one `review` stage with the same `standards` task and `no-blocking-findings` gate as `bug-fix`. Nothing triggers it: the engine has no trigger field, and triage maps no request type to it.
+- **Runner** `scripts/evals/reviewers/run_trial.py`: reads its skill, output name, model, timeout and gate from that workflow.
+- **Test** `factory/engine/tests/workflow/test_reviewer_eval.py`: keeps the eval's task and gate equal to `bug-fix`'s, and fails if the runner hard-codes a setting.
+- **Checks rerun before the merge:** the dry run (exit 0, 12 worktrees), the 78 workflow tests and the link check (223 links, 0 broken). The full engine suite passed earlier, before comment-only edits; it was not rerun after them.
+
+**Still open:**
+
+- [ ] **Starting it.** The runner is started by hand until module 16 (`factory run`) is built; the ADR says so. When 16 lands, `factory run reviewer-eval` replaces `run_trial.py` as the entry point.
+- [ ] **A real worker run.** No real reviewer has run through the new runner. The dry run never calls `claude`.
+- [ ] **Comment-review flags, out of scope of these PRs and not acted on:** `run_gates` returns a list where the caller uses `[-1]`; `GateContext.run` is typed non-optional; a `sys.path` hack sits behind the `E402` suppressions.
 
 ## Fallback workflow: P2-10
 
