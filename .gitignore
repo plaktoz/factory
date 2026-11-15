@@ -36,3 +36,6 @@ node_modules/
 .idea/
 .vscode/
 *.swp
+
+# Local results of the reviewer eval trial (P2-9); can hold private prompts and outputs.
+scripts/evals/**/results/

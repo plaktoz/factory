@@ -316,11 +316,11 @@ Rules that apply to all three entries:
 - [ ] Whether the existing tool (`claude plugin eval`) is enough, or the factory needs its own runner so evals also cover a future Codex adapter ([P2-1](#p2-1-codex-worker-adapter)). Unspecified.
 - [ ] How evals relate to the live smoke test (`FACTORY_LIVE=1`) and the pilot in [section 20](shared/20-dependencies-and-plan.md). Unspecified.
 
-**Deliverable.**
+**Deliverable.** Done 2026-11-15 for the trial; see the [finding](../research/p2-9-reviewer-eval-trial.md).
 
-- [ ] A short written finding, with a small trial: one case set for one stage, run through the chosen tool, with the score, the cost and a decision on whether to build evals into the factory. The trial must use `--no-publish` and sandboxed tools only.
-- [ ] Proposed trial: the reviewers (target 1). Ten to twenty cases, half with a planted defect and half clean, graded by code. The finding reports recall, false alarms and the cost from `usage.jsonl`.
-- [ ] If the trial is useful: a decision on a scheduled run of the regression suite (target 2), with its budget cap.
+- [x] A short written finding, with a small trial: one case set for one stage, with the score, the cost and a decision on whether to build evals into the factory. The trial used the factory's own runner, not `claude plugin eval`, which has no code graders and cannot run the factory's skills under its sandbox. Nothing was published and the results are not committed. (finding: `docs/research/p2-9-reviewer-eval-trial.md`; runner: `scripts/evals/reviewers/`)
+- [x] Trial: the reviewers (target 1). Twelve cases, six with a planted defect and six clean, three runs each, two arms, graded by code. Result: 18 of 18 recall and no false alarm once the prompt was fixed. As built, no run passed the schema and 20 of 36 wrote the artifact outside the folder the engine reads. Both are wiring defects in the module 9 prompt, listed in the finding.
+- [ ] A decision on a scheduled run of the regression suite (target 2), with its budget cap. Not yet: the cases are too easy to rank reviewers. Wait for real misses from pilot runs ([P2-4](#p2-4-pilot-repo-plaktoztest-adapters)).
 
 **Not decided here.** The format of a case, the graders, the runner and the storage. Nothing in phase 1 changes.
 
