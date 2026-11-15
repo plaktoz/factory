@@ -268,13 +268,13 @@ class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec 
 
 Acceptance criteria:
 
-- [ ] All built-in workflows and `_triage` load without problems.
-- [ ] A cycle in `needs`, an unknown skill, an unknown check or an unknown `goto` stage are each reported with their path.
-- [ ] Two tasks that can run together with overlapping write scopes fail unless one `needs` the other or the file is in `shared_files`.
-- [ ] A plugin inserts its stage at the right place, records `plugin:<name>` as source, and never edits a workflow file.
-- [ ] `expand_helpers` returns sibling tasks for `none` and the task itself for `native`.
-- [ ] Tasks from `tasks_from` failing the schema stop the stage before any worker starts.
-- [ ] A plugin task with `cmd`, `script` or `python` runs without an LLM, writes its artifact and log, and follows the exit code rules.
-- [ ] A plugin whose files changed after `enable` is switched off with a message naming the changed file.
-- [ ] A `.sh` script on a system not listed in `os:` fails the workflow at load, not mid-run.
-- [ ] A failing hook is logged and the run carries on unchanged.
+- [x] All built-in workflows and `_triage` load without problems. (test: factory/engine/tests/workflow/test_workflow.py::test_built_in_workflow_loads_without_problems for _triage, bug-fix and chore, the three that ship in phase 1a; the other built-ins are phase 1b)
+- [x] A cycle in `needs`, an unknown skill, an unknown check or an unknown `goto` stage are each reported with their path. (test: factory/engine/tests/workflow/test_workflow.py::test_a_needs_cycle_between_stages_is_reported_with_its_path, ::test_a_needs_cycle_between_tasks_is_reported_with_its_stage, ::test_an_unknown_skill_is_reported_with_its_path, ::test_an_unknown_check_is_reported_with_its_path, ::test_an_unknown_goto_is_reported_with_its_path)
+- [x] Two tasks that can run together with overlapping write scopes fail unless one `needs` the other or the file is in `shared_files`. (test: factory/engine/tests/workflow/test_workflow.py::test_two_parallel_tasks_with_overlapping_scopes_fail, ::test_a_needs_between_the_tasks_lifts_the_overlap, ::test_a_literal_file_in_shared_files_is_exempt)
+- [ ] A plugin inserts its stage at the right place, records `plugin:<name>` as source, and never edits a workflow file. (not ticked: plugins are phase 1b; no plugin loader exists and tests/workflow has no plugin test)
+- [x] `expand_helpers` returns sibling tasks for `none` and the task itself for `native`. (test: factory/engine/tests/workflow/test_workflow.py::test_expand_helpers_native_returns_the_task_itself, ::test_expand_helpers_none_returns_one_sibling_per_hint)
+- [x] Tasks from `tasks_from` failing the schema stop the stage before any worker starts. (test: factory/engine/tests/workflow/test_workflow.py::test_generated_tasks_that_fail_the_workflow_schema_are_refused (the check is expand_tasks_from, which returns no task on a bad item; no caller in the engine runs a worker yet, as module 6B is not merged))
+- [ ] A plugin task with `cmd`, `script` or `python` runs without an LLM, writes its artifact and log, and follows the exit code rules. (not ticked: plugin tasks are phase 1b; no test runs a plugin cmd, script or python task)
+- [ ] A plugin whose files changed after `enable` is switched off with a message naming the changed file. (not ticked: plugin enable and file hashing are phase 1b; no test)
+- [ ] A `.sh` script on a system not listed in `os:` fails the workflow at load, not mid-run. (not ticked: plugin scripts and the os: key are phase 1b; no test or loader check for .sh scripts)
+- [ ] A failing hook is logged and the run carries on unchanged. (not ticked: hooks are phase 1b; no test)
