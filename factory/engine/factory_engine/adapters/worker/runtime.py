@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
+import subprocess
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -95,3 +97,12 @@ def read_text(path: Path | None) -> str:
     if path is None or not path.is_file():
         return ""
     return path.read_text(errors="replace")
+
+
+def kill_group(proc: subprocess.Popen) -> None:
+    """Kills the worker's whole process group: the session leader and every helper it started."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.wait()

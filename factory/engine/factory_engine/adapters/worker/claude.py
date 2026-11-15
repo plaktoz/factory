@@ -9,7 +9,6 @@ from __future__ import annotations
 import json
 import os
 import shutil
-import signal
 import subprocess
 import uuid
 from collections.abc import Mapping
@@ -23,8 +22,8 @@ from ...prompt import build_prompt
 from ...types import CheckResult, HelperPolicy, McpServer
 from . import sandbox
 from .base import AttemptResult, Capabilities, HarnessConfig, TaskContext, WorkerHandle
-from .runtime import (FORBIDDEN_ENV, attempt_folder, base_env, cache_env, declared_env, read_text, remove_attempt,
-                      resolve_mcp, secret_values, write_log, write_private)
+from .runtime import (FORBIDDEN_ENV, attempt_folder, base_env, cache_env, declared_env, kill_group, read_text,
+                      remove_attempt, resolve_mcp, secret_values, write_log, write_private)
 
 # The variables the Claude harness reads from the environment (module 9, Connecting to the LLMs).
 CLAUDE_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL")
@@ -195,15 +194,6 @@ def sandbox_failure(text: str) -> tuple[str, str] | None:
     return None
 
 
-def _kill(proc: subprocess.Popen) -> None:
-    """Kills the worker's whole process group: the session leader and every helper it started."""
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    proc.wait()
-
-
 # ---- the adapter ----------------------------------------------------------------------------------------------------
 
 class ClaudeAdapter:
@@ -340,7 +330,7 @@ class ClaudeAdapter:
             rc = proc.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
             timed_out = True
-            _kill(proc)
+            kill_group(proc)
             rc = proc.returncode
         stdout = read_text(data["stdout"])
         stderr = read_text(data["stderr"])
@@ -364,7 +354,7 @@ class ClaudeAdapter:
     def stop(self, handle: WorkerHandle) -> None:
         proc = handle.data.get("proc")
         if proc is not None and proc.poll() is None:
-            _kill(proc)
+            kill_group(proc)
         handle.data["stopped"] = True
 
 
