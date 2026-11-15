@@ -23,13 +23,11 @@ from ...prompt import build_prompt
 from ...types import CheckResult, HelperPolicy, McpServer
 from . import sandbox
 from .base import AttemptResult, Capabilities, HarnessConfig, TaskContext, WorkerHandle
-from .runtime import (attempt_folder, base_env, cache_env, declared_env, read_text, remove_attempt, resolve_mcp,
-                      secret_values, write_log, write_private)
+from .runtime import (FORBIDDEN_ENV, attempt_folder, base_env, cache_env, declared_env, read_text, remove_attempt,
+                      resolve_mcp, secret_values, write_log, write_private)
 
 # The variables the Claude harness reads from the environment (module 9, Connecting to the LLMs).
 CLAUDE_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL")
-# A worker never gets a GitHub credential, whatever a config declares (module 9: the engine makes every GitHub call).
-FORBIDDEN_ENV = ("GH_TOKEN", "GITHUB_TOKEN")
 # Tools a worker may use. Scope and deny paths are enforced by the scope-diff gate (module 7), not by this list.
 BASE_TOOLS = ("Read", "Edit", "Write", "Glob", "Grep")
 # Helper tools, removed when the helper policy is off. Both names exist across Claude Code releases.

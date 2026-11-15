@@ -20,7 +20,9 @@ from ...types import McpServer
 
 BASE_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR")
 # Declared variables that are not secrets. Everything else a harness declares is masked in logs.
-NOT_SECRET = frozenset({"ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "FACTORY_TASK_DIR"})
+NOT_SECRET = frozenset({"ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "OPENAI_BASE_URL", "FACTORY_TASK_DIR"})
+# A worker never gets a GitHub credential, whatever a config declares (module 9: the engine makes every GitHub call).
+FORBIDDEN_ENV = ("GH_TOKEN", "GITHUB_TOKEN")
 
 
 def base_env(source: Mapping[str, str]) -> dict[str, str]:
