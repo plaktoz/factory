@@ -186,11 +186,20 @@ def test_resolve_harness_resolves_env_references_at_call_time(tmp_path):
     assert resolve_harness(cfg, "claude", env={"ANTHROPIC_BASE_URL": "https://gw"}).env == {"ANTHROPIC_BASE_URL": "https://gw"}
 
 
-def test_non_claude_harness_fails_fast(tmp_path):
-    home = write_home(tmp_path, "harnesses:\n  codex:\n    command: codex\n")
+def test_codex_harness_resolves(tmp_path):
+    home = write_home(tmp_path, "harnesses:\n  codex:\n    command: codex\n    model: gpt-5\n"
+                                "    env:\n      OPENAI_API_KEY: ${OPENAI_API_KEY}\n")
     cfg = load_config(None, env={"FACTORY_HOME": str(home)})
-    with pytest.raises(FactoryError, match="phase 1 accepts only claude"):
-        resolve_harness(cfg, "codex", env={})
+    h = resolve_harness(cfg, "codex", env={"OPENAI_API_KEY": "k"})
+    assert (h.command, h.model, h.env) == ("codex", "gpt-5", {"OPENAI_API_KEY": "k"})
+
+
+def test_unknown_harness_fails_fast_naming_the_accepted_ones(tmp_path):
+    home = write_home(tmp_path, "harnesses:\n  gemini:\n    command: gemini\n")
+    cfg = load_config(None, env={"FACTORY_HOME": str(home)})
+    with pytest.raises(FactoryError) as e:
+        resolve_harness(cfg, "gemini", env={})
+    assert e.value.code == "config.invalid" and "claude" in e.value.message and "codex" in e.value.message
 
 
 # --- worktree_path ---

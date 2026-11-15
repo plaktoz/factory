@@ -76,9 +76,9 @@ def resolve_harness(cfg: Config, harness: str, *, env: Mapping[str, str] = os.en
     if harness not in harnesses:
         raise FactoryError("config.invalid", f"harness {harness!r} is not in the machine file",
                            hint=f"add harnesses.{harness} to ~/.factory/config.yaml")
-    if harness != "claude":
-        raise FactoryError("config.invalid", f"harness {harness!r}: phase 1 accepts only claude",
-                           hint="set harness: claude; Codex is not supported yet")
+    if harness not in ("claude", "codex"):
+        raise FactoryError("config.invalid", f"harness {harness!r}: the accepted harnesses are claude and codex",
+                           hint="set harness: claude or harness: codex")
     h = harnesses[harness]
     raw_env = h.get("env") or {}
     resolved_env = {k: resolve(str(v), env, where=f"harnesses.{harness}.env.{k}") for k, v in raw_env.items()}
