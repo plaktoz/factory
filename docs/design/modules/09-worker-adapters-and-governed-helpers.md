@@ -297,3 +297,23 @@ Acceptance criteria:
 - [ ] A worker gets no `GH_TOKEN`. `factory doctor` runs the sandbox canary on every run of `doctor`, fails with the route named when a read route or the outside write is not blocked, and fails when the sandbox cannot start.
 - [ ] The `doctor` probe worker loads none of your personal instructions, plugins, hooks or MCP servers, and the check fails when one appears.
 - [ ] `CommandAdapter` runs a command, a script and a plugin Python function and kills each at its timeout. For a command, exit 0 is passed, any other exit is check failed, and a missing binary is a task error. For a script or function, exit 0, 1 and 2 map to passed, check failed and task error.
+
+**Implementation notes (wave 2 build, 2026-11-15).** These record what the code does where this file is silent or differs from what the first build assumed.
+
+- `TaskContext` has five defaulted fields after the 19 the spec lists: `artifact_name` (the file the task's `out` names), `bash` (the commands a stage grants), `cmd`, `run` and `plugin_dir` (for deterministic tasks). The spec names no field for the artifact file or the Bash grant, and `CommandAdapter` needs the rest.
+- `TaskContext.skill` is `None` for a deterministic task. The spec types it as a skill reference only.
+- `AttemptResult.error_kind` carries `binary_missing` for a missing `cmd` or `claude` binary. The spec's list has no code for it, and the error-kind list in the contract has it.
+- A sandbox refusal Claude reports on stderr raises `sandbox.*` as a `FactoryError` from `wait`, since no attempt ran. Only stderr is checked, so a worker that quotes the phrase is not mistaken for a sandbox failure.
+- `CommandAdapter` writes its captured output to the task's `work/` folder, not the attempt folder. `srt` confines a sandboxed child's writes to the worktree and `work/`, so a capture file under the denied factory home is refused and the output is lost (observed with a Python child, 2026-11-15).
+- The Claude adapter resolves `${...}` values against the machine environment when it is built, so a literal reference never reaches the child. The stub-tested config may carry references; the engine resolves them when the attempt starts.
+- `doctor` for Claude spends one short model call per run: a canary that asks the worker to try six routes and reads the verdicts from the filesystem and the tool-call record, not from the model's report. The isolation probe spends one more call and reads the init event.
+- Worker isolation checks plugins, MCP servers and hooks. It does not check instructions: the init event does not list the loaded `CLAUDE.md`. Whether a personal `CLAUDE.md` reaches a worker under `--setting-sources project` is Unspecified; the 2026-11-14 test is the only evidence and was run without the flags.
+- The worktree is listed in `allowRead` as well as `allowWrite`, and the factory home's children on the way to it are denied one by one. The default worktree root is `~/.factory/worktrees`, inside the denied home, so a whole-folder deny would also hide the worker's own worktree.
+- The helpers ledger is requested in every helper mode, so the gate can check that a helper-off task wrote none. With no file changed, the gate passes without a ledger.
+- The `helpers-ledger` gate reads the ledger from the task's `work/` folder, which the spec does not name for `GateContext.task_dir`.
+- `plugin_runner.main()` takes no arguments and reads `sys.argv`, to match the spec's `main() -> int`.
+- `FakeWorkerAdapter` is in `adapters/worker/fake.py`. The spec's signature block names `claude.py` for it, which is a mislabel; the code is unchanged.
+
+**Verified live (Claude Code 2.1.325, gateway token, 2026-11-15).** The optional smoke runs one attempt through the adapter and checks the real result shape. The canary passes with the verdicts the settings require: the Read tool, `cat` and an interpreter are blocked from the factory home, the worktree and task-folder writes are allowed, and the write outside both is blocked. The isolation probe loads no personal plugin, MCP server or hook. `git status`, `git add` and `git diff` work in the worktree under `srt`, `progress.md` is readable, and the factory home's `config.yaml` is refused.
+
+**Not verified here.** Linux (`bwrap`), the rule that a worker cannot write `task.json` or `notes.jsonl` through Claude's own sandbox (the same rule holds for `srt` and is tested there), and what `failIfUnavailable` changes on a machine whose sandbox cannot start. These stay as the spec says.

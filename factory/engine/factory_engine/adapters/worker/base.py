@@ -6,8 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal, Protocol
 
-from ...skills import SkillRef  # noqa: F401  (module 10 defines it; wave 0 had a stand-in here)
-from ...types import CheckResult, HelperPolicy, McpServer, Request
+from ...skills import SkillRef
+from ...types import CheckResult, HelperPolicy, McpServer, Request, RunSpec
 
 AttemptExit = Literal["ok", "failed", "timeout", "killed"]
 ErrorKindWorker = Literal["auth", "rate_limit", "binary_missing", "model_not_found", "crash"]
@@ -35,7 +35,7 @@ class TaskContext:
     task_id: str
     stage: str
     attempt: int
-    skill: SkillRef
+    skill: SkillRef | None                        # None for a deterministic task
     request: Request
     worktree: Path
     task_dir: Path
@@ -49,6 +49,12 @@ class TaskContext:
     model: str | None
     mcp: list[McpServer]
     practices: list[SkillRef]
+    # Fields below are not in the spec's block; each is defaulted, so the first 19 keep their order (see module 9).
+    artifact_name: str = "artifact.json"          # the file the task's `out` names, in task_dir
+    bash: list[str] = field(default_factory=list)  # commands the stage grants as Bash(<command>:*)
+    cmd: list[str] | None = None                  # deterministic tasks: the argument list
+    run: RunSpec | None = None                    # deterministic tasks: script or python
+    plugin_dir: Path | None = None                # the plugin folder a script or python task runs from
 
 
 @dataclass
