@@ -242,9 +242,26 @@ def test_a_shim_that_points_at_an_old_skill_is_replaced(repo, worktree, tmp_path
     assert (worktree / ".claude" / "skills" / "factory-fix").resolve() == new_ref.path.resolve()
 
 
-def test_only_claude_is_accepted_in_phase_1(repo, worktree):
-    with pytest.raises(FactoryError, match="phase 1 accepts only claude"):
-        shims.generate_shims(worktree, ["codex"], [])
+def test_codex_links_skills_under_agents_and_leaves_claude_alone(repo, worktree):
+    ref = skills.resolve_skill("fix", repo, CFG)
+    shims.generate_shims(worktree, ["codex"], [ref])
+    link = worktree / ".agents" / "skills" / "factory-fix"
+    assert link.is_symlink() and link.resolve() == ref.path.resolve()
+    assert not (worktree / ".claude" / "skills").exists()
+
+
+def test_both_harnesses_link_twice_without_change_or_git_noise(repo, worktree):
+    ref = [skills.resolve_skill("fix", repo, CFG)]
+    first = shims.generate_shims(worktree, ["claude", "codex"], ref)
+    second = shims.generate_shims(worktree, ["claude", "codex"], ref)
+    assert first == second and len(first) == 2
+    assert porcelain(worktree) == ""
+
+
+def test_an_unknown_harness_is_refused_and_names_the_accepted_ones(repo, worktree):
+    with pytest.raises(FactoryError, match="claude and codex") as e:
+        shims.generate_shims(worktree, ["gemini"], [])
+    assert e.value.code == "config.invalid"
 
 
 def test_generate_shims_outside_a_git_worktree_is_refused(tmp_path):
