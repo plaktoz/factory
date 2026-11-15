@@ -76,9 +76,9 @@ def parse_findings(tc: Toolchain, output: str) -> list[Finding]        # file, l
 
 Acceptance criteria:
 
-- [ ] Maven and Gradle Java, TypeScript, Python and Go fixtures are detected with the right variant.
-- [ ] After a worker leaves unformatted Java, the task's final commit contains formatted code; a checkpoint taken while the worker runs does not run the formatter.
-- [ ] A lint violation fails `lint-clean`, and the feedback record lists file, line and rule.
-- [ ] Repo hooks run on the join commit and before push, and a failing hook routes to rework; checkpoint commits skip hooks.
-- [ ] A repo with Java and TypeScript gets one verify test task per language, run in parallel.
-- [ ] `factory doctor` reports a missing tool before any run starts.
+- [x] Maven and Gradle Java, TypeScript, Python and Go fixtures are detected with the right variant. (test: factory/engine/tests/toolchains/test_toolchains.py::test_detection_picks_the_right_profile_and_variant (Maven, Gradle, npm, ruff, go, dotnet), ::test_a_repo_with_java_and_typescript_detects_both)
+- [ ] After a worker leaves unformatted Java, the task's final commit contains formatted code; a checkpoint taken while the worker runs does not run the formatter. (not ticked: the formatter step (run_step) is called only by tests, and no engine code formats after a worker stops; checkpoint_format is a source grep, not a run; no test formats a Java fixture)
+- [ ] A lint violation fails `lint-clean`, and the feedback record lists file, line and rule. (not ticked: check_lint_clean is tested with a stub ruff (test_a_lint_violation_fails_lint_clean_and_lists_file_line_and_rule), but the feedback record is written by module 8 (gates), which is not merged; the test checks the gate's result details only)
+- [ ] Repo hooks run on the join commit and before push, and a failing hook routes to rework; checkpoint commits skip hooks. (not ticked: no test runs a repo hook on a join commit or before push; hook behavior is module 7 and the routing to rework is module 6B)
+- [ ] A repo with Java and TypeScript gets one verify test task per language, run in parallel. (not ticked: test_a_java_and_typescript_repo_gets_one_test_task_per_language_with_no_dependencies checks language_tasks, which no engine code calls (the verify stage that would use it is module 6B); the parallel run is not tested)
+- [x] `factory doctor` reports a missing tool before any run starts. (test: factory/engine/tests/toolchains/test_toolchains.py::test_doctor_reports_a_missing_tool_before_any_run, ::test_doctor_is_silent_about_tools_that_are_present)
