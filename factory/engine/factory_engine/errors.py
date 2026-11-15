@@ -59,6 +59,9 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     "git.command_failed": CatalogueEntry("task_retry", "A git command failed and matches no other git code; the message holds git's stderr"),
     "git.path_exists": CatalogueEntry("fail_fast", "A worktree or branch path already exists; name the path"),
     "git.worktree_dirty": CatalogueEntry("human", "A worktree with changes was not removed; show the files"),
+    "delivery.merge_blocked": CatalogueEntry(
+        "human", "Branch protection or a required check refused the merge; a person must look at the pull request"
+    ),
     "decision.not_requested": CatalogueEntry(
         "fail_fast", "No decision file exists for this stage visit; the engine writes it when the stop begins"
     ),
