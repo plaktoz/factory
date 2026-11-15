@@ -209,7 +209,10 @@ def test_known_checks_lists_every_registered_name_without_importing_their_module
     }
 
 
-def test_a_check_whose_module_is_not_built_fails_fast_when_it_runs(tmp_path):
+def test_a_check_whose_module_is_not_built_fails_fast_when_it_runs(tmp_path, monkeypatch):
+    from factory_engine import checks
+
+    monkeypatch.setitem(checks.CHECKS, "helpers-ledger", "not_a_module_yet:check_helpers_ledger")
     worktree, base = make_repo(tmp_path)
     _, run = make_run(tmp_path, worktree)
     with pytest.raises(FactoryError) as err:
