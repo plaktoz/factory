@@ -90,12 +90,12 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 Acceptance criteria:
 
-- [ ] Each failure type in the class table maps to exactly one handling type.
-- [ ] A `cmd` gate runs under `srt`; its exit code decides pass or fail, and a missing binary is a task error.
-- [ ] Gates stop at the first failure and return the output tail.
-- [ ] A feedback record holds the gate, exit code, failing test names and changed files, all taken from command output.
-- [ ] `route` resets the target stage and every later stage, and leaves earlier stages done.
-- [ ] Loop counters survive an engine restart.
-- [ ] A rate-limit error is retried by `with_backoff` and never counts against task retries.
-- [ ] Three failed tries put the run in `retrying` with the operation and start time in `run.json`; the next tick tries again and clears the state on success; after `infra_wait_hours` the run is blocked with an attention item.
-- [ ] A repo hook failing on the join commit or push is classified as rework, with the hook output in the feedback record; a hook failing on a network or missing-tool error is classified as transient.
+- [ ] Each failure type in the class table maps to exactly one handling type. (not ticked: the engine crash row (interrupted attempts) has no test here, and the human rework and reject rows are routed by `route` on a fake Outcome until module 11 lands)
+- [ ] A `cmd` gate runs under `srt`; its exit code decides pass or fail, and a missing binary is a task error. (not ticked: no test runs under `srt`, because the gate tests replace the runner with a stub and module 9's CommandAdapter is not built; the exit-code and missing-binary parts are asserted by `factory/engine/tests/gates/test_gates.py::test_a_cmd_gate_passes_on_exit_0_and_fails_on_any_other_exit` and `::test_a_missing_gate_binary_is_a_task_error_not_a_failed_gate`)
+- [x] Gates stop at the first failure and return the output tail. (test: factory/engine/tests/gates/test_gates.py::test_gates_run_in_order_and_stop_at_the_first_failure; factory/engine/tests/gates/test_gates.py::test_a_failing_gate_returns_the_output_tail_of_the_last_200_lines)
+- [x] A feedback record holds the gate, exit code, failing test names and changed files, all taken from command output. (test: factory/engine/tests/gates/test_gates.py::test_feedback_fields_come_from_the_command_output_and_git; factory/engine/tests/rework/test_rework.py::test_a_feedback_record_holds_gate_exit_code_failing_tests_and_changed_files)
+- [x] `route` resets the target stage and every later stage, and leaves earlier stages done. (test: factory/engine/tests/rework/test_rework.py::test_route_resets_the_target_stage_and_every_later_stage_and_leaves_earlier_stages_done)
+- [x] Loop counters survive an engine restart. (test: factory/engine/tests/rework/test_rework.py::test_loop_counters_survive_an_engine_restart)
+- [x] A rate-limit error is retried by `with_backoff` and never counts against task retries. (test: factory/engine/tests/rework/test_rework.py::test_a_rate_limit_is_retried_by_backoff_and_never_counts_against_task_retries)
+- [x] Three failed tries put the run in `retrying` with the operation and start time in `run.json`; the next tick tries again and clears the state on success; after `infra_wait_hours` the run is blocked with an attention item. (test: factory/engine/tests/rework/test_rework.py::test_three_failed_tries_put_the_run_in_retrying_with_the_operation_and_start_time; factory/engine/tests/rework/test_rework.py::test_the_next_tick_tries_again_and_clears_the_state_on_success; factory/engine/tests/rework/test_rework.py::test_after_infra_wait_hours_the_run_is_blocked_with_an_attention_item)
+- [ ] A repo hook failing on the join commit or push is classified as rework, with the hook output in the feedback record; a hook failing on a network or missing-tool error is classified as transient. (not ticked: a join-commit hook failure reaches feedback only as a fixed sentence, because `JoinResult` carries no hook output; push hooks have no test; the output test uses `hook_failure_result`, not the join path)
