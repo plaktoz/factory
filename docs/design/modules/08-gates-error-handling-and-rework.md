@@ -17,15 +17,15 @@ The engine sorts every failure into one class, and each class has a fixed respon
 **Rework, step by step** (verify fails in a bug-fix run)
 
 1. Task `be-tests` (`make test-api`) exits non-zero. For a `cmd` task that is a check failure, so the stage's `on_fail` applies. The engine logs `gate_failed`.
-2. It writes a feedback record into the fix stage's task folders and logs `routed_back` with `verify->fix` loop 1 of 2.
+2. It writes a feedback record into the fix stage's task folders and logs `routed_back` with `verify->fix` loop 1 of 3.
 3. Stages from fix onward reset to pending. Earlier stages stay done. The run branch keeps its commits, so fix continues from the current code rather than starting over.
 4. The fix worker's prompt includes the feedback record. It fixes the failing test, then verify runs again.
-5. If verify fails a second time, the loop maximum is reached. The run becomes blocked, raises an attention item and notifies you.
+5. Verify fails again, and each failure routes back as loop 2, then loop 3 of 3. If verify fails a fourth time, the loop maximum is exceeded. The run becomes blocked, raises an attention item and notifies you.
 
 ```json
 {
   "schema_version": 1,
-  "from_stage": "verify", "to_stage": "fix", "loop": 1, "max": 2,
+  "from_stage": "verify", "to_stage": "fix", "loop": 1, "max": 3,
   "gate": "cmd: [make, test-api]", "exit_code": 1,
   "failed_tests": ["test_refresh_token_expired"],
   "output_tail": "last 200 lines of the gate output",
@@ -84,7 +84,7 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 - **Run and test:** `pytest factory/engine/tests/gates factory/engine/tests/rework` with recorded gate outputs.
 - **Errors:** a routing loop is bounded by persisted counters; at the maximum the run is blocked.
-- **Decisions taken while building (wave 2).** The 2 min step of the backoff is not used: three tries have two waits, so the list is `(5, 30)`, and the 2 min step needs a decision on where it goes. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. A loop is blocked when it reaches its `max`, so `max: 2` routes once and blocks on the second failure, as the walkthrough shows. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
+- **Decisions taken while building (wave 2).** The 2 min step of the backoff is not used: three tries have two waits, so the list is `(5, 30)`, and the 2 min step needs a decision on where it goes. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. `max` is the number of loops an edge allows: `max: 3` routes the first three failures and blocks the fourth. The module 5 workflow examples use `max` values of 1 and 2, and the bug-fix walkthrough now uses 3 as the decided value. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
 
 **Gate commands run sandboxed.** A `cmd` gate such as `[make, build]` runs through `CommandAdapter`, so it runs under `srt` with the worker's read and write rules ([module 9](09-worker-adapters-and-governed-helpers.md)). A gate that needs a domain or a cache folder gets them the way a task does. The exit code is the one the command returned: 0 passes, any other value is a gate failure, and a missing binary or a sandbox that cannot start is a task error, not a gate failure.
 

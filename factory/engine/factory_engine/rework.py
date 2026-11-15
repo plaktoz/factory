@@ -216,12 +216,11 @@ def _blocked(run: Run, stage_id: str, summary: str, when: datetime) -> Routing:
 def _go(run: Run, wf: Workflow, stage: Stage, goto: str, *, key: str, limit: int | None, why: str) -> Routing:
     """Take one loop on an edge, or block the run when the loop reaches the edge's limit. None is unlimited.
 
-    The limit is read the way the module 8 walkthrough reads it: the failure that is loop `max` blocks the run.
-    So max 2 routes the first failure ("loop 1 of 2") and blocks the second. The counter is kept in run.loops,
-    so it survives a restart."""
+    `limit` is the number of loops the edge allows. max 3 routes the first, second and third failure
+    ("loop 1 of 3" to "loop 3 of 3") and blocks the fourth. The counter is kept in run.loops, so it survives a restart."""
     _check_target(wf, stage, goto)
     loop = run.loops.get(key, 0) + 1
-    if limit is not None and loop >= limit:
+    if limit is not None and loop > limit:
         return _blocked(run, stage.id, f"{why}: {key} reached its limit of {limit} loops", SystemClock().now())
     run.loops[key] = loop
     reset = _reset_from(run, wf, goto)
