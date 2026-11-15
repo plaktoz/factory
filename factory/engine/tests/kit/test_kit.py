@@ -159,6 +159,37 @@ def test_doctor_as_scheduler_runs_in_an_empty_environment(monkeypatch):
     assert not results["credentials"].ok, "cron has no secrets, so the key in the shell must not count"
 
 
+def test_doctor_as_scheduler_runs_every_check_the_normal_run_runs(repo, fake_kit, monkeypatch):
+    """Acceptance: --as-scheduler runs every check in an empty environment. The same checks are listed, and the
+    environment is empty (a key in the shell does not count)."""
+    kit.init_repo(repo)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "k")
+    normal = [r.name for r in kit.doctor(repo)]
+    scheduled = by_name(kit.doctor(repo, as_scheduler=True))
+    assert list(scheduled) == normal and len(normal) >= 4
+    assert not scheduled["credentials"].ok  # cron has no secrets
+
+
+def test_upgrade_leaves_a_runs_kit_snapshot_and_its_kit_hash_alone(repo, fake_kit, tmp_path):
+    """Acceptance: a run created before upgrade keeps using its own kit snapshot."""
+    from factory_engine import gitops, state
+    from factory_engine.types import Request, Source
+    kit.init_repo(repo)
+    ident = ["-c", "user.name=t", "-c", "user.email=t@x.invalid", "-C", str(repo)]
+    subprocess.run(["git", *ident, "add", "-A"], check=True)
+    subprocess.run(["git", *ident, "commit", "-q", "-m", "kit"], check=True)
+    home = tmp_path / "home"
+    h = gitops.snapshot_kit(repo, "HEAD", home)
+    rq = Request("r1", Source("cli", "r1", "t", "b", [], None, []), "sha", "repo", "t", "bug", None, None, [])
+    ref = state.init_run(home, repo, "local/repo", "run-1", rq, branch="run-1", worktree=tmp_path / "wt", kit_hash=h)
+    before = snapshot_tree(home / "kits" / h)
+    (fake_kit / "workflows" / "bug-fix.yaml").write_text("name: bug-fix v2\n")
+    kit.upgrade(repo, "2")
+    assert (repo / "factory" / "workflows" / "bug-fix.yaml").read_text() == "name: bug-fix v2\n"  # the repo moved on
+    assert snapshot_tree(home / "kits" / h) == before                                              # the run did not
+    assert state.read_run(ref.run_dir).kit_hash == h
+
+
 def test_doctor_reports_a_bad_repo_config(repo, fake_kit):
     kit.init_repo(repo)
     assert by_name(kit.doctor(repo))["repo-config"].ok

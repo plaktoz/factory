@@ -257,6 +257,23 @@ def test_run_id_format_is_slug_then_five_characters(repo, cfg, home):
     assert ref.run_id.startswith("pink-header-colour-")
 
 
+def test_a_run_id_taken_under_another_repo_key_is_avoided(repo, cfg, home, monkeypatch):
+    """Acceptance (module 6A): run ids are unique across the whole factory home, not only within one repo. The
+    first candidate is held by a run folder under a different repo key; the next candidate must be used."""
+    (home / "runs" / "github.com/acme/other" / "fix-login-aaaaa").mkdir(parents=True)
+
+    class Stub:
+        def __init__(self):
+            self.n = 0
+
+        def choice(self, alphabet):
+            self.n += 1
+            return "a" if self.n <= 5 else "d"
+
+    monkeypatch.setattr(state, "secrets", Stub())
+    assert intake.add(repo, cfg, "Fix login").run_id == "fix-login-ddddd"
+
+
 def test_run_id_never_matches_an_existing_run_folder(repo, cfg, tracker, home, monkeypatch):
     (home / "runs" / KEY / "fix-login-aaaaa").mkdir(parents=True)
 

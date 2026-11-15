@@ -41,7 +41,7 @@ def summarize(run_dirs: list[Path], *, since: date | None = None) -> UsageReport
 
 Acceptance criteria:
 
-- [ ] A started record exists before the worker launches; the ended record holds the requested model, the observed models, tokens, start, end, repo, branch and worktree. (not ticked: test_a_started_record_exists_before_the_worker_launches_and_the_ended_record_holds_the_facts asserts the started record and the ended record's models, tokens, times, repo, branch and worktree, but never a non-null requested model on the ended record (test_a_requested_model_is_recorded_and_no_request_gives_null checks the started record only))
+- [x] A started record exists before the worker launches; the ended record holds the requested model, the observed models, tokens, start, end, repo, branch and worktree. (test: factory/engine/tests/usage/test_usage.py::test_a_started_record_exists_before_the_worker_launches_and_the_ended_record_holds_the_facts)
 - [x] An attempt with no requested model records `model_requested: null` and the observed models from the result. (test: factory/engine/tests/usage/test_usage.py::test_an_attempt_with_no_requested_model_records_the_observed_models_from_the_result)
 - [x] Unknown tokens are `null`, never 0, and are counted separately in reports. (test: factory/engine/tests/usage/test_usage.py::test_unknown_tokens_are_null_never_zero_and_counted_separately)
 - [x] `close_open_attempts` marks every open attempt `interrupted`. (test: factory/engine/tests/usage/test_usage.py::test_close_open_attempts_marks_every_open_attempt_interrupted_with_no_count)

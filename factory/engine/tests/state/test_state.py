@@ -365,3 +365,90 @@ def test_rebuild_without_a_snapshot_fails_and_leaves_run_json(tmp_path):
     with pytest.raises(FactoryError, match="no run_snapshot"):
         state.rebuild_run(ref.run_dir)
     assert (ref.run_dir / "run.json").read_bytes() == before
+
+
+@pytest.mark.parametrize("when", ["before", "after"])
+def test_a_process_killed_inside_write_run_leaves_the_old_or_the_new_run_json(tmp_path, when):
+    """Acceptance: a crash during write_run leaves either the old or the new file, never half of one. A child process
+    is killed with SIGKILL right before, or right after, the rename that publishes run.json."""
+    home, ref = make_run(tmp_path)
+    old = (ref.run_dir / "run.json").read_bytes()
+    code = textwrap.dedent(f"""
+        import os, signal, sys
+        sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})
+        from pathlib import Path
+        from factory_engine import atomic, state
+        from factory_engine.lock import acquire_lock
+        d = Path({str(ref.run_dir)!r})
+        run = state.read_run(d)
+        run.status, run.stage = 'running', 'fix'
+        lock = acquire_lock(d, 'writer')
+        real = os.replace
+        def crash(src, dst):
+            if {when!r} == 'before':
+                os.kill(os.getpid(), signal.SIGKILL)
+            real(src, dst)
+            os.kill(os.getpid(), signal.SIGKILL)
+        atomic.os.replace = crash
+        state.write_run(d, run, lock=lock)
+    """)
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, timeout=60)
+    assert proc.returncode == -signal.SIGKILL
+    now = (ref.run_dir / "run.json").read_bytes()
+    assert now == old if when == "before" else now != old
+    assert state.read_run(ref.run_dir).status == ("pending" if when == "before" else "running")  # whole and schema-valid
+
+
+def test_a_held_lock_with_a_stale_heartbeat_still_refuses(tmp_path):
+    """Acceptance: acquire_lock refuses whatever the heartbeat says. The heartbeat in the lock file is rewritten as
+    stale (time 0, a pid that is not the holder) while the holder still holds the kernel lock."""
+    d = tmp_path / "run"
+    holder = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+        import sys, time
+        sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})
+        from pathlib import Path
+        from factory_engine.lock import acquire_lock
+        acquire_lock(Path({str(d)!r}), 'holder')
+        print('HELD', flush=True)
+        time.sleep(600)
+    """)], stdout=subprocess.PIPE, text=True)
+    try:
+        assert holder.stdout.readline().strip() == "HELD"
+        (d / "lock").write_text(json.dumps({"owner": "holder", "pid": 1, "heartbeat": 0}))
+        with pytest.raises(FactoryError) as e:
+            acquire_lock(d, "engine-2")
+        assert e.value.code == "state.locked"
+    finally:
+        holder.kill()
+        holder.wait()
+
+
+def test_a_killed_holder_with_a_stale_heartbeat_releases_the_lock_at_once(tmp_path):
+    """Acceptance: a killed holder releases the lock at once, whatever its heartbeat says."""
+    d = tmp_path / "run"
+    holder = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+        import sys, time
+        sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})
+        from pathlib import Path
+        from factory_engine.lock import acquire_lock
+        acquire_lock(Path({str(d)!r}), 'holder')
+        print('HELD', flush=True)
+        time.sleep(600)
+    """)], stdout=subprocess.PIPE, text=True)
+    assert holder.stdout.readline().strip() == "HELD"
+    (d / "lock").write_text(json.dumps({"owner": "holder", "pid": 1, "heartbeat": 0}))
+    holder.kill()
+    holder.wait()
+    release(acquire_lock(d, "engine-2"))  # no raise
+
+
+def test_a_rebuild_from_one_snapshot_gives_the_whole_run_without_heartbeat_or_signals(tmp_path):
+    """Acceptance: with one run_snapshot left and every other event removed, rebuild_run gives the same run. The
+    heartbeat and signals are the two fields the spec leaves out of a rebuild."""
+    import dataclasses
+    home, ref = make_run(tmp_path)
+    run = _mid_run(ref)
+    events = ref.run_dir / "events.jsonl"
+    kept = [l for l in events.read_text().splitlines() if '"type":"run_snapshot"' in l.replace(" ", "")]
+    events.write_text("\n".join(kept) + "\n")
+    assert state.rebuild_run(ref.run_dir) == dataclasses.replace(run, heartbeat="", signals=None)
