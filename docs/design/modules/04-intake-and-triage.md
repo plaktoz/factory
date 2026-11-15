@@ -55,7 +55,7 @@ stages:
 
 **Rules**
 
-- Triage order: explicit type, then label, then front matter, then keyword rules. Only if all fail does an LLM task propose a type with a confidence score. A low score becomes a human stop with the candidate workflows as options.
+- Triage order: explicit type, then label, then front matter, then keyword rules. Only if all fail does an LLM task propose a type with a confidence score. A low score becomes a human stop with the candidate workflows as options. The candidates are the request types whose workflow loads, best keyword match first, at most four (`triage_candidates` in `triage.py`); the engine supplies the load check, and blocks the run when fewer than two load.
 - Duplicates are caught by source ref plus body hash, so the same issue never starts two runs. The check covers active runs, archived runs and `history.jsonl`. When a run ends, the engine removes the `factory` label from its GitHub issue, so a finished issue is not picked up again.
 - If a GitHub issue body changes while its run is active, the engine logs `request_changed` and raises an attention item. It does not restart the run by itself.
 - Status goes back to the source at each change: GitHub labels `factory:queued`, `factory:running`, `factory:needs-human`, `factory:blocked`, `factory:done`, `factory:failed` plus a comment at the start, at each human stop and at the end; markdown front matter `factory_status` and `factory_run`; for the CLI, printed output and `factory status`.
@@ -101,6 +101,8 @@ def add(repo: Path, cfg: Config, title: str, *, type: str | None = None,
 def triage_rules(request: Request, cfg: Config) -> TriageResult
     """type, workflow, confidence, type_source: explicit | label | front_matter | keyword. The rules never return `llm`:
     the classify task writes `type_source: llm`, which the merge policy never auto-merges (module 13)."""
+def triage_candidates(request: Request, loads: Callable[[str], bool]) -> list[tuple[str, str, str]]
+    """(workflow id, name, reason) for a triage stop: only workflows `loads` accepts, best match first, at most 4."""
 def check_type_resolved(spec: GateSpec, ctx: GateContext) -> GateResult      # used by 8
 ```
 
