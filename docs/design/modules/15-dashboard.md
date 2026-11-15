@@ -2,7 +2,7 @@
 
 Part of the [phase 1 design](../phase-1.md#module-map). Build wave: 3. Contracts and acceptance criteria are in this file; shared types are in [section 18](../shared/18-shared-contracts.md). Terms such as run, stage, task, attempt and rework are defined in the [glossary](../phase-1.md#2-glossary).
 
-One local Python server, started with `factory dashboard`, serves the prebuilt React bundle. It reads every run's files in the factory home directly and refreshes every 5 seconds. Its writes go through the same engine functions the CLI uses.
+One local Python server, started with `factory dashboard`, serves the dashboard page: a plain HTML page in phase 1a, the prebuilt React bundle in phase 1b (owner decision, 2026-11-15). It reads every run's files in the factory home directly and refreshes every 5 seconds. Its writes go through the same engine functions the CLI uses.
 
 **How the dashboard finds runs**
 
@@ -92,12 +92,13 @@ The server is part of the machine launcher, not a repo's kit. It reads files dir
 Acceptance criteria:
 
 - [x] Runs from two repos with different kit versions show on one page. (test: factory/launcher/tests/server/test_api_state.py::test_runs_from_two_repos_on_different_kits_show_on_one_page)
-- [ ] A new run appears within one refresh with no API call; an archived run disappears. (not ticked: the server half is tested (test_a_new_run_and_an_archived_run_show_on_the_next_refresh), but "with no API call" describes the page's own 5 s poll, which is a Playwright UI test and out of scope; the placeholder page is untested)
+- [ ] A new run appears within one refresh with no API call; an archived run disappears. (not ticked: the server half is tested (test_a_new_run_and_an_archived_run_show_on_the_next_refresh), but "with no API call" describes the page's own 5 s poll, which is a Playwright UI test and out of scope; the plain page is untested)
 - [x] With 500 runs, a refresh re-reads only the run files that changed. (test: factory/launcher/tests/server/test_api_state.py::test_with_500_runs_a_refresh_rereads_only_changed_files)
 - [x] A run whose repo was deleted shows as repo missing and can still be opened. (test: factory/launcher/tests/server/test_api_state.py::test_a_run_whose_repo_was_deleted_shows_as_repo_missing_and_opens)
-- [ ] Run detail shows repo, worktree, task worktrees, branch and source paths, each copyable. (not ticked: the server returns all five paths (test_run_detail_lists_repo_worktree_task_worktrees_branch_and_source), but the Copy button is in the placeholder page, which has no UI test; the spec's React UI is not built)
+- [ ] Run detail shows repo, worktree, task worktrees, branch and source paths, each copyable. (not ticked: the server returns all five paths (test_run_detail_lists_repo_worktree_task_worktrees_branch_and_source), but the Copy button is in the plain page, which has no UI test)
 - [ ] Needs you lists every attention item across repos, with Open page and Copy path for decisions. (not ticked: the API lists every item oldest first with its page URL and path (test_needs_you_lists_every_attention_item_across_repos_oldest_first), but the Open page and Copy path buttons are UI and untested)
 - [ ] (1b) Submit on a decision page records the answer through the launcher and the run resumes. In 1a the page shows the command only. (not ticked: 1b behavior; the launcher call is tested with a fake, and the run resuming needs module 16 and the real engine)
-- [ ] The page refreshes every 5 seconds without a manual click; Show JSON displays the document in use. (not ticked: a Playwright UI test, out of scope for this change; the placeholder page has REFRESH_MS = 5000 and a Show JSON control, but no test drives them)
+- [ ] The page refreshes every 5 seconds without a manual click; Show JSON displays the document in use. (not ticked: a Playwright UI test, out of scope for this change; the plain page has REFRESH_MS = 5000 and a Show JSON control, but no test drives them)
+- [x] Run detail shows token totals by observed model, repo and day, and says so when none are recorded. (test: factory/launcher/tests/server/test_pages_and_writes.py::test_run_detail_returns_token_totals_by_model_repo_and_day, ::test_a_run_with_no_attempts_has_empty_usage_groups, ::test_the_page_renders_each_usage_group_and_the_empty_state; the page's rendering was also driven once in a headless browser against a real server, not as a repeatable UI test)
 - [x] A request with no token, a wrong token, a foreign `Host` or a foreign `Origin` is refused with HTTP 403 and changes nothing. (test: factory/launcher/tests/server/test_security.py::test_no_token_wrong_token_foreign_host_or_foreign_origin_is_403_and_changes_nothing)
 - [x] Scheduler health shows the last tick from `tick.json`, and warns after `stale_after_ticks` intervals without one. (test: factory/launcher/tests/server/test_api_state.py::test_scheduler_health_shows_the_last_tick_and_warns_when_it_is_stale)

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .config import Config
@@ -68,6 +69,27 @@ def _keywords(request: Request) -> TriageResult:
         return _result(matched[0], KEYWORD_CONFIDENCE, "keyword")
     # Nothing matched, or several types matched: no decision. The classify task decides.
     return TriageResult(None, None, 0.0, "keyword")
+
+
+def triage_candidates(request: Request, loads: Callable[[str], bool]) -> list[tuple[str, str, str]]:
+    """The workflows a triage stop offers: (workflow id, name, reason), best match first, only workflows that load.
+
+    `loads` says whether a workflow id loads (the driver passes a wrapper over module 5's `load_workflow`; module 4
+    does not import module 5). A type whose workflow does not load is left out, so the human is never offered a
+    choice that would fail with `config.invalid` after they pick it. A type whose keywords match the request ranks
+    first. The packet takes two to four options, so the list holds at most four; fewer than two means the caller
+    cannot build a triage stop and must block the run with the reason.
+    """
+    text = f"{request.title}\n{request.source.body}".lower()
+    ranked = []
+    for rtype, wid in TYPE_WORKFLOW.items():
+        if not loads(wid):
+            continue
+        hits = [w for w in KEYWORDS.get(rtype, ()) if re.search(rf"\b{re.escape(w)}\b", text)]
+        reason = f"The request mentions {', '.join(hits)}." if hits else f"A {rtype} request runs the {wid} workflow."
+        ranked.append((-len(hits), wid, wid.replace("-", " ").capitalize(), reason))
+    ranked.sort(key=lambda r: (r[0], r[1]))
+    return [(wid, name, reason) for _, wid, name, reason in ranked[:4]]
 
 
 def check_type_resolved(spec: GateSpec, ctx: GateContext) -> GateResult:

@@ -11,7 +11,7 @@ A reusable software factory: a deterministic Python engine that turns a request 
 | `factory/engine/tests/<module>/` | Tests named in each module's "Run and test" line | all |
 | `factory/engine/tests/contracts/` | Checks that public signatures match the spec | 20 |
 | `factory/launcher/` | Machine launcher, `tick`, dashboard server | 15, 16 |
-| `factory/dashboard/` | Prebuilt React bundle (source lives elsewhere until built) | 15 |
+| `factory/dashboard/` | The dashboard page: plain HTML in 1a, prebuilt React bundle in 1b (no React source exists yet) | 15 |
 | `factory/{workflows,schemas,policies,languages,shims}/` | Shipped data the engine loads | 5, 17A |
 | `factory/skills/own/` | The factory's own skills, including `practices/` | 10 |
 | `docs/` | See `docs/README.md` | - |

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; form-action 'none'">
 <title>Factory</title>
-<!-- Minimal placeholder for module 15. It is not the designed React UI; the bundle replaces it later. -->
+<!-- The phase 1a dashboard: a plain page, read-only. The designed React bundle is phase 1b. -->
 <style>
 :root{--fg:#1b1f24;--muted:#57606a;--line:#d0d7de;--bg:#fff;--accent:#0969da;--warn:#9a6700;--bad:#cf222e}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#e6edf3;--muted:#8b949e;--line:#30363d;--bg:#0d1117;--accent:#58a6ff;--warn:#d29922;--bad:#f85149}}
@@ -255,11 +255,32 @@ pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-
         "<h3>Tasks</h3>" + (tasks ? "<table><thead><tr><th>Task</th><th>Stage</th><th>Status</th><th>Attempt</th>" +
         "</tr></thead><tbody>" + tasks + "</tbody></table>" : '<p class="muted">No tasks.</p>') +
         "<h3>Decisions</h3>" + (decisions ? "<ul>" + decisions + "</ul>" : '<p class="muted">None.</p>') +
+        usageSection(run.usage) +
         summary;
       el("detail").classList.remove("hidden");
       el("overview").classList.add("hidden");
       el("needs-section").classList.add("hidden");
     }).catch(function (e) { if (!quiet) { showError(String(e)); } });
+  }
+
+  // Token totals for one run, by observed model, repo and day (module 14). A count that was not reported shows as
+  // "n/a attempts", never as 0.
+  function usageSection(usage) {
+    var groups = [["Model", "by_model"], ["Repo", "by_repo"], ["Day", "by_day"]];
+    var any = groups.some(function (g) { return usage && Object.keys(usage[g[1]] || {}).length; });
+    if (!any) { return '<h3>Usage</h3><p class="muted" id="usage-empty">No usage recorded yet.</p>'; }
+    return "<h3>Usage</h3>" + groups.map(function (g) {
+      var rows = usage[g[1]] || {};
+      var body = Object.keys(rows).sort().map(function (k) {
+        var t = rows[k];
+        var missing = t.attempts_without_count ? ' <span class="warn">(' + esc(t.attempts_without_count) + " without a count)</span>" : "";
+        return "<tr><td>" + esc(k) + "</td><td>" + esc(t.attempts) + "</td><td>" + esc(t.input_tokens) + "</td><td>" +
+               esc(t.output_tokens) + "</td><td>" + esc(t.total_tokens) + missing + "</td><td>" +
+               esc(Math.round(t.minutes * 10) / 10) + "</td></tr>";
+      }).join("");
+      return '<table class="usage" data-group="' + g[1] + '"><thead><tr><th>' + g[0] + "</th><th>Attempts</th>" +
+             "<th>Input</th><th>Output</th><th>Total</th><th>Minutes</th></tr></thead><tbody>" + body + "</tbody></table>";
+    }).join("");
   }
 
   function closeRun() {

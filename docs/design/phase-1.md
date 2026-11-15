@@ -41,7 +41,7 @@ The factory is a reusable kit that turns a request into reviewed work through a 
 | 12 | [Live view and steering](modules/12-live-view-and-steering.md) | Log tail, notes | No |
 | 13 | [Delivery](modules/13-delivery.md) | Pull request, merge policy, sinks, run summary | No |
 | 14 | [Token tracking](modules/14-token-tracking.md) | Usage records and reports | No |
-| 15 | [Dashboard](modules/15-dashboard.md) | Server, run scanner, React UI | No |
+| 15 | [Dashboard](modules/15-dashboard.md) | Server, run scanner, plain page (1a), React UI (1b) | No |
 | 16 | [Drivers](modules/16-drivers.md) | CLI, router skill | The router skill runs inside a chat |
 | 17 | [Housekeeping](modules/17-housekeeping.md) | Cleanup, archive, retention | No |
 | 17A | [Language toolchains, lint and format](modules/17a-language-toolchains.md) | Toolchain profiles per language, detection, format and lint steps | No |
@@ -60,7 +60,7 @@ Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-depe
 | Plugins | None | Plugins, hooks and `tasks_from` for plugins |
 | MCP servers, practice packs | None | Both |
 | Toolchains (17A) | Profile loader and the profiles the first target repos need | The other shipped languages |
-| Dashboard | Read-only: overview, Needs you, run detail, usage, Show JSON. Answers go through `factory decide` and the other CLI commands | Writes: Submit, notes, retry, goto, skip, abort |
+| Dashboard | A plain HTML page, read-only: overview, Needs you, run detail, usage, Show JSON. Answers go through `factory decide` and the other CLI commands | The React bundle replaces the plain page. Writes: Submit, notes, retry, goto, skip, abort |
 | Operating systems | macOS and Linux | Windows is phase 2 |
 | Pilot repo | One `factory`-labelled chore or bug-fix issue in `plaktoz/test-adapters`, human merge | Feature work, once the feature workflow lands |
 
@@ -107,7 +107,7 @@ Every request follows this path. A stage repeats until its gates pass, and a fai
 | Subagents | Engine plus native subagents, governed: declared, capped, logged and scope-checked. Claude Code has native subagents. |
 | Skills | The factory writes its own headless skill for every stage. Upstream skills are reference only; they enter through `skills.lock` (empty by default) for plugins and overrides, with pinned refs and an allowlist. |
 | Engine language | Python. |
-| Dashboard | React, shipped as a prebuilt bundle and served by the engine. It scans run files in the factory home and re-reads only those that changed. |
+| Dashboard | A plain HTML page in phase 1a; React, shipped as a prebuilt bundle, in phase 1b. The launcher serves either. It scans run files in the factory home and re-reads only those that changed. |
 | State format | JSON for state, JSON Lines for logs, YAML for files people write. |
 | Decision file | One YAML file per human stop, plus a generated HTML decision page that gives the CLI command. |
 | Naming | One request is one run, named `<slug>-<5 chars>` with hyphens everywhere, such as `new-color-q1w2e`. |

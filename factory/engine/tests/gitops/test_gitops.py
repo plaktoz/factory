@@ -549,3 +549,38 @@ def test_a_task_that_does_not_need_the_reworked_one_is_left_alone(repo, cfg):
 def test_a_cycle_in_needs_is_refused(repo, cfg):
     with pytest.raises(FactoryError, match="cycle"):
         gitops.delete_chained_branches(repo, "run-1", {"a": ["b"], "b": ["a"]})
+
+
+# ---------------- module 8 step 3 and the 6B gate reset ----------------
+# 6B takes the run branch's HEAD before a stage's join and, when that stage's gate fails, runs
+# `git reset --hard <that commit>`. These tests use the real join and the same reset. They pin what module 8 step 3
+# ("the run branch keeps its commits") relies on. They do not run the engine; the engine-level test belongs to 6B.
+
+def test_resetting_to_the_pre_join_commit_keeps_the_commits_of_stages_that_already_passed(repo, cfg):
+    rw = start_run(repo, cfg)
+    fix = make_task(repo, cfg, "run-1", "fix", {"services/api.py": "x = 'fixed'\n"})
+    assert gitops.join(rw, [fix], regenerate=[], join_cmd=None).ok          # the fix stage joined and passed its gates
+    after_fix = run(rw, "rev-parse", "HEAD")
+
+    pre_join = run(rw, "rev-parse", "HEAD")                                  # verify's join starts here
+    verify = make_task(repo, cfg, "run-1", "verify", {"tests/test_api.py": "assert False\n"})
+    assert gitops.join(rw, [verify], regenerate=[], join_cmd=None).ok
+    assert run(rw, "rev-parse", "HEAD") != pre_join                          # the join added a commit; the gate then fails
+
+    run(rw, "reset", "--hard", pre_join)                                     # what 6B does when the gate fails
+    assert run(rw, "rev-parse", "HEAD") == after_fix                         # fix's commit is still on the run branch
+    assert (rw / "services" / "api.py").read_text() == "x = 'fixed'\n"       # so the rework continues from the fix
+    assert not (rw / "tests" / "test_api.py").exists()                       # the failed stage's own join is gone
+    assert run(rw, "status", "--porcelain") == ""                            # nothing half-applied is left behind
+
+
+def test_resetting_to_the_pre_join_commit_drops_the_failed_stages_own_commits(repo, cfg):
+    """The case step 3 does not describe: the stage whose gate fails is the stage that made the commits (a scope-diff
+    failure in fix itself). Its join is undone, so the run branch is back at the base, not 'keeping its commits'."""
+    rw = start_run(repo, cfg)
+    base = run(rw, "rev-parse", "HEAD")
+    fix = make_task(repo, cfg, "run-1", "fix", {"web/app.js": "out of scope\n"})
+    assert gitops.join(rw, [fix], regenerate=[], join_cmd=None).ok
+    run(rw, "reset", "--hard", base)
+    assert run(rw, "rev-parse", "HEAD") == base
+    assert run(rw, "rev-list", "--count", "main..HEAD") == "0"

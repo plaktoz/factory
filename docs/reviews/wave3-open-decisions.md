@@ -11,6 +11,19 @@ Page: `docs/reviews/wave3-open-decisions.html`. Data: `docs/reviews/wave3-open-d
 
 Steps that wait on an owner answer: the PR #43 merge (its page, D1 and D2 there); the tutorial's dashboard section and the module 15 UI tests (D2 here). Module 6B, module 16 and the integration tests wait on the `factory-40` session's 6B pull request, which is not an owner decision.
 
+## Owner's answers (applied 2026-11-15)
+
+| Decision | Choice | Recommended? | Applied in |
+| --- | --- | --- | --- |
+| D1 The owner's work email in commit `6a6ff04` | `keep-history-redact-text` (keep the history; no force push) | Yes | No history change. The text copy in `docs/tasks.md` is already removed (0 hits for the address in the tree). `docs/tasks.md` item 8 |
+| D2 Dashboard in phase 1a | `placeholder-for-1a` (plain page with a usage view; React moves to phase 1b) | Yes | `factory/dashboard/index.html` (usage view); tests in `factory/launcher/tests/server/test_pages_and_writes.py`; `docs/design/phase-1.md` (phase split, module map, tech choices); modules 3 and 15; `AGENTS.md`; `docs/tasks.md` item 6 |
+
+How D2 was recorded: the owner's pasted reply said "keep the history" for D2. That was a slip, because "keep the history" is D1's option and D2 has no such option. The owner has since confirmed `placeholder-for-1a`.
+
+D1 costs what the page said it would: the address stays on one public commit and in 44 of 45 pull request refs. A rewrite stays possible later, and the pull request refs need GitHub Support in any case. Keep the address out of the repo's files, including this one.
+
+D2 changes scope, so the spec now says it in each place that stated React: the phase split row (1a plain page, 1b React plus writes), the module map row, the tech-choices row, module 3's kit layout, module 15's first paragraph and `AGENTS.md`. The module 15 criteria for refresh, Needs you buttons and copy paths stay unticked, because no UI test drives the page; their text now says "plain page". A new ticked criterion covers the usage view (3 tests). The view was also driven once in a headless browser against a real server: three groups rendered, the empty state showed, no page errors. That run is not a repeatable test.
+
 ## Settled without the owner (decided at recommendation, reversible)
 
 | Item | Check | Result |
@@ -29,11 +42,11 @@ Steps that wait on an owner answer: the PR #43 merge (its page, D1 and D2 there)
 - `scope` skill vs `tasks_from`, and `every-claim-has-source`: phase 1b tasks, already in [wave3-decisions.md](wave3-decisions.md).
 - Phase 2 "Unspecified" items in `docs/design/phase-2.md`: out of scope until phase 1 closes.
 
-## Tasks created
+## Tasks created, and where they stand
 
-1. Module 4 or 6B: build the triage candidate list from workflows that load.
-2. Reconcile module 8 step 3 with the 6B gate reset, and add a test that names it.
-3. Run `factory doctor` in the Linux machine under `podman`.
+1. Triage candidates from workflows that load: **done in module 4.** `triage_candidates` in `triage.py`, 6 tests. 6B still has to call it (`docs/tasks.md`).
+2. Reconcile module 8 step 3 with the 6B gate reset: **wording done, test half done.** Module 8 now says the failed stage's own join is undone and earlier stages' commits stay. Two tests pin that with the real `join`. The engine-level test waits for the 6B pull request, because the reset is only in the uncommitted `m06b-engine`. The "Not checked" note above stays true for `test_engine.py`.
+3. `factory doctor` in the Linux machine under `podman`: **run** as `kit.doctor` in `python:3.12-slim` (Linux arm64). `gh` is missing from that image, which is the one real finding. `git` and credentials pass; 132 tests pass.
 
 ## Facts checked for D1 and D2
 
