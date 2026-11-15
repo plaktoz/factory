@@ -217,6 +217,7 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `git.command_failed` | `task_retry` | A git command failed and matches no other git code; the message holds git's stderr. Not a catch-all for the codes above (module 7) |
 | `git.worktree_dirty` | `human` | A worktree with changes was not removed; show the files, and a removal only with force (module 7) |
 | `notes.task_finished` | `fail_fast` | A note for a finished task is refused |
+| `gate.command_missing` | `human` | A gate command's binary was not found, so the gate did not run; install it or fix the command (module 8) |
 | `sandbox.unavailable` | `human` | The OS refused to start the sandbox (`sandbox_apply: Operation not permitted`, exit 71) |
 | `sandbox.settings_invalid` | `fail_fast` | The settings file parses but a field fails validation; name the field |
 | `sandbox.settings_unreadable` | `fail_fast` | The `--settings` file is missing or unreadable; name the path |
