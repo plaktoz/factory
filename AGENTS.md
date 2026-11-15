@@ -17,7 +17,7 @@ A reusable software factory: a deterministic Python engine that turns a request 
 | `docs/` | See `docs/README.md` | - |
 | `scripts/docs-check/` | Checks on the spec: links, Mermaid blocks, module contracts. See its README | - |
 
-`factory/` is the kit that gets copied into other repos, so nothing in it may reference this repo's `docs/`. `.factory/` is created by `factory init` and is not committed here.
+`factory/` is the kit that gets copied into other repos, so nothing in it may reference this repo's `docs/`. The two paths `docs/adr` and `docs/research` in `delivery.py` are not references: they name folders in the target repo where a run's deliverables go (modules 7 and 13). `.factory/` is created by `factory init` and is not committed here.
 
 ## Building one module
 
