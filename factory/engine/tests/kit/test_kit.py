@@ -202,3 +202,16 @@ def test_doctor_reports_a_repo_with_no_init(tmp_path):
     r = tmp_path / "bare"
     r.mkdir()
     assert not by_name(kit.doctor(r))["repo-config"].ok
+
+
+def test_doctor_reports_a_missing_toolchain_tool_for_a_repo(repo, fake_kit, monkeypatch, tmp_path):
+    """Module 17A: `factory doctor` reports a tool a detected profile needs, before any run, through the same doctor
+    the CLI calls. The repo needs a valid factory.yaml (the profile lookup reads its config) and a go.mod."""
+    from factory_engine import kit
+    cfg = repo / ".factory" / "config"
+    cfg.mkdir(parents=True)
+    (cfg / "factory.yaml").write_text("base_branch: main\ntracker: github\nharness: claude\n")
+    (repo / "go.mod").write_text("module x\n")
+    monkeypatch.setenv("PATH", str(tmp_path))  # no tools on PATH
+    tool_checks = [r for r in kit.doctor(repo) if r.name.startswith("toolchain:")]
+    assert any(r.name == "toolchain:go:golangci-lint" and not r.ok for r in tool_checks), tool_checks

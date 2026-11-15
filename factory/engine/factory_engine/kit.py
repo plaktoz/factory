@@ -136,8 +136,8 @@ def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult
     """Check the tools and settings a run needs. With as_scheduler, run in an empty, cron-like environment.
 
     Wave 1 checks what module 3 owns: git, gh, node (srt's floor), credentials and the repo's settings. The sandbox
-    canary, harness binaries and probe worker belong to module 9, and toolchain checks to 17A; they add their checks
-    in their waves."""
+    canary, harness binaries and probe worker belong to module 9; they add their checks in their waves. The toolchain
+    checks of 17A run here too, for a repo with a valid config."""
     base = dict(os.environ)
     if as_scheduler:
         # what cron gives a job: a short PATH, no profile, no secrets
@@ -161,4 +161,18 @@ def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult
                 out.append(CheckResult("repo-config", True, "factory.yaml is valid", ""))
             except FactoryError as e:
                 out.append(CheckResult("repo-config", False, e.message, e.hint))
+            else:
+                out.extend(_toolchain_checks(repo))
     return out
+
+
+def _toolchain_checks(repo: Path) -> list[CheckResult]:
+    """The toolchain checks of module 17A: every tool a detected profile needs. Runs only when the repo's config is
+    valid, because the profile lookup reads it; a repo with a bad config already reports that above."""
+    from .loadcfg import load_config
+    from .toolchains import doctor_checks
+    try:
+        cfg = load_config(repo)
+    except FactoryError as e:
+        return [CheckResult("toolchains", False, e.message, e.hint)]
+    return doctor_checks(repo, cfg)

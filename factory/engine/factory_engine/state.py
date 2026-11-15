@@ -137,8 +137,12 @@ def init_run(home: Path, repo: Path, key: str, run_id: str, request: Request, *,
               branch=branch, worktree=worktree, status="pending", stage=None, stages=[], loops={}, attention=None,
               pr=None, signals=None, heartbeat=_now(), kit_hash=kit_hash, infra_wait=None,
               paths={"run_dir": str(d), "repo": str(repo), "worktree": str(worktree)})
-    write_json_atomic(d / "run.json", _run_to_doc(run))
+    doc = _run_to_doc(run)
+    write_json_atomic(d / "run.json", doc)
     append_event(d, "run_created", run_id=run_id)
+    # Module 6, decision E1: creating the run is a change, so it writes a run_snapshot too. Without it a run whose
+    # run.json is lost before its first engine change cannot be rebuilt.
+    append_event(d, "run_snapshot", run=doc)
     return RunRef(repo=repo, repo_key=key, run_id=run_id, run_dir=d)
 
 
@@ -328,30 +332,50 @@ def history_append(home: Path, record: HistoryRecord) -> None:
 
 
 class RunScanner:
-    """Change-aware polling (module 6A): re-reads a run's files only when their time or size changed."""
+    """Change-aware polling (module 6A): re-reads a run's files only when their time or size changed.
+
+    A scan stats every run.json and parses only the ones whose mtime or size differ from the last scan, so a scan with
+    no changes parses nothing. A run that cannot be read is skipped and reported on its own; it does not fail the scan.
+    """
 
     def __init__(self, home: Path):
         self.home = home
         self._seen: dict[str, tuple[float, int]] = {}
+        self._repo: dict[str, Path] = {}  # run folder -> repo_path from its last successful read
 
     def scan(self) -> ScanResult:
         out = ScanResult()
         now: dict[str, tuple[float, int]] = {}
-        for ref in list_runs(self.home):
-            path = ref.run_dir / "run.json"
-            st = path.stat()
-            key = str(ref.run_dir)
-            now[key] = (st.st_mtime, st.st_size)
+        runs = self.home / "runs"
+        for rj in sorted(runs.rglob("run.json")) if runs.is_dir() else []:
+            d = rj.parent
+            key = str(d)
+            try:
+                st = rj.stat()
+            except OSError:
+                continue
+            stamp = (st.st_mtime, st.st_size)
+            now[key] = stamp
             if key not in self._seen:
-                out.added.append(ref.run_id)
-                out.reread += 1
-            elif self._seen[key] != now[key]:
-                out.changed.append(ref.run_id)
-                out.reread += 1
-            if not ref.repo.exists():
-                out.repo_missing.append(ref.run_id)
+                out.added.append(d.name)
+            elif self._seen[key] != stamp:
+                out.changed.append(d.name)
+            else:
+                if key in self._repo and not self._repo[key].exists():
+                    out.repo_missing.append(d.name)
+                continue
+            out.reread += 1
+            try:
+                repo = Path(json.loads(rj.read_text())["repo_path"])
+            except (OSError, ValueError, KeyError):
+                self._repo.pop(key, None)
+                continue
+            self._repo[key] = repo
+            if not repo.exists():
+                out.repo_missing.append(d.name)
         for key in self._seen:
             if key not in now:
                 out.removed.append(Path(key).name)
+                self._repo.pop(key, None)
         self._seen = now
         return out
