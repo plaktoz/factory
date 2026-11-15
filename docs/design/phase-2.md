@@ -40,7 +40,7 @@ Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-
 | Native helpers | Claude Code subagents | Codex subagents, on by default; spawned only when the prompt, `AGENTS.md` or a skill asks |
 | Usage data | From the JSON result | From the event stream (to confirm) |
 | Live log | Parsed into plain-text `worker.log` | Parsed into plain-text `worker.log` |
-| Write boundary | Claude Code's sandbox settings (`sandbox.filesystem.allowWrite`, D7) | Workspace-write sandbox, with `$FACTORY_TASK_DIR` as an extra writable root |
+| Write boundary | Claude Code's sandbox settings (`sandbox.filesystem.allowWrite`, D7) | `srt` only. Codex's own sandbox is off (`-s danger-full-access`), and `srt` allows the `com.apple.trustd.agent` Mach lookup. Both risks are accepted for Codex only; see the D7 record in [module 9](modules/09-worker-adapters-and-governed-helpers.md), "Threat model and isolation" |
 | MCP config | JSON MCP config per attempt | `mcp_servers` entries as `-c` config overrides per attempt |
 | Isolation from your setup | `--setting-sources project --strict-mcp-config` (verified) | A `-p` profile or a factory-owned `CODEX_HOME` (to verify) |
 
@@ -68,13 +68,13 @@ class CodexAdapter(WorkerAdapter): ...           # name = "codex"
 
 **To confirm before building**
 
-- [ ] Where `codex exec --json` reports input and output tokens, and in what shape ([module 14](modules/14-token-tracking.md) records `null` until then).
-- [ ] Which flags keep your own `~/.codex` config, MCP servers and instructions out of a worker. Prove it with the `doctor` probe worker ([module 9](modules/09-worker-adapters-and-governed-helpers.md)).
-- [ ] Whether the sandbox enforces the deny-read rules from D7.
+- [x] Where `codex exec --json` reports input and output tokens, and in what shape ([module 14](modules/14-token-tracking.md) records `null` until then). Verified: the last `turn.completed` event's `usage` holds `input_tokens` and `output_tokens`, with `cached_input_tokens` and `reasoning_output_tokens` beside them, and the event stream names no model. Test: `tests/workers/test_codex_adapter.py::test_tokens_come_from_the_last_turn_completed_usage`.
+- [ ] Which flags keep your own `~/.codex` config, MCP servers and instructions out of a worker. Prove it with the `doctor` probe worker ([module 9](modules/09-worker-adapters-and-governed-helpers.md)). Partly answered, not ticked: `--ignore-user-config` drops the user's provider and `CODEX_HOME` is an empty folder, so no login or config is read. No test shows that a user's MCP servers stay out of a worker, and the `doctor` probe is Claude-only, so no Codex probe exists yet.
+- [x] Whether the sandbox enforces the deny-read rules from D7. Verified for `srt`: a sandboxed `cat` and `python3` fail to read a file in the factory home and a `~/.codex/auth.json`, and a write outside the worktree and task folder is refused. Test: `tests/workers/test_codex_adapter.py::test_the_codex_settings_block_reads_of_the_factory_home_and_the_codex_key_file`. Codex's own sandbox is off, so `srt` is the only layer.
 
 **Acceptance criteria to add back to phase 1 modules**
 
-- [ ] (9) Both adapters run headless in the task worktree, with only the declared environment plus `FACTORY_TASK_DIR`.
+- [x] (9) Both adapters run headless in the task worktree, with only the declared environment plus `FACTORY_TASK_DIR`. Codex: `tests/workers/test_codex_adapter.py::test_the_worker_runs_headless_in_the_task_worktree`, `::test_the_child_gets_only_the_declared_variables_and_the_folders_the_adapter_sets`. Claude: `factory/engine/tests/workers/test_claude_adapter.py::test_the_worker_runs_headless_in_the_task_worktree` and `::test_the_child_gets_only_the_declared_variables_and_the_task_dir`. Both run against stubs, not the live CLI.
 - [ ] (9) The same request on Claude and Codex gives gate evidence of the same shape, with helpers off and on.
 - [ ] (20) A live smoke test on Claude, then Codex, with `FACTORY_LIVE=1`: the same seeded request gives gate evidence of the same shape.
 - [ ] (16) The router skill works from Codex as well as Claude Code.

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import signal
+import subprocess
 import tempfile
 from collections.abc import Mapping
 from pathlib import Path
@@ -20,7 +22,9 @@ from ...types import McpServer
 
 BASE_ENV = ("PATH", "HOME", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR")
 # Declared variables that are not secrets. Everything else a harness declares is masked in logs.
-NOT_SECRET = frozenset({"ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "FACTORY_TASK_DIR"})
+NOT_SECRET = frozenset({"ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL", "OPENAI_BASE_URL", "FACTORY_TASK_DIR"})
+# A worker never gets a GitHub credential, whatever a config declares (module 9: the engine makes every GitHub call).
+FORBIDDEN_ENV = ("GH_TOKEN", "GITHUB_TOKEN")
 
 
 def base_env(source: Mapping[str, str]) -> dict[str, str]:
@@ -93,3 +97,12 @@ def read_text(path: Path | None) -> str:
     if path is None or not path.is_file():
         return ""
     return path.read_text(errors="replace")
+
+
+def kill_group(proc: subprocess.Popen) -> None:
+    """Kills the worker's whole process group: the session leader and every helper it started."""
+    try:
+        os.killpg(proc.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    proc.wait()

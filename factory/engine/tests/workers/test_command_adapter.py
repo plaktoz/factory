@@ -111,10 +111,46 @@ def test_a_missing_binary_is_reported_as_binary_missing_not_a_check_failure(cmd_
 # ---- timeout and stop -------------------------------------------------------------------------------------------
 
 @needs_srt
-def test_a_command_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home):
-    ctx = cmd_ctx(cmd=["sleep", "30"])
-    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=1)
+def test_a_command_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home, task_dir):
+    pid_file = task_dir / "child.pid"
+    ctx = cmd_ctx(cmd=["sh", "-c", f"echo $$ > {pid_file}; sleep 30"])
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=3)
     assert result.exit == "timeout"
+    assert_pid_gone(pid_file)
+
+
+@needs_srt
+def test_a_plugin_script_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home, task_dir):
+    plugin = tmp_path / "plugin"
+    (plugin / "scripts").mkdir(parents=True)
+    pid_file = task_dir / "child.pid"
+    (plugin / "scripts" / "slow.py").write_text(
+        f"import os, time\nopen({str(pid_file)!r}, 'w').write(str(os.getpid()))\ntime.sleep(30)\n")
+    ctx = cmd_ctx(run=RunSpec("scripts/slow.py", None, []), plugin_dir=plugin)
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=3)
+    assert result.exit == "timeout"
+    assert_pid_gone(pid_file)
+
+
+@needs_srt
+def test_a_plugin_function_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home, task_dir):
+    plugin = tmp_path / "plugin"
+    (plugin / "checks").mkdir(parents=True)
+    (plugin / "checks" / "__init__.py").write_text("")
+    pid_file = task_dir / "child.pid"
+    (plugin / "checks" / "slow.py").write_text(
+        f"import os, time\n\ndef scan(ctx):\n    open({str(pid_file)!r}, 'w').write(str(os.getpid()))\n    time.sleep(30)\n")
+    ctx = cmd_ctx(run=RunSpec(None, "checks.slow:scan", []), plugin_dir=plugin)
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=3)
+    assert result.exit == "timeout"
+    assert_pid_gone(pid_file)
+
+
+def assert_pid_gone(pid_file):
+    """The child wrote its PID before it slept. After the timeout no process with that PID may still run."""
+    pid = int(pid_file.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
 
 
 @needs_srt
@@ -177,6 +213,18 @@ def test_a_command_cannot_read_the_factory_home(cmd_ctx, tmp_path, factory_home,
 
 
 @needs_srt
+def test_a_command_cannot_read_the_codex_key_file(cmd_ctx, tmp_path, factory_home, monkeypatch):
+    home = tmp_path / "userhome"
+    (home / ".codex").mkdir(parents=True)
+    key = home / ".codex" / "auth.json"
+    key.write_text('{"OPENAI_API_KEY": "sk-SECRET"}')
+    monkeypatch.setenv("HOME", str(home))
+    result, log = run(CommandAdapter(dict(os.environ)), cmd_ctx(cmd=["cat", str(key)]), tmp_path)
+    assert result.exit == "failed" and result.exit_code != 0
+    assert "sk-SECRET" not in log.read_text()
+
+
+@needs_srt
 def test_a_command_can_write_inside_the_worktree_and_task_folder_but_not_outside_both(cmd_ctx, tmp_path, factory_home,
                                                                                        worktree, task_dir):
     inside = worktree / "ok.txt"
@@ -217,6 +265,15 @@ def test_a_npm_style_cache_lands_under_the_task_folder_and_a_write_to_home_npm_s
     blocked, _ = run(CommandAdapter(dict(os.environ)), cmd_ctx(cmd=["sh", "-c", f"echo x > {home_npm}"]), tmp_path)
     assert blocked.exit == "failed"
     assert not home_npm.exists()
+
+
+@needs_srt
+@pytest.mark.skipif(shutil.which("npm") is None, reason="npm is not installed")
+def test_real_npm_reports_its_cache_under_the_task_folder(cmd_ctx, tmp_path, factory_home, task_dir):
+    ctx = cmd_ctx(cmd=["npm", "config", "get", "cache"])
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "ok"
+    assert log.read_text().strip() == str(task_dir / "cache" / "npm")
 
 
 def test_a_command_with_no_srt_is_refused_before_it_runs(cmd_ctx, tmp_path, factory_home, monkeypatch):

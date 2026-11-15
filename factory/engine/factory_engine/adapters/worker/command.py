@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import json
 import os
-import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -20,7 +19,7 @@ from ...errors import FactoryError
 from ...types import CheckResult, RunSpec
 from . import sandbox
 from .base import AttemptResult, Capabilities, HarnessConfig, TaskContext, WorkerHandle
-from .runtime import attempt_folder, base_env, cache_env, read_text, remove_attempt, write_log, write_private
+from .runtime import attempt_folder, base_env, cache_env, kill_group, read_text, remove_attempt, write_log, write_private
 
 PASS, CHECK_FAILED, TASK_ERROR = "passed", "check_failed", "task_error"
 
@@ -132,7 +131,7 @@ class CommandAdapter:
         try:
             rc = proc.wait(timeout=timeout_s)
         except subprocess.TimeoutExpired:
-            _kill_group(proc)
+            kill_group(proc)
             rc = None
         self._finish_log(data)
         if rc is None:
@@ -151,13 +150,6 @@ class CommandAdapter:
     def stop(self, handle: WorkerHandle) -> None:
         proc = handle.data.get("proc")
         if proc is not None and proc.poll() is None:
-            _kill_group(proc)
+            kill_group(proc)
         handle.data["stopped"] = True
 
-
-def _kill_group(proc: subprocess.Popen) -> None:
-    try:
-        os.killpg(proc.pid, signal.SIGKILL)
-    except ProcessLookupError:
-        pass
-    proc.wait()
