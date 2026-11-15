@@ -7,7 +7,7 @@ Every error falls into one of five handling types, and each module maps its fail
 | Type | Handling | Example |
 | --- | --- | --- |
 | Fail fast | Stop before any work, name the file, line and fix; exit 2 | A missing `${ANTHROPIC_API_KEY}` |
-| Transient retry | Retry with backoff (5 s, 30 s, 2 min), then wait and retry on each tick for `infra_wait_hours`, then block | GitHub rate limit |
+| Transient retry | Three tries with waits of 5 s and 30 s, then wait and retry on each tick for `infra_wait_hours`, then block | GitHub rate limit |
 | Task retry | New attempt from the last checkpoint, up to `retries` | Worker crash |
 | Rework | Route to an earlier stage with a feedback record | Tests fail |
 | Human | Raise an attention item and wait | Loop maximum reached |
