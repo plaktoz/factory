@@ -196,12 +196,12 @@ class Outcome: status: str; choices: dict[str, str]; questions: dict[str, str]; 
 
 Acceptance criteria:
 
-- [ ] Every stop kind writes a valid decision file; approval packets have approve, rework and reject.
-- [ ] An architect packet missing context, options, flows or a recommendation fails `validate`.
-- [ ] `record` with a stale packet sha is refused with a reopen hint.
-- [ ] Editing the packet after an answer gives `decision_invalidated`.
-- [ ] When fix routes back to root-cause, propose gets a new `propose.2.yaml` that needs a fresh approval, and `propose.1.yaml` is unchanged.
-- [ ] The page renders all picker parts, escapes all packet text, works offline, and its copied command matches its picks.
-- [ ] A `question` answer returns `Outcome(status="question")` with the questions.
-- [ ] GitHub requests get the `factory:needs-human` label and a comment with the dashboard link and file path; markdown requests get `factory_status` and `factory_attention`.
-- [ ] Reminders fire after `remind_after_hours`, and a failed webhook never stops the run.
+- [ ] Every stop kind writes a valid decision file; approval packets have approve, rework and reject. (not ticked: merge review writes no decision file by design (its test says it is answered on GitHub); the tests cover the engine template stops (approval, blocked) and the skill packet, not every stop kind)
+- [x] An architect packet missing context, options, flows or a recommendation fails `validate`. (test: factory/engine/tests/decisions/test_decisions.py::test_an_architect_packet_missing_a_picker_field_fails_validate, ::test_an_option_with_no_flow_fails_validate, ::test_a_recommendation_that_is_not_an_option_is_refused)
+- [x] `record` with a stale packet sha is refused with a reopen hint. (test: factory/engine/tests/decisions/test_decisions.py::test_record_with_a_stale_packet_sha_is_refused_with_a_reopen_hint)
+- [x] Editing the packet after an answer gives `decision_invalidated`. (test: factory/engine/tests/decisions/test_decisions.py::test_editing_the_packet_after_an_answer_gives_decision_invalidated)
+- [ ] When fix routes back to root-cause, propose gets a new `propose.2.yaml` that needs a fresh approval, and `propose.1.yaml` is unchanged. (not ticked: test_a_second_visit_gets_its_own_file_and_leaves_the_first_alone covers the file side (propose.2.yaml, pending, propose.1.yaml unchanged), but the route from fix back to root-cause is the engine loop, module 6B, and is untested)
+- [x] The page renders all picker parts, escapes all packet text, works offline, and its copied command matches its picks. (test: factory/engine/tests/decisions/test_page.py::test_the_page_renders_every_picker_part, ::test_all_packet_text_is_escaped, ::test_the_page_loads_nothing_from_the_network, ::test_the_page_opens_from_disk_and_its_command_matches_the_picks (real Chrome, run on this machine))
+- [x] A `question` answer returns `Outcome(status="question")` with the questions. (test: factory/engine/tests/decisions/test_decisions.py::test_a_question_answer_returns_the_questions)
+- [x] GitHub requests get the `factory:needs-human` label and a comment with the dashboard link and file path; markdown requests get `factory_status` and `factory_attention`. (test: factory/engine/tests/decisions/test_notify.py::test_a_github_request_gets_the_needs_human_label_and_a_comment_with_link_and_path, ::test_a_markdown_request_gets_factory_status_and_attention_in_front_matter)
+- [x] Reminders fire after `remind_after_hours`, and a failed webhook never stops the run. (test: factory/engine/tests/decisions/test_notify.py::test_reminders_fire_after_remind_after_hours, ::test_a_failed_webhook_retries_then_reports_and_the_run_is_untouched)
