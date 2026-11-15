@@ -295,17 +295,17 @@ def history_append(home: Path, record: HistoryRecord) -> None
 
 Acceptance criteria:
 
-- [ ] A crash during `write_run` leaves either the old or the new file, never half of one.
-- [ ] A cut-off last line in a `.jsonl` file is ignored on read.
-- [ ] Two processes appending events at once produce whole lines only, on Linux and macOS.
-- [ ] `acquire_lock` refuses while another process holds the lock, whatever its heartbeat says, and succeeds right after that process is killed.
-- [ ] A process stopped with SIGSTOP for longer than the old 60-second limit keeps its lock; `lock_status` reports `live`, and a tick starts no second engine.
-- [ ] A `run_snapshot` event is written after each change to a run and carries the whole run [snapshot-event].
-- [ ] `rebuild_run` replays only the last `run_snapshot` in `events.jsonl` and gives the same status, stage, stage and task states, loop counters and attention item as the engine wrote. Heartbeat and conflict signals are not part of the rebuild; they are recomputed on the next tick.
-- [ ] With every other event removed from `events.jsonl` and one `run_snapshot` left, `rebuild_run` gives the same run. A rebuild never reads the other events.
-- [ ] `repo_key` gives `github.com/acme/report` for both SSH and HTTPS remotes, `local/<folder>` with no remote, and the override when set.
-- [ ] Run ids are unique across the whole factory home, not only within one repo.
-- [ ] With 500 runs, `RunScanner.scan` re-reads only files whose time or size changed, and flags a deleted repo as `repo_missing`.
+- [ ] A crash during `write_run` leaves either the old or the new file, never half of one. (not ticked: test_a_failed_write_keeps_the_last_good_file simulates a failed os.replace in write_json_atomic, not a crash during write_run, and the wording does not allow a proxy)
+- [x] A cut-off last line in a `.jsonl` file is ignored on read. (test: factory/engine/tests/state/test_state.py::test_a_cut_off_last_jsonl_line_is_ignored)
+- [ ] Two processes appending events at once produce whole lines only, on Linux and macOS. (not ticked: test_two_processes_appending_events_get_whole_lines_only runs on this macOS host only; the repo has no CI workflow, so the Linux half has no run)
+- [ ] `acquire_lock` refuses while another process holds the lock, whatever its heartbeat says, and succeeds right after that process is killed. (not ticked: the refuse and killed-holder tests (test_acquire_refuses_while_another_process_holds_the_lock, test_acquire_succeeds_right_after_the_holder_is_killed) never write a stale heartbeat, so the 'whatever its heartbeat says' clause is untested)
+- [ ] A process stopped with SIGSTOP for longer than the old 60-second limit keeps its lock; `lock_status` reports `live`, and a tick starts no second engine. (not ticked: test_a_stopped_process_keeps_its_lock_past_the_old_limit checks the lock right after SIGSTOP, not past 60 seconds; a tick starting no second engine is module 16 and needs 6B)
+- [ ] A `run_snapshot` event is written after each change to a run and carries the whole run [snapshot-event]. (not ticked: test_every_change_writes_a_run_snapshot counts one snapshot for one write_run; it does not check the snapshot carries the whole run, and write_task writes no snapshot)
+- [ ] `rebuild_run` replays only the last `run_snapshot` in `events.jsonl` and gives the same status, stage, stage and task states, loop counters and attention item as the engine wrote. Heartbeat and conflict signals are not part of the rebuild; they are recomputed on the next tick. (not ticked: test_rebuild_gives_the_same_state_the_engine_wrote checks status, stage, stages, loops and attention; the snapshot holds no task states (task.json is outside run.json, and StageState holds only task ids))
+- [ ] With every other event removed from `events.jsonl` and one `run_snapshot` left, `rebuild_run` gives the same run. A rebuild never reads the other events. (not ticked: test_rebuild_reads_no_other_events compares only the stages of the rebuilt run, not the whole run)
+- [x] `repo_key` gives `github.com/acme/report` for both SSH and HTTPS remotes, `local/<folder>` with no remote, and the override when set. (test: factory/engine/tests/state/test_state.py::test_repo_key_from_ssh_and_https_and_override_and_no_remote)
+- [ ] Run ids are unique across the whole factory home, not only within one repo. (not ticked: no test puts a taken run id under a different repo key; test_run_ids_are_unique_across_repos_in_the_home only checks find_run)
+- [ ] With 500 runs, `RunScanner.scan` re-reads only files whose time or size changed, and flags a deleted repo as `repo_missing`. (not ticked: the scanner test uses 20 runs, not 500 (the test says so); the 500-run check is not in the suite)
 
 **Module contract: 6B Engine loop**
 
