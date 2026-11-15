@@ -90,7 +90,7 @@ def conf_for(stub, env=None):
     return harness(str(stub.exe), env if env is not None else CONF.env)
 
 
-def fixture(name: str, tmp_path: Path) -> str:
+def fixture(name: str) -> str:
     return str(RECORDED / "codex" / name)
 
 
@@ -156,7 +156,7 @@ def test_the_base_url_defaults_to_the_public_api_when_the_machine_sets_none(stub
     # Untested live: every recorded run used the IBM gateway. This checks only the value the adapter sends.
     adapter = CodexAdapter({**machine, "OPENAI_API_KEY": "sk-x"})
     attempt(adapter, make_ctx(), conf_for(stub, {"OPENAI_API_KEY": "${OPENAI_API_KEY}"}), tmp_path)
-    assert "model_providers.custom.base_url=https://api.openai.com/v1" in [a for a in stub.argv()]
+    assert "model_providers.custom.base_url=https://api.openai.com/v1" in stub.argv()
 
 
 # ---- the command line -------------------------------------------------------------------------------------------
@@ -205,7 +205,7 @@ def test_tokens_come_from_the_last_turn_completed_usage(stub, machine, make_ctx,
 
 @needs_srt
 def test_tokens_are_null_when_no_usage_is_reported(stub, machine, make_ctx, tmp_path):
-    stub.set(result=fixture("no-usage.jsonl", tmp_path))
+    stub.set(result=fixture("no-usage.jsonl"))
     result, _ = attempt(gateway_adapter(machine), make_ctx(), conf_for(stub), tmp_path)
     assert result.exit == "ok"
     assert (result.input_tokens, result.output_tokens) == (None, None)
@@ -236,14 +236,14 @@ def test_the_artifact_the_task_names_is_returned_when_the_worker_wrote_it(stub, 
 
 @needs_srt
 def test_a_401_is_auth_and_needs_a_human(stub, machine, make_ctx, tmp_path):
-    stub.set(result=fixture("noauth.jsonl", tmp_path), exit=1)
+    stub.set(result=fixture("noauth.jsonl"), exit=1)
     result, _ = attempt(gateway_adapter(machine), make_ctx(), conf_for(stub), tmp_path)
     assert (result.exit, result.error_kind) == ("failed", "auth")
 
 
 @needs_srt
 def test_a_403_for_the_model_is_model_not_found(stub, machine, make_ctx, tmp_path):
-    stub.set(result=fixture("nomodel.jsonl", tmp_path), exit=1)
+    stub.set(result=fixture("nomodel.jsonl"), exit=1)
     result, _ = attempt(gateway_adapter(machine), make_ctx(model="gpt-5-codex"), conf_for(stub), tmp_path)
     assert (result.exit, result.error_kind) == ("failed", "model_not_found")
 
@@ -269,7 +269,7 @@ def test_any_other_failure_is_a_crash(stub, machine, make_ctx, tmp_path):
 
 @needs_srt
 def test_a_nonzero_exit_with_a_completed_turn_is_a_crash(stub, machine, make_ctx, tmp_path):
-    stub.set(result=fixture("ok.jsonl", tmp_path), exit=3)
+    stub.set(result=fixture("ok.jsonl"), exit=3)
     result, _ = attempt(gateway_adapter(machine), make_ctx(), conf_for(stub), tmp_path)
     assert (result.exit, result.error_kind) == ("failed", "crash")
 

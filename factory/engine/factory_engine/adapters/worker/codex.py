@@ -26,7 +26,7 @@ from .runtime import (FORBIDDEN_ENV, attempt_folder, base_env, cache_env, declar
 
 # The variables the Codex harness reads from the environment. OPENAI_API_KEY is the gateway key.
 CODEX_VARS = ("OPENAI_API_KEY", "OPENAI_BASE_URL")
-# Untested: the live runs all used the IBM gateway, so the public default has no evidence yet.
+# Untested: no run so far has used the public API, so this default has no evidence yet.
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
 # --ignore-user-config drops the provider from config.toml, so the provider comes from per-key -c overrides.
 PROVIDER = "custom"
