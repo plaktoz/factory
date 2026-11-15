@@ -118,6 +118,40 @@ def test_a_command_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home):
 
 
 @needs_srt
+def test_a_plugin_script_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home, task_dir):
+    plugin = tmp_path / "plugin"
+    (plugin / "scripts").mkdir(parents=True)
+    pid_file = task_dir / "child.pid"
+    (plugin / "scripts" / "slow.py").write_text(
+        f"import os, time\nopen({str(pid_file)!r}, 'w').write(str(os.getpid()))\ntime.sleep(30)\n")
+    ctx = cmd_ctx(run=RunSpec("scripts/slow.py", None, []), plugin_dir=plugin)
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=3)
+    assert result.exit == "timeout"
+    assert_pid_gone(pid_file)
+
+
+@needs_srt
+def test_a_plugin_function_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_home, task_dir):
+    plugin = tmp_path / "plugin"
+    (plugin / "checks").mkdir(parents=True)
+    (plugin / "checks" / "__init__.py").write_text("")
+    pid_file = task_dir / "child.pid"
+    (plugin / "checks" / "slow.py").write_text(
+        f"import os, time\n\ndef scan(ctx):\n    open({str(pid_file)!r}, 'w').write(str(os.getpid()))\n    time.sleep(30)\n")
+    ctx = cmd_ctx(run=RunSpec(None, "checks.slow:scan", []), plugin_dir=plugin)
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=3)
+    assert result.exit == "timeout"
+    assert_pid_gone(pid_file)
+
+
+def assert_pid_gone(pid_file):
+    """The child wrote its PID before it slept. After the timeout no process with that PID may still run."""
+    pid = int(pid_file.read_text())
+    with pytest.raises(ProcessLookupError):
+        os.kill(pid, 0)
+
+
+@needs_srt
 def test_a_stop_ends_the_command(cmd_ctx, tmp_path, factory_home):
     ad = CommandAdapter(dict(os.environ))
     handle = ad.start(cmd_ctx(cmd=["sleep", "30"]), harness("command"), tmp_path / "worker.log")
