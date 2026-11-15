@@ -7,7 +7,7 @@ The engine sorts every failure into one class, and each class has a fixed respon
 | Class | Examples | Engine response | Limit |
 | --- | --- | --- | --- |
 | Worker error | Crash, non-zero exit, timeout, no artifact, artifact fails its schema | Retry the same task from its last checkpoint as a new attempt | `retries` per task (default 2) |
-| Infrastructure error | Git lock file, network, GitHub rate limit, disk full | Retry the operation with backoff (5 s, 30 s, 2 min). The worker never sees it | 3 tries, then the run waits as `retrying` and each tick tries again until `infra_wait_hours` (default 6) pass, then blocked |
+| Infrastructure error | Git lock file, network, GitHub rate limit, disk full | Retry the operation with backoff (waits of 5 s and 30 s between three tries). The worker never sees it | 3 tries, then the run waits as `retrying` and each tick tries again until `infra_wait_hours` (default 6) pass, then blocked |
 | Gate failure | Tests fail (a `cmd` task exits non-zero), scope violation, blocking review finding | Rework: route to `on_fail.goto` with a feedback record | `on_fail.max` loops per edge |
 | Merge conflict at join | Two task branches change the same lines | Abort the merge, route to `on_conflict.goto` | `on_conflict.max` |
 | Human rework | You answer rework at an approval | Route to `on_reject.goto` with your notes as feedback | None |
@@ -73,7 +73,7 @@ CHECKS = {"scope-diff": "gitops:check_scope_diff", "helpers-ledger": "prompt:che
           "lint-clean": "toolchains:check_lint_clean", "build-matches-stack": "decisions:check_build_stack"}
 # rework.py
 def classify(failure: FactoryError | AttemptResult | GateResult | JoinResult) -> ErrorKind
-def with_backoff(fn: Callable[[], T], *, delays: tuple[int, ...] = (5, 30, 120), clock: Clock) -> T
+def with_backoff(fn: Callable[[], T], *, delays: tuple[int, ...] = (5, 30), clock: Clock) -> T
 def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: GateResult | JoinResult,
                    loop: int, max_loops: int, task_ids: list[str]) -> Path
 def route(run: Run, wf: Workflow, stage: Stage, failure: ErrorKind | Outcome) -> Routing
@@ -84,6 +84,7 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 - **Run and test:** `pytest factory/engine/tests/gates factory/engine/tests/rework` with recorded gate outputs.
 - **Errors:** a routing loop is bounded by persisted counters; at the maximum the run is blocked.
+- **Decisions taken while building (wave 2).** The 2 min step of the backoff is not used: three tries have two waits, so the list is `(5, 30)`, and the 2 min step needs a decision on where it goes. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. A loop is blocked when it reaches its `max`, so `max: 2` routes once and blocks on the second failure, as the walkthrough shows. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
 
 **Gate commands run sandboxed.** A `cmd` gate such as `[make, build]` runs through `CommandAdapter`, so it runs under `srt` with the worker's read and write rules ([module 9](09-worker-adapters-and-governed-helpers.md)). A gate that needs a domain or a cache folder gets them the way a task does. The exit code is the one the command returned: 0 passes, any other value is a gate failure, and a missing binary or a sandbox that cannot start is a task error, not a gate failure.
 

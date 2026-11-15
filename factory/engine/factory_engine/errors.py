@@ -75,6 +75,7 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     "decision.render_failed": CatalogueEntry(
         "fail_fast", "The decision page could not be written; the decision file is still usable, so run factory open again"
     ),
+    "gate.command_missing": CatalogueEntry("human", "A gate command's binary was not found, so the gate did not run; install it or fix the command"),
     "sandbox.canary_open": CatalogueEntry(
         "human", "doctor found a read or write route that is not blocked; name the route"
     ),
