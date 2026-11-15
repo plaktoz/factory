@@ -20,8 +20,8 @@ from ...types import CheckResult
 
 SRT_VERSION = "0.0.83"
 NODE_FLOOR = (22, 12)
-# Credential folders that no worker reads. The Claude entries are the harness's own config and state.
-CREDENTIAL_PATHS = ("~/.ssh", "~/.aws", "~/.config/gh", "~/.claude", "~/.claude.json")
+# Credential folders that no worker reads. The Claude and Codex entries are each harness's own config and keys.
+CREDENTIAL_PATHS = ("~/.ssh", "~/.aws", "~/.config/gh", "~/.claude", "~/.claude.json", "~/.codex")
 
 
 def _resolved(p: str | Path) -> Path:

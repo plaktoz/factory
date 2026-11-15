@@ -198,7 +198,7 @@ def test_every_attempt_has_a_settings_file_with_the_required_sandbox_rules(stub,
     assert sb["enabled"] is True and sb["failIfUnavailable"] is True and sb["allowUnsandboxedCommands"] is False
     fs = sb["filesystem"]
     assert str(factory_home.resolve()) in fs["denyRead"]
-    for credential in ("~/.ssh", "~/.aws", "~/.config/gh"):
+    for credential in ("~/.ssh", "~/.aws", "~/.config/gh", "~/.codex"):
         assert str(Path(credential).expanduser().resolve()) in fs["denyRead"]
     assert str(task_dir.resolve()) in fs["allowRead"]
     assert set(fs["allowWrite"]) == {str(worktree.resolve()), str(task_dir.resolve())}

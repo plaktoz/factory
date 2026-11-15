@@ -177,6 +177,18 @@ def test_a_command_cannot_read_the_factory_home(cmd_ctx, tmp_path, factory_home,
 
 
 @needs_srt
+def test_a_command_cannot_read_the_codex_key_file(cmd_ctx, tmp_path, factory_home, monkeypatch):
+    home = tmp_path / "userhome"
+    (home / ".codex").mkdir(parents=True)
+    key = home / ".codex" / "auth.json"
+    key.write_text('{"OPENAI_API_KEY": "sk-SECRET"}')
+    monkeypatch.setenv("HOME", str(home))
+    result, log = run(CommandAdapter(dict(os.environ)), cmd_ctx(cmd=["cat", str(key)]), tmp_path)
+    assert result.exit == "failed" and result.exit_code != 0
+    assert "sk-SECRET" not in log.read_text()
+
+
+@needs_srt
 def test_a_command_can_write_inside_the_worktree_and_task_folder_but_not_outside_both(cmd_ctx, tmp_path, factory_home,
                                                                                        worktree, task_dir):
     inside = worktree / "ok.txt"
