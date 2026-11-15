@@ -1,6 +1,6 @@
 {
   "title": "PR #43 Codex adapter: two decisions under D7",
-  "intro": "PR #43 adds a Codex worker (phase 2, P2-1) under srt. Two facts were checked by running them. Codex's own sandbox fails inside srt, and Codex needs the trustd Mach grant to reach the gateway. The PR is not merged and conflicts with main in module 09.",
+  "intro": "ANSWERED 2026-11-15, applied: D1 accept-both-codex-only; D2 hold-resolve-conflict. The cards show the question as it was asked. See pr43-codex-decisions.md. Original intro: PR #43 adds a Codex worker (phase 2, P2-1) under srt. Two facts were checked by running them. Codex's own sandbox fails inside srt, and Codex needs the trustd Mach grant to reach the gateway. The PR is not merged and conflicts with main in module 09.",
   "target": "docs/design/modules/09-worker-adapters-and-governed-helpers.md",
   "storage_key": "pr43-codex-2026-11-15",
   "decisions": [
@@ -14,20 +14,43 @@
           "id": "accept-both-codex-only",
           "name": "Accept both for Codex workers only, and record them in D7 as residual risk",
           "recommended": true,
-          "pros": ["Both changes are verified to be needed, not optional", "Claude workers keep the stricter settings; main has no trustd grant", "The risk is written down in D7 where the owner can see it", "Reversible: rejecting later only removes the Codex adapter"],
-          "cons": ["Codex runs get weaker isolation than Claude runs: one OS layer, and a Mach route srt itself warns about", "The exfiltration route is documented by srt but not tested here", "D7 now has two isolation levels to keep straight"]
+          "pros": [
+            "Both changes are verified to be needed, not optional",
+            "Claude workers keep the stricter settings; main has no trustd grant",
+            "The risk is written down in D7 where the owner can see it",
+            "Reversible: rejecting later only removes the Codex adapter"
+          ],
+          "cons": [
+            "Codex runs get weaker isolation than Claude runs: one OS layer, and a Mach route srt itself warns about",
+            "The exfiltration route is documented by srt but not tested here",
+            "D7 now has two isolation levels to keep straight"
+          ]
         },
         {
           "id": "reject-keep-codex-out",
           "name": "Reject both: Codex workers are not allowed in phase 1 or 2 until a stronger sandbox exists",
-          "pros": ["D7 stays exactly as decided: one sandbox level for every worker", "No new exfiltration route"],
-          "cons": ["P2-1 stays incomplete and Codex cannot be used", "Throws away verified work and live smoke runs", "No stronger sandbox is planned, so this may be permanent"]
+          "pros": [
+            "D7 stays exactly as decided: one sandbox level for every worker",
+            "No new exfiltration route"
+          ],
+          "cons": [
+            "P2-1 stays incomplete and Codex cannot be used",
+            "Throws away verified work and live smoke runs",
+            "No stronger sandbox is planned, so this may be permanent"
+          ]
         },
         {
           "id": "accept-sandbox-only-probe-trustd",
           "name": "Accept the disabled Codex sandbox, but hold the trustd grant until a probe shows what can leave through it",
-          "pros": ["Keeps the unverified route closed until it is measured", "Gives a test to cite in D7"],
-          "cons": ["Without the grant Codex cannot reach the gateway on macOS, so this is the same as rejecting Codex for now", "The probe is new work with no spec behind it", "Linux behavior is a separate unknown"]
+          "pros": [
+            "Keeps the unverified route closed until it is measured",
+            "Gives a test to cite in D7"
+          ],
+          "cons": [
+            "Without the grant Codex cannot reach the gateway on macOS, so this is the same as rejecting Codex for now",
+            "The probe is new work with no spec behind it",
+            "Linux behavior is a separate unknown"
+          ]
         }
       ],
       "why": "Both changes were shown to be required, they apply to Codex only, and writing the residual risk into D7 keeps the decision visible and reversible."
@@ -42,20 +65,40 @@
           "id": "hold-resolve-conflict",
           "name": "Keep the PR open, have the author resolve the module 09 conflict, and merge only after D1 is recorded in D7",
           "recommended": true,
-          "pros": ["The decision and the merge stay in order", "The conflict is small and in one file", "Nothing on main changes until D7 says what Codex workers may do"],
-          "cons": ["P2-1 stays unmerged for now", "Needs a rebase and a rerun of both suites"]
+          "pros": [
+            "The decision and the merge stay in order",
+            "The conflict is small and in one file",
+            "Nothing on main changes until D7 says what Codex workers may do"
+          ],
+          "cons": [
+            "P2-1 stays unmerged for now",
+            "Needs a rebase and a rerun of both suites"
+          ]
         },
         {
           "id": "merge-after-rebase",
           "name": "Rebase, rerun both suites, merge now, and open the missing items as tasks",
-          "pros": ["The adapter and the ~/.codex deny-read fix reach main", "Open items become tracked tasks"],
-          "cons": ["Merges a weaker isolation level before D7 records it", "Criterion 20 and the doctor canary are unproven at merge time", "Adds a phase 2 adapter to main during phase 1, as PR #39 and #40 did"]
+          "pros": [
+            "The adapter and the ~/.codex deny-read fix reach main",
+            "Open items become tracked tasks"
+          ],
+          "cons": [
+            "Merges a weaker isolation level before D7 records it",
+            "Criterion 20 and the doctor canary are unproven at merge time",
+            "Adds a phase 2 adapter to main during phase 1, as PR #39 and #40 did"
+          ]
         },
         {
           "id": "split-deny-read-fix",
           "name": "Merge only the ~/.codex deny-read fix now, and hold the rest",
-          "pros": ["The real gap (the gateway key readable under srt) is closed at once", "No new isolation level on main"],
-          "cons": ["The fix lives in shared sandbox code and the PR author must split it", "The adapter work waits for D1"]
+          "pros": [
+            "The real gap (the gateway key readable under srt) is closed at once",
+            "No new isolation level on main"
+          ],
+          "cons": [
+            "The fix lives in shared sandbox code and the PR author must split it",
+            "The adapter work waits for D1"
+          ]
         }
       ],
       "why": "The deny-read fix is valuable and the adapter is not urgent, so the order that keeps D7 honest is decision first, merge second."

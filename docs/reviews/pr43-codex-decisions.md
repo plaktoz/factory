@@ -2,11 +2,16 @@
 
 Page: `docs/reviews/pr43-codex-decisions.html`. Data: `docs/reviews/pr43-codex-decisions.json`. PR #43 stays on its own page and is not repeated on [the wave 3 open decisions page](wave3-open-decisions.md).
 
-## Answers
+## Answers (applied 2026-11-15)
 
-**No answers are recorded.** The task that produced this note said PR #43 should "follow the answers on its own page", but the pasted reply covered only D1 and D2 of the wave 3 page. Neither the repo, the PR (no comments, no reviews) nor the session notes hold a choice for D1 (sandbox promise) or D2 (what happens to the PR). Nothing was applied, and D7 was not changed. The recommendations on the page are `accept-both-codex-only` for D1 and `hold-resolve-conflict` for D2; they are recommendations, not decisions.
+| Decision | Choice | Recommended? | Applied in |
+| --- | --- | --- | --- |
+| D1 Sandbox promise for Codex workers under D7 | `accept-both-codex-only` | Yes | [Module 9](../design/modules/09-worker-adapters-and-governed-helpers.md), "Threat model and isolation": a Codex-only residual risk item under Residual risk, and a pointer from that bullet; [phase-1-decisions.md](phase-1-decisions.md), "D7 residual risk for Codex workers" |
+| D2 What happens to PR #43 now | `hold-resolve-conflict` | Yes | PR #43 stays open, with a comment saying its author resolves the module 9 conflict and that the merge waits for the D7 record |
 
-PR #43 stays open and unmerged until the owner answers that page.
+The earlier version of this file said no answers were recorded. That was true when it was written; the answers arrived afterwards and are above.
+
+Two things were not changed, on purpose. `docs/design/phase-2.md` still says "Workspace-write sandbox" in its Claude and Codex comparison table and has the "To confirm" ticks, because PR #43 edits the same lines and a second edit here would add a conflict; the PR's author updates them while resolving the conflict. PR #43's own module 9 text for the Codex adapter ("One sandbox layer", "Settings") already states both changes; once rebased it should link to the D7 record and not restate the risk.
 
 ## Module 09 conflict (checked 2026-11-15, `origin/main` at `b04add6`)
 

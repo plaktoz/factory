@@ -33,6 +33,6 @@ Page: `docs/reviews/wave3-decisions.html`. Data: `docs/reviews/wave3-decisions.j
 
 D3 carries a cost the owner accepted: the kit copies `reviewer-eval.yaml` into every repo that runs `factory init`. The ADR lists this under "Known limits".
 
-## Open escalation (not decided here)
+## PR #43 (answered 2026-11-15)
 
-**PR #43, Codex worker adapter (P2-1).** Not merged. It changes D7 in two ways: Codex's own sandbox is off (`danger-full-access`, so `srt` is the only layer), and `srt` allows the Mach service `com.apple.trustd.agent` for Codex's TLS, which srt flags as a possible exfiltration route. The PR also conflicts with `main` in module 09. Decide: accept both changes under D7, accept only one, or reject both. Until then P2-1 is not complete.
+**PR #43, Codex worker adapter (P2-1).** Decided on `pr43-codex-decisions.html`: D1 `accept-both-codex-only` (both changes accepted for Codex workers only, recorded in D7 as residual risk in [module 9](../design/modules/09-worker-adapters-and-governed-helpers.md)); D2 `hold-resolve-conflict` (the PR stays open, its author resolves the module 9 conflict, and it is merged only after the D7 record is on `main`). See [pr43-codex-decisions.md](pr43-codex-decisions.md).
