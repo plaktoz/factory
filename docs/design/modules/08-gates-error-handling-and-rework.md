@@ -46,7 +46,7 @@ Every field is extracted by code: the gate's exit code and output, JUnit XML for
 **On the dashboard**
 
 - The run row turns amber while reworking and red when blocked or failed.
-- The stage strip draws the loop back, such as `verify → fix 1/2`.
+- The stage strip draws the loop back, such as `verify → fix 1/3`.
 - The run detail shows a failure panel with the gate, exit code, failing tests, output tail and a link to the feedback record.
 - Blocked runs count toward Needs you.
 
@@ -84,7 +84,7 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 - **Run and test:** `pytest factory/engine/tests/gates factory/engine/tests/rework` with recorded gate outputs.
 - **Errors:** a routing loop is bounded by persisted counters; at the maximum the run is blocked.
-- **Decisions taken while building (wave 2).** The backoff has three tries and two waits, 5 s and 30 s, so the default is `(5, 30)`. A third wait of 2 min is not used. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. `max` is the number of loops an edge allows: `max: 3` routes the first three failures and blocks the fourth. The module 5 workflow examples use `max` values of 1 and 2, and the bug-fix walkthrough now uses 3 as the decided value. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
+- **Decisions taken while building (wave 2).** The backoff has three tries and two waits, 5 s and 30 s, so the default is `(5, 30)`. A third wait of 2 min is not used. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. `max` is the number of loops an edge allows: `max: 3` routes the first three failures and blocks the fourth. The shipped `bug-fix.yaml` and the module 5 `bug-fix` example use 3 on `verify->fix`, the value the walkthrough uses (owner decision, wave 3). The other shipped edges keep their values: `fix->root-cause` 2, `fix` conflict 1, `review->fix` 1, and `chore` 2 on both edges. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
 
 **Gate commands run sandboxed.** A `cmd` gate such as `[make, build]` runs through `CommandAdapter`, so it runs under `srt` with the worker's read and write rules ([module 9](09-worker-adapters-and-governed-helpers.md)). A gate that needs a domain or a cache folder gets them the way a task does. The exit code is the one the command returned: 0 passes, any other value is a gate failure, and a missing binary or a sandbox that cannot start is a task error, not a gate failure.
 

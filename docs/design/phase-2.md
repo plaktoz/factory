@@ -322,7 +322,21 @@ Rules that apply to all three entries:
 - [x] Trial: the reviewers (target 1). Twelve cases, six with a planted defect and six clean, three runs each, two arms, graded by code. Result: 18 of 18 recall and no false alarm once the prompt was fixed. As built, no run passed the schema and 20 of 36 wrote the artifact outside the folder the engine reads. Both are wiring defects in the module 9 prompt, listed in the finding.
 - [ ] A decision on a scheduled run of the regression suite (target 2), with its budget cap. Not yet: the cases are too easy to rank reviewers. Wait for real misses from pilot runs ([P2-4](#p2-4-pilot-repo-plaktoztest-adapters)).
 
-**Not decided here.** The format of a case, the graders, the runner and the storage. Nothing in phase 1 changes.
+**Not decided here.** The format of a case, the graders and the storage.
+
+**What landed on `main` (PRs #39 and #40, kept by the owner, wave 3 decision D3).** These change the phase 1 kit in one place: it now ships `factory/workflows/reviewer-eval.yaml`.
+
+- **ADR** [`2026-11-15-reviewer-eval-outside-bug-fix.md`](../adr/2026-11-15-reviewer-eval-outside-bug-fix.md): the eval stays out of `bug-fix.yaml`, for cost, fixture and recurring-run reasons, and names `reviewer-eval` as the alternative.
+- **Workflow** `factory/workflows/reviewer-eval.yaml`: one `review` stage with the same `standards` task and `no-blocking-findings` gate as `bug-fix`. Nothing triggers it: the engine has no trigger field, and triage maps no request type to it.
+- **Runner** `scripts/evals/reviewers/run_trial.py`: reads its skill, output name, model, timeout and gate from that workflow.
+- **Test** `factory/engine/tests/workflow/test_reviewer_eval.py`: keeps the eval's task and gate equal to `bug-fix`'s, and fails if the runner hard-codes a setting.
+- **Checks rerun before the merge:** the dry run (exit 0, 12 worktrees), the 78 workflow tests and the link check (223 links, 0 broken). The full engine suite passed earlier, before comment-only edits; it was not rerun after them.
+
+**Still open:**
+
+- [ ] **Starting it.** The runner is started by hand until module 16 (`factory run`) is built; the ADR says so. When 16 lands, `factory run reviewer-eval` replaces `run_trial.py` as the entry point.
+- [ ] **A real worker run.** No real reviewer has run through the new runner. The dry run never calls `claude`.
+- [ ] **Comment-review flags, out of scope of these PRs and not acted on:** `run_gates` returns a list where the caller uses `[-1]`; `GateContext.run` is typed non-optional; a `sys.path` hack sits behind the `E402` suppressions.
 
 ## Fallback workflow: P2-10
 
