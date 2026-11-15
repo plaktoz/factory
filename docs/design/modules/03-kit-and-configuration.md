@@ -22,7 +22,7 @@ factory/                    the kit: replaced whole on update, never edited
   engine/                   Python engine and the factory CLI
   adapters/tracker/         file, github
   adapters/worker/          claude, command, fake
-  dashboard/                prebuilt React bundle, served by the launcher
+  dashboard/                the dashboard page (plain HTML in 1a, prebuilt React bundle in 1b), served by the launcher
   shims/                    generators for .claude skill links (generated into each worktree as `factory-<skill>` folders, git-excluded)
 
 .factory/config/            in the repo, committed: local settings that survive updates

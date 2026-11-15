@@ -1,6 +1,6 @@
 {
   "title": "Wave 3 open decisions: commit email and dashboard scope",
-  "intro": "D1 to D3 of wave 3 are applied and not asked again. PR #43 (Codex adapter, two calls under D7) is on its own page, docs/reviews/pr43-codex-decisions.html; answer it there. Two calls remain here. Module 6B, module 16, the integration tests and the tutorial wait on the 6B pull request from the factory-40 session, not on you, except the dashboard parts of the tutorial (D2 below).",
+  "intro": "ANSWERED 2026-11-15, applied: D1 keep-history-redact-text (keep the history, no force push); D2 placeholder-for-1a (plain page with a usage view in 1a, React moves to 1b). The cards below show the question as it was asked, so D2's context still says the page has no usage view; it has one now. See wave3-open-decisions.md. Original intro: D1 to D3 of wave 3 are applied and not asked again. PR #43 (Codex adapter, two calls under D7) is on its own page, docs/reviews/pr43-codex-decisions.html; answer it there. Two calls remain here. Module 6B, module 16, the integration tests and the tutorial wait on the 6B pull request from the factory-40 session, not on you, except the dashboard parts of the tutorial (D2 below).",
   "target": "docs/tasks.md",
   "storage_key": "wave3-open-decisions-2026-11-15",
   "decisions": [
