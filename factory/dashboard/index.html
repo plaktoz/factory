@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; img-src 'none'; form-action 'none'">
+<title>Factory</title>
+<!-- Minimal placeholder for module 15. It is not the designed React UI; the bundle replaces it later. -->
+<style>
+:root{--fg:#1b1f24;--muted:#57606a;--line:#d0d7de;--bg:#fff;--accent:#0969da;--warn:#9a6700;--bad:#cf222e}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--fg:#e6edf3;--muted:#8b949e;--line:#30363d;--bg:#0d1117;--accent:#58a6ff;--warn:#d29922;--bad:#f85149}}
+:root[data-theme="dark"]{--fg:#e6edf3;--muted:#8b949e;--line:#30363d;--bg:#0d1117;--accent:#58a6ff;--warn:#d29922;--bad:#f85149}
+body{margin:0;padding:0 16px;font:14px/1.45 system-ui,sans-serif;color:var(--fg);background:var(--bg)}
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0}h2{font-size:15px;margin:20px 0 8px}
+button{font:inherit;padding:3px 10px;border:1px solid var(--line);border-radius:6px;background:transparent;color:var(--fg);cursor:pointer}
+button.primary{border-color:var(--accent);color:var(--accent)}
+.counters{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.counter{border:1px solid var(--line);border-radius:6px;padding:6px 12px;min-width:110px}
+.counter b{display:block;font-size:20px}.counter span{color:var(--muted);font-size:12px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:500;font-size:12px}
+tr.run{cursor:pointer}tr.run:hover{background:rgba(127,127,127,.08)}
+.muted{color:var(--muted)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.banner{border:1px solid var(--warn);color:var(--warn);border-radius:6px;padding:6px 10px;margin:8px 0}
+pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-wrap;word-break:break-all;border-radius:6px;max-height:60vh}
+.path{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0}.path code{word-break:break-all}
+.hidden{display:none!important}
+@media (max-width:640px){table,thead,tbody,tr,td,th{display:block}thead{display:none}td{border:0;padding:2px 0}tr{border-bottom:1px solid var(--line);padding:6px 0}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Factory</h1>
+  <div>
+    <span id="status" class="muted">loading</span>
+    <button id="show-json" type="button">Show JSON</button>
+    <button id="notify" type="button" class="hidden">Notify me</button>
+  </div>
+</header>
+
+<div id="error" class="banner hidden"></div>
+<div id="tick" class="muted"></div>
+
+<div class="counters" id="counters"></div>
+
+<section id="needs-section">
+  <h2>Needs you</h2>
+  <div id="needs" class="muted">Nothing waiting.</div>
+</section>
+
+<section id="overview">
+  <h2>Runs</h2>
+  <div id="runs" class="muted">Loading runs.</div>
+</section>
+
+<section id="detail" class="hidden">
+  <h2 id="detail-title"></h2>
+  <div id="detail-body"></div>
+  <p><button id="detail-close" type="button">Back to overview</button></p>
+</section>
+
+<section id="json-section" class="hidden">
+  <h2>State JSON</h2>
+  <pre id="json"></pre>
+</section>
+
+<script>
+(function () {
+  "use strict";
+  var TOKEN = null;            // kept in memory only; never written to storage
+  var REFRESH_MS = 5000;
+  var lastState = null;
+  var selectedRun = null;
+  var lastNeeds = null;
+  var baseTitle = document.title;
+
+  // Take the token from the URL once, then drop it from the address bar.
+  try {
+    var params = new URLSearchParams(location.search);
+    TOKEN = params.get("token");
+    if (TOKEN !== null) { history.replaceState(null, "", location.pathname); }
+  } catch (e) { TOKEN = null; }
+
+  function esc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function el(id) { return document.getElementById(id); }
+
+  function api(path, opts) {
+    opts = opts || {};
+    var headers = { "X-Factory-Token": TOKEN || "" };
+    if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; }
+    return fetch(path, { method: opts.method || "GET", headers: headers,
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body) })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          var doc = null;
+          try { doc = JSON.parse(t); } catch (e) { doc = null; }
+          return { ok: r.ok, status: r.status, text: t, doc: doc };
+        });
+      });
+  }
+
+  function copyButton(text, label) {
+    return '<button type="button" class="copy" data-copy="' + esc(text) + '">' + (label || "Copy") + "</button>";
+  }
+
+  function fallbackCopy(text) {
+    var t = document.createElement("textarea");
+    t.value = text; document.body.appendChild(t); t.select();
+    try { document.execCommand("copy"); } catch (e) { /* nothing else to try */ }
+    document.body.removeChild(t);
+  }
+
+  document.addEventListener("click", function (ev) {
+    var btn = ev.target.closest && ev.target.closest("button.copy");
+    if (!btn) { return; }
+    var text = btn.getAttribute("data-copy");
+    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1200); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+    } else { fallbackCopy(text); done(); }
+  });
+
+  function statusCell(r) {
+    if (r.unreadable) { return '<span class="bad">unreadable</span>'; }
+    var s = r.display_status || r.status;
+    var cls = (s === "stale" || s === "not responding" || s === "blocked") ? "warn" : "";
+    var extra = r.repo_missing ? ' <span class="bad">repo missing</span>' : "";
+    return '<span class="' + cls + '">' + esc(s) + "</span>" + extra;
+  }
+
+  function renderCounters(state) {
+    var c = state.counters;
+    var items = [["Running", c.running], ["Needs you", c.needs_you], ["Blocked", c.blocked],
+                 ["Conflict warnings", c.conflict_warnings], ["Done today", c.done_today]];
+    el("counters").innerHTML = items.map(function (it) {
+      return '<div class="counter"><b>' + esc(it[1]) + "</b><span>" + esc(it[0]) + "</span></div>";
+    }).join("");
+  }
+
+  function renderNeeds(state) {
+    var items = state.attention || [];
+    if (!items.length) { el("needs").innerHTML = "Nothing waiting."; return; }
+    el("needs").innerHTML = items.map(function (a) {
+      var buttons = "";
+      if (a.kind === "decision" || a.page_path) {
+        if (a.page_url) {
+          buttons += '<a href="' + esc(a.page_url + "?token=" + encodeURIComponent(TOKEN || "")) +
+                     '" target="_blank" rel="noopener"><button type="button">Open page</button></a> ';
+        }
+        if (a.page_path) { buttons += copyButton(a.page_path, "Copy path") + " "; }
+      }
+      if (a.command) { buttons += copyButton(a.command, "Copy command") + " "; }
+      return '<div class="needs-item" style="margin:6px 0"><strong>' + esc(a.repo_key) + "</strong> / " +
+             '<a href="#" class="open-run" data-run="' + esc(a.run_id) + '">' + esc(a.run_id) + "</a> " +
+             '<span class="muted">' + esc(a.kind) + " " + esc(a.stage || "") + " since " + esc(a.since) + "</span><br>" +
+             esc(a.summary) + "<br>" + buttons + "</div>";
+    }).join("");
+  }
+
+  function renderRuns(state) {
+    var rows = state.runs.filter(function (r) { return !r.hidden; });
+    if (!rows.length) { el("runs").innerHTML = "No runs."; return; }
+    var byRepo = {};
+    rows.forEach(function (r) { (byRepo[r.repo_key] = byRepo[r.repo_key] || []).push(r); });
+    var html = "";
+    Object.keys(byRepo).sort().forEach(function (key) {
+      html += "<h3 style=\"font-size:13px;margin:14px 0 4px\">" + esc(key) + "</h3><table><thead><tr>" +
+              "<th>Run</th><th>Task</th><th>Stage</th><th>Status</th><th>Updated</th></tr></thead><tbody>";
+      byRepo[key].forEach(function (r) {
+        html += '<tr class="run" data-run="' + esc(r.run_id) + '"><td>' + esc(r.run_id) + "</td><td>" +
+                esc(r.title || (r.unreadable ? "unreadable: " + r.unreadable : "")) + "</td><td>" + esc(r.stage) +
+                "</td><td>" + statusCell(r) + "</td><td>" + esc(r.updated) + "</td></tr>";
+      });
+      html += "</tbody></table>";
+    });
+    el("runs").innerHTML = html;
+  }
+
+  function renderTick(state) {
+    var t = state.tick;
+    el("tick").innerHTML = (t.warning ? '<span class="warn">Scheduler: ' : "Scheduler: ") + esc(t.message) +
+                           (t.warning ? "</span>" : "");
+  }
+
+  function renderTitleAndNotify(state) {
+    var n = state.counters.needs_you;
+    document.title = n ? "(" + n + ") " + baseTitle : baseTitle;
+    if (lastNeeds !== null && n > lastNeeds && "Notification" in window && Notification.permission === "granted") {
+      try { new Notification("Factory: " + n + " waiting for you"); } catch (e) { /* ignore */ }
+    }
+    lastNeeds = n;
+  }
+
+  function renderState(state) {
+    lastState = state;
+    renderCounters(state);
+    renderNeeds(state);
+    renderRuns(state);
+    renderTick(state);
+    renderTitleAndNotify(state);
+    el("json").textContent = JSON.stringify(state, null, 2);
+    el("status").textContent = "updated " + new Date().toLocaleTimeString();
+  }
+
+  function showError(message) {
+    var b = el("error");
+    b.textContent = message;
+    b.classList.remove("hidden");
+  }
+
+  function refresh() {
+    api("/api/state.json").then(function (r) {
+      if (!r.ok) {
+        showError(r.doc ? r.doc.message : "HTTP " + r.status + " from the dashboard");
+        return;
+      }
+      el("error").classList.add("hidden");
+      renderState(r.doc);
+      if (selectedRun) { openRun(selectedRun, true); }
+    }).catch(function (e) { showError("Cannot reach the dashboard: " + e); });
+  }
+
+  function openRun(runId, quiet) {
+    selectedRun = runId;
+    api("/api/runs/" + encodeURIComponent(runId)).then(function (r) {
+      if (!r.ok) { if (!quiet) { showError(r.doc ? r.doc.message : "HTTP " + r.status); } return; }
+      var run = r.doc;
+      var paths = (run.paths || []).map(function (p) {
+        return '<div class="path"><span class="muted">' + esc(p.label) + ":</span> <code>" + esc(p.value) + "</code> " +
+               copyButton(p.value) + "</div>";
+      }).join("") || '<p class="muted">No paths.</p>';
+      var tasks = (run.tasks || []).map(function (t) {
+        return "<tr><td>" + esc(t.task_id) + "</td><td>" + esc(t.stage) + "</td><td>" + esc(t.status) +
+               "</td><td>" + esc(t.attempt) + "</td></tr>";
+      }).join("");
+      var decisions = (run.decisions || []).map(function (d) {
+        return "<li>" + esc(d.file) + (d.valid ? "" : ' <span class="bad">invalid</span>') +
+               (d.decision ? " status: " + esc(d.decision.status) : "") + "</li>";
+      }).join("");
+      var failure = run.run && run.status === "failed" ? '<p class="bad">Run failed.</p>' : "";
+      var summary = run.summary ? "<h3>Summary</h3><pre>" + esc(run.summary) + "</pre>" : "";
+      var unreadable = run.unreadable ? '<p class="bad">Unreadable: ' + esc(run.unreadable) + "</p>" : "";
+      el("detail-title").textContent = runId;
+      el("detail-body").innerHTML =
+        unreadable +
+        "<p>Status: " + statusCell(run) + " &middot; Stage: " + esc(run.stage) + " &middot; Repo: " + esc(run.repo_key) +
+        (run.repo_missing ? ' &middot; <span class="bad">repo missing</span>' : "") + "</p>" + failure +
+        "<h3>Paths</h3>" + paths +
+        "<h3>Tasks</h3>" + (tasks ? "<table><thead><tr><th>Task</th><th>Stage</th><th>Status</th><th>Attempt</th>" +
+        "</tr></thead><tbody>" + tasks + "</tbody></table>" : '<p class="muted">No tasks.</p>') +
+        "<h3>Decisions</h3>" + (decisions ? "<ul>" + decisions + "</ul>" : '<p class="muted">None.</p>') +
+        summary;
+      el("detail").classList.remove("hidden");
+      el("overview").classList.add("hidden");
+      el("needs-section").classList.add("hidden");
+    }).catch(function (e) { if (!quiet) { showError(String(e)); } });
+  }
+
+  function closeRun() {
+    selectedRun = null;
+    el("detail").classList.add("hidden");
+    el("overview").classList.remove("hidden");
+    el("needs-section").classList.remove("hidden");
+  }
+
+  document.addEventListener("click", function (ev) {
+    var row = ev.target.closest && ev.target.closest("tr.run, a.open-run");
+    if (row) {
+      ev.preventDefault();
+      openRun(row.getAttribute("data-run"));
+    }
+  });
+  el("detail-close").addEventListener("click", closeRun);
+  el("show-json").addEventListener("click", function () {
+    el("json-section").classList.toggle("hidden");
+  });
+  if ("Notification" in window && Notification.permission === "default") {
+    el("notify").classList.remove("hidden");
+    el("notify").addEventListener("click", function () { Notification.requestPermission(); });
+  }
+
+  if (TOKEN === null) {
+    showError("No session token. Open the dashboard with the link that factory dashboard printed.");
+  }
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

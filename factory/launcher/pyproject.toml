@@ -1,0 +1,23 @@
+[project]
+name = "factory-launcher"
+version = "0.1.0"
+description = "Machine launcher for the factory: the dashboard server (module 15). Module 16 adds the machine commands."
+# Python 3.10 is the floor, the same as the engine.
+requires-python = ">=3.10"
+dependencies = ["factory-engine"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv.sources]
+factory-engine = { path = "../engine", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["factory_launcher"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

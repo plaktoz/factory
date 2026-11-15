@@ -8,7 +8,7 @@ One local Python server, started with `factory dashboard`, serves the prebuilt R
 
 All run state is in the factory home, so the dashboard needs no registration and no call from the engine. It watches one folder: `$FACTORY_HOME/runs/<repo key>/<run id>/`.
 
-1. Every 5 seconds the server's `RunScanner` (6A) lists the `run.json` files under `runs/`. It remembers each file's modification time and size, and re-reads only files that changed, so a refresh stays cheap with hundreds of runs.
+1. Every 5 seconds the server lists the `run.json` files under `runs/`. It remembers each file's modification time and size, and re-reads with 6A `read_run` only files that changed, so a refresh stays cheap with hundreds of runs. It does not call `RunScanner.scan()`: that parses every `run.json` through `list_runs` on each call, and one unreadable file fails the whole scan. A file that cannot be read shows as an unreadable row.
 2. A new run folder appears on the next refresh, and a folder archived by housekeeping disappears. There is nothing to register or clean up.
 3. Each run shows its repo key and the paths from `run.json` (repo, worktree, task worktrees, branch, source), each with a Copy button. The server never reads repos or worktrees.
 4. A run whose repo is gone shows as "repo missing": still readable, but it can't be resumed, and housekeeping archives it.
@@ -91,13 +91,13 @@ The server is part of the machine launcher, not a repo's kit. It reads files dir
 
 Acceptance criteria:
 
-- [ ] Runs from two repos with different kit versions show on one page.
-- [ ] A new run appears within one refresh with no API call; an archived run disappears.
-- [ ] With 500 runs, a refresh re-reads only the run files that changed.
-- [ ] A run whose repo was deleted shows as repo missing and can still be opened.
-- [ ] Run detail shows repo, worktree, task worktrees, branch and source paths, each copyable.
-- [ ] Needs you lists every attention item across repos, with Open page and Copy path for decisions.
-- [ ] (1b) Submit on a decision page records the answer through the launcher and the run resumes. In 1a the page shows the command only.
-- [ ] The page refreshes every 5 seconds without a manual click; Show JSON displays the document in use.
-- [ ] A request with no token, a wrong token, a foreign `Host` or a foreign `Origin` is refused with HTTP 403 and changes nothing.
-- [ ] Scheduler health shows the last tick from `tick.json`, and warns after `stale_after_ticks` intervals without one.
+- [x] Runs from two repos with different kit versions show on one page. (test: factory/launcher/tests/server/test_api_state.py::test_runs_from_two_repos_on_different_kits_show_on_one_page)
+- [ ] A new run appears within one refresh with no API call; an archived run disappears. (not ticked: the server half is tested (test_a_new_run_and_an_archived_run_show_on_the_next_refresh), but "with no API call" describes the page's own 5 s poll, which is a Playwright UI test and out of scope; the placeholder page is untested)
+- [x] With 500 runs, a refresh re-reads only the run files that changed. (test: factory/launcher/tests/server/test_api_state.py::test_with_500_runs_a_refresh_rereads_only_changed_files)
+- [x] A run whose repo was deleted shows as repo missing and can still be opened. (test: factory/launcher/tests/server/test_api_state.py::test_a_run_whose_repo_was_deleted_shows_as_repo_missing_and_opens)
+- [ ] Run detail shows repo, worktree, task worktrees, branch and source paths, each copyable. (not ticked: the server returns all five paths (test_run_detail_lists_repo_worktree_task_worktrees_branch_and_source), but the Copy button is in the placeholder page, which has no UI test; the spec's React UI is not built)
+- [ ] Needs you lists every attention item across repos, with Open page and Copy path for decisions. (not ticked: the API lists every item oldest first with its page URL and path (test_needs_you_lists_every_attention_item_across_repos_oldest_first), but the Open page and Copy path buttons are UI and untested)
+- [ ] (1b) Submit on a decision page records the answer through the launcher and the run resumes. In 1a the page shows the command only. (not ticked: 1b behavior; the launcher call is tested with a fake, and the run resuming needs module 16 and the real engine)
+- [ ] The page refreshes every 5 seconds without a manual click; Show JSON displays the document in use. (not ticked: a Playwright UI test, out of scope for this change; the placeholder page has REFRESH_MS = 5000 and a Show JSON control, but no test drives them)
+- [x] A request with no token, a wrong token, a foreign `Host` or a foreign `Origin` is refused with HTTP 403 and changes nothing. (test: factory/launcher/tests/server/test_security.py::test_no_token_wrong_token_foreign_host_or_foreign_origin_is_403_and_changes_nothing)
+- [x] Scheduler health shows the last tick from `tick.json`, and warns after `stale_after_ticks` intervals without one. (test: factory/launcher/tests/server/test_api_state.py::test_scheduler_health_shows_the_last_tick_and_warns_when_it_is_stale)

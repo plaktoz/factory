@@ -79,6 +79,9 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     "sandbox.canary_open": CatalogueEntry(
         "human", "doctor found a read or write route that is not blocked; name the route"
     ),
+    "dashboard.port_in_use": CatalogueEntry(
+        "fail_fast", "The dashboard port is taken; stop the process on it or pass another --port"
+    ),
 }
 
 _EXIT_BY_KIND: dict[ErrorKind, int] = {
