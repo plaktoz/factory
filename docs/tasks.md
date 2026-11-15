@@ -6,23 +6,29 @@ Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it wa
 
 ## Resume here
 
-**State at 2026-11-15 (wave 2, paused).** `main` is at `e6ed3af`. Modules 3, 6A, 7, 10, 14 and 17A (wave 1) and modules 4, 5, 9, 11, 12 and 17 (wave 2) are merged. P2-11 (architecture review, phase 2 backlog) is merged.
+**State at 2026-11-15 (wave 3, 6B open).** `main` is at `1358825`. Merged: waves 0 to 2 (modules 3, 4, 5, 6A, 7, 8, 9, 10, 11, 12, 14, 17, 17A), module 13 (PR #37), module 15 (PR #36), the draft report schemas (PR #35), and the waves 1 and 2 criteria audit (PR #38). Full engine suite after the audit: 703 passed, 16 skipped on 3.10 and on 3.15. Module 13 branch: 720 passed, 16 skipped on both. Module 15 launcher suite: 54 passed on both.
 
-**Not done in wave 2:**
+**Not done:**
 
-1. **Module 8 (gates, errors, rework) is not merged.** PR #29 was closed at 00:31:32Z by the `plaktoz` account, and its remote branch `wave2/m08-gates` was force-pushed back to the old commit `984cb92`. The owner did not say why. The rebased work is a local branch at `7d6f44f` in worktree `.claude/worktrees/agent-a55c1e451b3af7fb3`: 3 commits on `main` `c22ba62`, 588 tests pass on 3.10 and 3.15. Ask the owner whether to reopen. Do not push over the remote branch without their word.
-2. **Acceptance-criteria ticks are not written.** Every `- [ ]` in the module files is still unticked, though modules 3, 4, 6A, 7, 9, 10, 11, 12, 14, 17 and 17A have merged tests. Two agents stopped before committing (the second on a network error), so nothing is saved. Method: tick a criterion only when a merged test asserts it, append ` (test: <file>::<name>)`, and leave the rest with ` (not ticked: <reason>)`. First pass counts, unverified: 65 ticked and 26 not, across 10 files. Do module 8 after it is merged.
+1. **Module 6B (engine loop) is not merged.** The `factory-40` session builds it on `wave3/m06b-engine` and reports 9 of 9 criteria with a test, but it has not opened a PR. Its user approved the push. Review it against `docs/design/modules/06-engine-core.md`, run 3.10 then 3.15, then merge. Do not start a second 6B build.
+2. **Module 16 (drivers) and the integration tests** start only after 6B is merged.
+3. **The tutorial** (new project, dashboard progress, fixing an issue in an existing project) is not written. It needs 16.
+4. **Owner review of drafts (not spec-backed):** `stage-report`, `test-report`, `source-notes` and `review-findings` in `factory/schemas/`, each marked `x-status: draft`. `merge` has no schema; module 13 writes `merge.json` with `auto`, `reason` and `rules` (each `{rule, passed, detail}`). Module 5 has the draft table. `no-blocking-findings` treats medium and high as blocking, a draft choice. `every-claim-has-source` is still unbuilt. The `scope` skill says `questions.json` has the `source-notes` schema, but `tasks_from` reads it as a task list, so the two disagree.
+5. **Code gaps the audit found, not fixed** (PR #38 body): `RunScanner.scan` re-reads every run file; `mark_run` is not called in production; `doctor_checks` is not wired into `kit.doctor`; `init_run` writes no snapshot; `expand_tasks_from` and `pending_notes` have no engine caller (6B should call them); the engine-crash row is unclassified.
+6. **Module 15's page is a minimal placeholder**, not the designed React UI. It never called the real `factory` CLI, because 16 does not exist. Playwright UI tests are not written.
+7. **Not installed, so untested:** Gradle, golangci-lint, dotnet, prettier, eslint (and `srt`, which blocks the sandbox criteria).
+8. **Commit `6a6ff04`** carries the owner's work email. Removing it needs a force push, which is not approved.
+9. **PRs #39 and #40** (phase 2 reviewer evals) were merged to `main` by other sessions. Phase 1 rules say phase 2 is not built; the owner should decide whether to keep them.
+10. Module 13 writes ADRs and research reports to `docs/adr` and `docs/research`. These are paths in the target repo, as the spec says, not this repo's `docs/`. A literal grep of `factory/` matches them, so the "no `docs/`" rule needs a ruling.
 
-**Decided in wave 2** (applied in the code and in every doc that states it):
+**Decided in wave 3** (owner and `factory-40`'s user; applied in code and docs):
 
-- `on_fail.max` and `on_conflict.max` are the number of loops an edge allows. `max: 3` routes failures 1 to 3 and blocks the fourth. Module 8 and the walkthrough use 3. The shipped workflow files and module 5 examples still use `max` of 1 and 2, so check them against this when module 8 lands.
+- `max` on `on_fail` and `on_conflict` is the number of loops allowed. The shipped `max` of 1 and 2 are valid under it, and a test pins them (`test_the_shipped_workflows_max_values_are_loops_allowed_so_max_2_routes_twice_then_blocks`). The module 8 walkthrough uses 3 as an example; `bug-fix` ships 2 for `verify->fix`. I did not raise it.
+- Workers are supervised with threads, and a failed gate resets the run branch to its pre-join commit (decided by `factory-40`'s user; recorded in module 6; both were Unspecified in modules 6 to 8).
 - Backoff is three tries with waits of 5 s and 30 s. There is no 2 min wait.
 - When a rule changes, change every doc that states it in the same pass, then grep for the old wording.
-- Run test suites one at a time per worktree. Two runs in one `.venv` broke it once.
-
-**Next, in order:** settle module 8 with the owner, then tick the criteria, then wave 3 (6B, 13, 15), then wave 4 (16 and the integration tests), then the tutorial.
-
-**Still open from before:** five schemas (`merge`, `stage-report`, `test-report`, `source-notes`, `review-findings`) have no fields in the spec. The `bug-fix` workflow gates on `stage-report` and `test-report`, so a run fails at run time with `config.invalid` until they exist. Commit `6a6ff04` carries the owner's work email, and removing it needs a force push, which is not approved.
+- Run test suites one at a time per worktree. Two runs in one `.venv` break it.
+- An autonomous loop that only waits on a peer stops after three no-progress ticks (global `CLAUDE.md`).
 
 **Older notes below are history.**
 
@@ -104,6 +110,8 @@ Procedure: `AGENTS.md`, "Building one module". The spec is `docs/design/shared/1
 Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
+
+- 2026-11-15 (wave 3): merged the four draft report schemas with their gates (#35), module 15 (#36, 54 launcher tests), module 13 (#37, 26 delivery tests, 720 engine tests passed on 3.10 and 3.15), and the waves 1 and 2 criteria audit (#38: 14 tests added, 4 ticks removed, 703 passed on both). `bug-fix` no longer fails with `config.invalid` at its schema and check gates (`test_bug_fix_no_longer_fails_with_config_invalid_at_its_schema_and_check_gates`). Module 6B was started twice: a second build was stopped before it wrote any file, because `factory-40` already had one with all 9 criteria tested. Module 13's agent was marked completed. Lesson: a wave 3 loop waited on a peer for hours; the rule is now in the global `CLAUDE.md`.
 
 - 2026-11-15 (wave 1, module 10): built in `skills.py`, `shims.py`, with `factory/stages.map.yaml`, `factory/skills.lock` (empty) and the 13 own skills in `factory/skills/own/`. 50 module tests; 261 engine and 121 spec-contract tests pass on 3.10 and 3.15. Covered: resolution order override then locked then own; allowlist and denylist (a denied skill is never installed; an empty allowlist fetches nothing); `verify_lock` reports a changed ref and an uninstalled source; every one of the 13 stages resolves to an own skill with an empty lock; shims appear in a new worktree and never show in `git status`, in a second worktree too; the exclude patterns are written once; the practice-pack mechanism (a Java-only task gets only Java, override replaces or merges, packs over `max_lines` are reported). Planted faults caught: a denied skill installed, a skill that tells the worker to ask a person. **Two limits.** (1) The criterion that each own skill, run against `FakeWorkerAdapter`, writes an artifact that passes its schema or a packet needs the engine's worker path (module 9, wave 2); what is tested now is static: each skill has the front matter, the headless rules, asks nothing, and the `classify` and `architect` skills name every field of the `triage` and `packet` schemas. (2) Six skills point at report schemas (`stage-report`, `review-findings`, `source-notes`) that have no fields in the spec, so their skill text names the schema and does not invent its shape. **Changed in the spec:** module 4 now says the classify task writes `type_source: llm` and the rules never do (the merge policy relies on telling them apart); section 18 gains `skills.unknown`. **Unspecified, so chosen here:** a team practice-pack override merges over the shipped one when its front matter says `merge: true`; shipped language pack content (java, typescript, python, go, csharp) is not written, because practice packs are phase 1b.
 
