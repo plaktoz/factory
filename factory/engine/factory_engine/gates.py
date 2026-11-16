@@ -121,6 +121,21 @@ def _cmd_gate(spec: GateSpec, ctx: GateContext) -> GateResult:
     return cmd_gate_result(spec.cmd, code, output, ctx)
 
 
+def _cmd_name(cmd: list[str]) -> str:
+    return "cmd: [" + ", ".join(cmd) + "]"
+
+
+def gate_name(spec: GateSpec) -> str:
+    """The id of a gate: the name its results and gate events carry, and the one `factory skip --gate` takes.
+
+    A cmd gate is `cmd: [make, lint]`, a schema gate is `schema: stage-report`, and a check gate is its check name."""
+    if spec.kind == "cmd":
+        return _cmd_name(spec.cmd or [])
+    if spec.kind == "schema":
+        return f"schema: {spec.schema}"
+    return spec.check or ""
+
+
 def cmd_gate_result(cmd: list[str], exit_code: int, output: str, ctx: GateContext) -> GateResult:
     """The result of a command that ran, from its exit code and output (module 8, class table).
 
@@ -128,7 +143,7 @@ def cmd_gate_result(cmd: list[str], exit_code: int, output: str, ctx: GateContex
     failure, so 6B passes its command's result here and gets the same rework feedback. Zero passes. Any other exit
     fails with the output tail, the failing test names from the task's JUnit report (ctx.artifact), and the files
     git reports as changed."""
-    name = "cmd: [" + ", ".join(cmd) + "]"
+    name = _cmd_name(cmd)
     if exit_code == 0:
         return GateResult(passed=True, gate=name, code="ok", output_tail="", details={"exit_code": 0})
     # The changed files come from git (module 7), read through the same function its scope check uses.
@@ -144,7 +159,7 @@ def _schema_gate(spec: GateSpec, ctx: GateContext) -> GateResult:
     if not spec.schema:
         raise FactoryError("config.invalid", "a schema gate needs a schema name",
                            hint="write the gate as {schema: stage-report}")
-    name = f"schema: {spec.schema}"
+    name = gate_name(spec)
     if not (SCHEMA_DIR / f"{spec.schema}.schema.json").is_file():
         raise FactoryError("config.invalid", f"no schema named {spec.schema!r} in {SCHEMA_DIR}",
                            hint="the schema must be in factory/schemas/")

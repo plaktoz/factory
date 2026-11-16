@@ -38,9 +38,10 @@ Every field is extracted by code: the gate's exit code and output, JUnit XML for
 
 **When a run is blocked**, its decision file offers these options, also available as commands:
 
-- `factory retry <run> [--stage <s>] [--note "..."]` runs the stage again once more, with your note added to the feedback.
-- `factory goto <run> <stage>` routes the run to any earlier stage.
-- `factory skip <run> --gate <id> --reason "..."` passes a gate marked `skippable: true`. It is logged, and the run can no longer be auto-merged.
+- `factory retry <run> [--stage <s>] [--note "..."]` runs the stage again once more, with your note queued on each task of the stage. A failed task starts again with a fresh state. Loop counters do not change, and `run_retried` is logged.
+- `factory goto <run> <stage>` routes the run to the blocked stage or any earlier one. That stage and every later stage start again. It takes no loop count, because a person chose the route, and `run_routed` is logged.
+- `factory skip <run> --gate <id> --reason "..."` passes a gate marked `skippable: true` on the blocked stage. `<id>` is the gate's name as its results carry it (`cmd: [make, lint]`, `schema: stage-report` or the check name). A reason is required. It logs `gate_skipped` with the reason, marks the stage `skipped`, and the run can no longer be auto-merged. A gate not marked `skippable` is refused.
+- All three refuse a run that is not `blocked`.
 - `factory abort <run>` stops the run, and housekeeping cleans it up.
 
 **On the dashboard**
@@ -98,4 +99,6 @@ Acceptance criteria:
 - [x] Loop counters survive an engine restart. (test: factory/engine/tests/rework/test_rework.py::test_loop_counters_survive_an_engine_restart)
 - [x] A rate-limit error is retried by `with_backoff` and never counts against task retries. (test: factory/engine/tests/rework/test_rework.py::test_a_rate_limit_is_retried_by_backoff_and_never_counts_against_task_retries)
 - [x] Three failed tries put the run in `retrying` with the operation and start time in `run.json`; the next tick tries again and clears the state on success; after `infra_wait_hours` the run is blocked with an attention item. (test: factory/engine/tests/rework/test_rework.py::test_three_failed_tries_put_the_run_in_retrying_with_the_operation_and_start_time; factory/engine/tests/rework/test_rework.py::test_the_next_tick_tries_again_and_clears_the_state_on_success; factory/engine/tests/rework/test_rework.py::test_after_infra_wait_hours_the_run_is_blocked_with_an_attention_item)
+- [x] `skip` passes only a gate marked `skippable: true`, requires a reason, logs `gate_skipped` and stops auto-merge; a gate not marked is refused and the run stays blocked. (test: factory/engine/tests/drivers/test_blocked_actions.py::test_skip_passes_a_skippable_gate_logs_the_reason_and_blocks_auto_merge; ::test_skip_refuses_a_gate_the_workflow_did_not_mark_skippable; ::test_skip_needs_a_reason; ::test_no_shipped_gate_is_skippable. Tested through `factory_engine.api`, not yet through the CLI, which module 16 has not built)
+- [x] `retry` queues the note on the blocked stage's tasks and returns the run to running without changing loop counters; `goto` sends the run to an earlier stage and resets it; both refuse a run that is not blocked and a stage the workflow lacks. (test: factory/engine/tests/drivers/test_blocked_actions.py::test_retry_queues_the_note_and_moves_the_blocked_run_back_to_running; ::test_retry_refuses_a_run_that_is_not_blocked; ::test_goto_routes_a_blocked_run_to_an_earlier_stage_and_resets_it; ::test_goto_refuses_a_stage_the_workflow_does_not_have. Through `factory_engine.api` only)
 - [ ] A repo hook failing on the join commit or push is classified as rework, with the hook output in the feedback record; a hook failing on a network or missing-tool error is classified as transient. (not ticked: a join-commit hook failure reaches feedback only as a fixed sentence, because `JoinResult` carries no hook output; push hooks have no test; the output test uses `hook_failure_result`, not the join path)

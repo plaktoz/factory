@@ -319,11 +319,12 @@ def _parse_task(t: dict, defaults: Defaults) -> TaskSpec:
 
 
 def _parse_gate(g: dict) -> GateSpec:
+    skippable = g.get("skippable", False)
     if "cmd" in g:
-        return GateSpec(kind="cmd", cmd=list(g["cmd"]), check=None, schema=None, args={})
+        return GateSpec(kind="cmd", cmd=list(g["cmd"]), check=None, schema=None, args={}, skippable=skippable)
     if "check" in g:
-        return GateSpec(kind="check", cmd=None, check=g["check"], schema=None, args={})
-    return GateSpec(kind="schema", cmd=None, check=None, schema=g["schema"], args={})
+        return GateSpec(kind="check", cmd=None, check=g["check"], schema=None, args={}, skippable=skippable)
+    return GateSpec(kind="schema", cmd=None, check=None, schema=g["schema"], args={}, skippable=skippable)
 
 
 def _parse_goto(node: dict | None) -> OnFail | None:

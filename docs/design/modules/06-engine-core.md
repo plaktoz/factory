@@ -241,7 +241,7 @@ flowchart LR
 | --- | --- |
 | Run | `run_created`, `request_invalid`, `request_duplicate`, `run_done`, `run_failed`, `run_aborted`, `run_blocked`, `run_resumed`, `request_changed`, `infra_waiting`, `infra_recovered` |
 | Stage and task | `stage_started`, `stage_done`, `task_created`, `attempt_started`, `attempt_ended`, `checkpoint`, `task_interrupted` |
-| Gates and rework | `gate_passed`, `gate_failed`, `routed_back`, `merge_conflict` |
+| Gates and rework | `gate_passed`, `gate_failed`, `gate_skipped`, `routed_back`, `run_retried`, `run_routed`, `merge_conflict` |
 | Human stops | `attention_requested`, `attention_cleared`, `decision_requested`, `decision_recorded`, `decision_approved`, `decision_rejected`, `decision_invalidated`, `decision_reopened` |
 | Steering | `note_queued`, `note_delivered`, `worker_restarted` |
 | Delivery and cleanup | `pr_opened`, `merge_evaluated`, `merged`, `sink_written`, `archived` |
