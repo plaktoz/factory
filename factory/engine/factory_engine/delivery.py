@@ -12,6 +12,8 @@ from datetime import datetime
 from fnmatch import fnmatch
 from pathlib import Path
 
+import yaml
+
 from .adapters.tracker.base import TrackerAdapter
 from .atomic import read_jsonl, write_json_atomic, write_text_atomic
 from .config import Config
@@ -143,7 +145,12 @@ def write_adr(run_dir: Path, worktree: Path) -> Path | None:
 
 
 def _adr_text(run: Run, day: str, packet: dict, dec: dict) -> str:
-    lines = [f"# {run.request.title}", "", f"Run {run.run_id} on {day}, request {run.request.source.ref}", ""]
+    # A run's ADR is written after an approval, so its status is accepted, and it supersedes nothing: a run never
+    # edits an earlier ADR.
+    front = {"scope": "repo", "repo": run.repo, "topic": "architecture", "status": "accepted", "supersedes": []}
+    head = yaml.safe_dump(front, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    lines = ["---", head.rstrip("\n"), "---", "", f"# {run.request.title}", "",
+             f"Run {run.run_id} on {day}, request {run.request.source.ref}", ""]
     choices = dec.get("choices") or {}
     for d in packet.get("decisions") or []:
         options = d.get("options") or []

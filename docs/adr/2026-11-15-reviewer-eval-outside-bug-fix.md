@@ -1,6 +1,12 @@
-# The reviewer eval stays out of `bug-fix.yaml`
+---
+scope: repo
+repo: factory
+topic: reviewer-eval
+status: accepted
+supersedes: []
+---
 
-Status: accepted, 2026-11-15
+# The reviewer eval stays out of `bug-fix.yaml`
 
 ## Decision
 
