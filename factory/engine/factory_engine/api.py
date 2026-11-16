@@ -24,6 +24,7 @@ from .config import Config
 from .engine import Engine, EngineResult
 from .errors import FactoryError
 from .gh import FileTracker, GitHubPullRequests, GitHubTracker
+from .types import Source
 from .loadcfg import load_config
 from .prs import PullRequests
 from .types import RunRef
@@ -45,9 +46,29 @@ def default_workers(cfg: Config) -> dict[str, WorkerAdapter]:
     return {harness: ClaudeAdapter()}
 
 
+class _InboxStatusOnly:
+    """A file tracker that writes status and reads nothing. intake reads the inbox's markdown files itself, so a
+    tracker that also listed them would create every run twice."""
+
+    def __init__(self, inbox: FileTracker):
+        self._inbox = inbox
+
+    def list_new(self, since: str | None) -> list[Source]:
+        return []
+
+    def fetch(self, ref: str) -> Source:
+        return self._inbox.fetch(ref)
+
+    def set_status(self, ref: str, status: str, *, comment: str | None = None, link: str | None = None) -> None:
+        self._inbox.set_status(ref, status, comment=comment, link=link)
+
+    def ensure_labels(self, labels: list[str]) -> None:
+        self._inbox.ensure_labels(labels)
+
+
 def default_tracker(repo: Path, cfg: Config) -> TrackerAdapter:
     if ((cfg.repo or {}).get("tracker") or "github") == "file":
-        return FileTracker(repo / ".factory" / "inbox")
+        return _InboxStatusOnly(FileTracker(repo / ".factory" / "inbox"))
     return GitHubTracker(runner=_gh_runner(repo))
 
 

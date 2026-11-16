@@ -193,7 +193,7 @@ def _decide(args, f) -> _Result:
     ref = _ref(args.run)
     repo = _repo_of_run(args, args.run)
     stage = args.stage or _latest_stop_stage(ref.run_dir)
-    outcome = api.decide(repo, args.run, stage, packet_sha=args.packet, choices=_pairs(args.choices) or None,
+    outcome = api.decide(repo, args.run, stage, packet_sha=args.packet, choices=_pairs(args.choice) or None,
                          questions=_pairs(args.question) or None, notes=args.notes, by=args.by or "cli",
                          channel="cli")
     # An engine must see every answer that moves or ends the run. A pending or rejected answer changes nothing.
@@ -389,9 +389,9 @@ def _parser() -> argparse.ArgumentParser:
 
     sp = add("decide", _decide, help="answer a human stop")
     sp.add_argument("run")
-    sp.add_argument("choices", nargs="*", metavar="D1=opt", help="one option per decision")
     sp.add_argument("--stage", help="the stop's stage (default: the open one)")
     sp.add_argument("--packet", required=True, help="the packet sha the page shows")
+    sp.add_argument("--choice", action="append", metavar="D1=opt-a", help="one option per decision (repeatable)")
     sp.add_argument("--notes", default="")
     sp.add_argument("--question", action="append", metavar="D1=text", help="ask about a decision instead of answering")
     sp.add_argument("--by", help="who answers")

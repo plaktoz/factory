@@ -30,20 +30,20 @@ def interval_seconds(every: str) -> int:
     return n * {"s": 1, "m": 60, "h": 3600}[unit]
 
 
-def _factory_bin() -> str:
+def _factory_command() -> list[str]:
     """The `factory` script on PATH, else this interpreter running the launcher. The scheduler starts with almost no
-    PATH, so the entry names an absolute path."""
+    PATH, so the entry names an absolute path. A list, so an interpreter path with spaces stays one argument."""
     found = shutil.which("factory")
-    return found if found else f"{sys.executable} -m factory_launcher"
+    return [found] if found else [sys.executable, "-m", "factory_launcher"]
 
 
 def _log_dir(home: Path) -> Path:
     return home / "logs"
 
 
-def launchd_plist(every_seconds: int, *, home: Path, binary: str) -> str:
+def launchd_plist(every_seconds: int, *, home: Path, command: list[str]) -> str:
     log = _log_dir(home) / "tick.launchd.log"
-    args = "".join(f"    <string>{part}</string>\n" for part in (*binary.split(" "), "tick", "--all-repos"))
+    args = "".join(f"    <string>{part}</string>\n" for part in (*command, "tick", "--all-repos"))
     return (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
@@ -58,13 +58,13 @@ def launchd_plist(every_seconds: int, *, home: Path, binary: str) -> str:
     )
 
 
-def systemd_units(every_seconds: int, *, home: Path, binary: str) -> tuple[str, str]:
+def systemd_units(every_seconds: int, *, home: Path, command: list[str]) -> tuple[str, str]:
     """A oneshot service and the timer that starts it. A timer does not start a second run while one is active."""
     service = (
         "[Unit]\nDescription=Factory tick\n\n"
         "[Service]\nType=oneshot\n"
         f"Environment=FACTORY_HOME={home}\n"
-        f"ExecStart={binary} tick --all-repos\n"
+        f"ExecStart={' '.join(command)} tick --all-repos\n"
         f"StandardOutput=append:{_log_dir(home) / 'tick.log'}\n"
         f"StandardError=append:{_log_dir(home) / 'tick.log'}\n"
     )
@@ -88,18 +88,18 @@ def install(every: str, *, home: Path, target_dir: Path | None = None, system: s
     LaunchAgents or systemd user folder, so a test can check the content without loading anything."""
     seconds = interval_seconds(every)
     sysname = system or _system()
-    binary = _factory_bin()
+    command = _factory_command()
     _log_dir(home).mkdir(parents=True, exist_ok=True)
     if sysname == "Darwin":
         folder = target_dir or Path.home() / "Library" / "LaunchAgents"
         folder.mkdir(parents=True, exist_ok=True)
         path = folder / f"{LABEL}.plist"
-        path.write_text(launchd_plist(seconds, home=home, binary=binary))
+        path.write_text(launchd_plist(seconds, home=home, command=command))
         return path
     if sysname == "Linux":
         folder = target_dir or Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "systemd" / "user"
         folder.mkdir(parents=True, exist_ok=True)
-        service, timer = systemd_units(seconds, home=home, binary=binary)
+        service, timer = systemd_units(seconds, home=home, command=command)
         (folder / f"{UNIT}.service").write_text(service)
         path = folder / f"{UNIT}.timer"
         path.write_text(timer)
