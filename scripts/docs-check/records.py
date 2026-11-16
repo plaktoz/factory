@@ -13,11 +13,14 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    MAX_BEHIND merges behind it.
 4. A PR that docs/tasks.md calls open or blocked (the same item says "not merged", "open and
    not merged" or "blocked") must not already be merged on origin/main.
+5. Every ADR dated TRACKED_FROM or later is named by file name in docs/tasks.md (Log or task), so
+   the session that records a decision also updates the task list.
 """
 import json, re, subprocess, sys
 from pathlib import Path
 
 MAX_BEHIND = 3
+TRACKED_FROM = "2026-11-16"  # the 33 ADRs backfilled on 2026-11-14 and 15 are exempt
 root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 problems = []
 
@@ -87,6 +90,10 @@ for item in re.split(r"\n(?=\d+\. |\*\*)", tasks):
     for n in re.findall(r"\bPRs? #(\d+)", head):
         if n in merged_prs:
             problems.append(f"tasks.md: PR #{n} is called open or blocked but is merged on origin/main: {head[:80]!r}")
+
+for adr in sorted((root / "docs/adr").glob("*.md")):
+    if adr.name[:10] >= TRACKED_FROM and adr.name not in tasks:
+        problems.append(f"tasks.md does not name {adr.name}; a decision is not carried through until the task list says so")
 
 for p in problems:
     print("records:", p)
