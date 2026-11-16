@@ -2,7 +2,8 @@
 
 Run from the repo root: python3 -I scripts/docs-check/records.py .
 
-1. Every docs/reviews/<name>.json (a decision page source) has a <name>.md, and for each
+1. Every docs/reviews/<name>.json (a decision page source) has a <name>.md, or an ADR in docs/adr/
+   whose Source line names the page and each decision id. If it has a .md, then for each
    decision id the .md has a table row that starts with that id and names one of that
    decision's option ids (or NOT SURE). A page answered in the browser and pasted back is
    not durable until this passes.
@@ -31,8 +32,13 @@ for src in sorted((root / "docs/reviews").glob("*.json")):
         continue
     rec = src.with_suffix(".md")
     html = src.with_suffix(".html")
+    adrs = [a.read_text(encoding="utf-8") for a in (root / "docs/adr").glob("*.md")]
+    in_adr = {d["id"] for d in doc["decisions"]
+              if any(f"page `docs/reviews/{src.name}`" in a and f"decision `{d['id']}`" in a for a in adrs)}
     if not rec.exists():
-        problems.append(f"{src.name}: no record {rec.name}")
+        missing = [d["id"] for d in doc["decisions"] if d["id"] not in in_adr]
+        if missing:
+            problems.append(f"{src.name}: no record {rec.name} and no ADR for {', '.join(missing)}")
         continue
     if html.exists():
         m = re.search(r"const DATA\s*=\s*(\{.*?\});\s*\n", html.read_text(encoding="utf-8"), re.S)
