@@ -216,9 +216,63 @@ def test_spawn_engine_returns_none_while_a_live_lock_holds_the_run(seeded, capsy
 
 def test_decide_refuses_a_stale_packet_with_exit_2(seeded, capsys, spawned):
     run_id = _add(seeded, capsys, spawned, "Bump the lint config", "--no-run")
-    code, doc = run_cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "not-the-sha", "--choice", "D1=approve"],
+    code, doc = run_cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "not-the-sha", "D1=approve"],
                         capsys)
     assert code == EXIT_INVALID and doc["ok"] is False and spawned == []
+
+
+# ---- decide takes its answers as trailing tokens, in any position (decision M1) -----------------------------------------
+
+@pytest.fixture
+def decide_calls(seeded, capsys, spawned, monkeypatch):
+    """A run id to decide on, and a recorder for what the CLI hands to api.decide."""
+    run_id = _add(seeded, capsys, spawned, "Bump the lint config", "--no-run")
+    calls: list[dict] = []
+    monkeypatch.setattr(cli, "_latest_stop_stage", lambda run_dir: "implement")
+    monkeypatch.setattr(api, "decide", lambda repo, rid, stage, **kw: calls.append(kw) or _outcome("pending"))
+    return run_id, calls
+
+
+def _outcome(status):
+    from factory_engine.decisions import Outcome
+    return Outcome(status=status, choices={}, questions={}, notes="", code=None, message=None)
+
+
+@pytest.mark.parametrize("order", [
+    ["D1=opt-a", "D2=opt-b", "--notes", "n"],
+    ["--notes", "n", "D1=opt-a", "D2=opt-b"],
+    ["D1=opt-a", "--notes", "n", "D2=opt-b"],
+], ids=["answers-first", "answers-last", "answers-between"])
+def test_decide_reads_the_answers_wherever_they_sit_among_the_options(seeded, capsys, decide_calls, order):
+    run_id, calls = decide_calls
+    code, doc = run_cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "661cb74d", *order], capsys)
+    assert code == EXIT_OK, doc
+    assert calls[0]["choices"] == {"D1": "opt-a", "D2": "opt-b"}
+    assert calls[0]["notes"] == "n" and calls[0]["packet_sha"] == "661cb74d"
+
+
+def test_decide_keeps_a_question_apart_from_the_answers(seeded, capsys, decide_calls):
+    run_id, calls = decide_calls
+    code, _ = run_cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "661cb74d", "D1=opt-a",
+                       "--question", "D2=Can option B add charts later?"], capsys)
+    assert code == EXIT_OK
+    assert calls[0]["choices"] == {"D1": "opt-a"} and calls[0]["questions"] == {"D2": "Can option B add charts later?"}
+
+
+@pytest.mark.parametrize("stray", [["oops"], ["--choice", "D1=opt-a"], ["--chooice", "D1=opt-a"]])
+def test_decide_rejects_a_token_that_is_not_an_answer_with_exit_2_and_asks_for_nothing(seeded, capsys, decide_calls, stray):
+    run_id, calls = decide_calls
+    with pytest.raises(SystemExit) as e:
+        cli.main(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "661cb74d", *stray])
+    assert e.value.code == EXIT_INVALID and calls == []
+    assert json.loads(capsys.readouterr().out)["code"] == "cli.usage"
+
+
+def test_a_command_other_than_decide_still_rejects_a_stray_token(seeded, capsys, spawned):
+    with pytest.raises(SystemExit) as e:
+        cli.main(["sync", "D1=opt-a", "--repo", str(seeded), "--json"])
+    assert e.value.code == EXIT_INVALID
+    assert json.loads(capsys.readouterr().out)["code"] == "cli.usage"
 
 
 # ---- init --github composes init_repo (3) with ensure_labels (7) ----------------------------------------------------

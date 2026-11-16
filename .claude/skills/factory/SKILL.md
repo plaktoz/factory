@@ -22,7 +22,7 @@ Map the user's words to one `factory` command, run it, and report what it printe
 | "what is running", "status" | `factory status` (add the run id for one run) |
 | "what needs me", "inbox" | `factory inbox` |
 | "show the decision" for a run | `factory check <run>`, then render the picker below |
-| "answer D1 with opt-a" | `factory decide <run> --packet <sha> --choice D1=opt-a` |
+| "answer D1 with opt-a" | `factory decide <run> --packet <sha> D1=opt-a` |
 | "ask about D2 before deciding" | `factory decide <run> --packet <sha> --question D2="<text>"` |
 | "retry the stage", "try again" | `factory retry <run> --note "<text>"` |
 | "send it back to <stage>" | `factory goto <run> <stage>` |
@@ -43,7 +43,7 @@ When `factory inbox` or `factory check` names a stop, read the packet from the d
 Answer through `factory decide` with the packet sha the page shows:
 
 ```
-factory decide <run> --packet <sha> --choice D1=<option-id> --choice D2=<option-id>
+factory decide <run> --packet <sha> D1=<option-id> D2=<option-id>
 ```
 
 If the CLI refuses with `decision.stale_packet`, the packet changed. Show the new packet and ask again. Do not retry the old sha.

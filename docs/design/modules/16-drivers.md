@@ -73,7 +73,7 @@ def schedule_install(every: str, *, dashboard: bool = False) -> None
 | --- | --- | --- | --- |
 | `factory run` | `[<run> ...] \| --all`, `--detach`, `--poll 5`, `--json` | Takes each run's lock and drives it until done, failed, aborted, blocked or waiting. `--detach` starts the engine in the background and returns its pid | 0, 1, 3, 4, 5 |
 | `factory tick` | `--all-repos \| --repo <path>`, `--env-file <path>`, `--json` | The scheduled pass in [module 6](06-engine-core.md). Never runs a worker, and returns within seconds | 0, 1, 2 |
-| `factory decide` | `<run> [--stage <s>] --packet <sha> D1=opt-a ... [--notes] [--question D1="..."] [--by] [--json]` | Records the answer, then starts an engine if none holds the lock | 0, 2 (stale packet or bad choice) |
+| `factory decide` | `<run> [--stage <s>] --packet <sha> D1=opt-a ... [--notes] [--question D1="..."] [--by] [--json]` | Records the answer, then starts an engine if none holds the lock. Answers are trailing `ID=option` tokens, in any position | 0, 2 (stale packet, bad choice, or a token that is not `ID=option`) |
 | `factory add` | `"title" [--type] [--body file] [--files a.md b.md] [--repo]` | Creates the run and prints its id; starts an engine unless `--no-run` | 0, 2 |
 | `factory sync` | `[--repo] [--json]` | Reads sources once and creates runs without starting engines | 0, 1 |
 
@@ -81,7 +81,8 @@ The launcher finds the repo from the current folder, `--repo`, or, for a run id,
 
 The **router skill** maps chat phrases to these same commands and shows decision packets in the picker format. It never writes state.
 
-- **Run and test:** `pytest factory/engine/tests/api factory/launcher/tests`, plus an end-to-end test that runs the bug-fix workflow on a seeded repo with `FakeWorkerAdapter` and `FakePullRequests`, driven only through the CLI.
+- **Run and test:** `pytest factory/engine/tests/api factory/launcher/tests`, plus an end-to-end test that runs the shipped bug-fix workflow on a seeded repo, driven only through the CLI. Its `cmd` gates are stubbed through the gate runner (`gates.use_command_runner`) and its worker is scripted with `FakeWorkerAdapter`, with `FakePullRequests` for the pull request step. The run stops at the `propose` approval, is answered with `factory decide`, and finishes.
+- **Decide answers:** `factory decide` takes each answer as a trailing `D1=opt-a` token, in any position among the options. argparse cannot take a variable positional list between options, so the CLI reads the leftover tokens itself with `parse_known_args`, and each one must match `ID=option`. Any other token is a usage error, exit 2.
 - **Errors:** CLI misuse exits with code 2. Every command supports `--json` with the shared error shape. The router skill shows CLI messages as they are.
 
 Acceptance criteria:

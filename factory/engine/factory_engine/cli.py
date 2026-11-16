@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from collections.abc import Callable
@@ -193,7 +194,7 @@ def _decide(args, f) -> _Result:
     ref = _ref(args.run)
     repo = _repo_of_run(args, args.run)
     stage = args.stage or _latest_stop_stage(ref.run_dir)
-    outcome = api.decide(repo, args.run, stage, packet_sha=args.packet, choices=_pairs(args.choice) or None,
+    outcome = api.decide(repo, args.run, stage, packet_sha=args.packet, choices=_pairs(args.answers) or None,
                          questions=_pairs(args.question) or None, notes=args.notes, by=args.by or "cli",
                          channel="cli")
     # An engine must see every answer that moves or ends the run. A pending or rejected answer changes nothing.
@@ -391,7 +392,7 @@ def _parser() -> argparse.ArgumentParser:
     sp.add_argument("run")
     sp.add_argument("--stage", help="the stop's stage (default: the open one)")
     sp.add_argument("--packet", required=True, help="the packet sha the page shows")
-    sp.add_argument("--choice", action="append", metavar="D1=opt-a", help="one option per decision (repeatable)")
+    sp.add_argument("answers", nargs="*", metavar="D1=opt-a", help="one option per decision, in any position")
     sp.add_argument("--notes", default="")
     sp.add_argument("--question", action="append", metavar="D1=text", help="ask about a decision instead of answering")
     sp.add_argument("--by", help="who answers")
@@ -459,11 +460,30 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
+def _parse(argv: list[str]) -> argparse.Namespace:
+    """Parse argv. `decide` takes its answers anywhere among the options (module 16, decision M1), which argparse
+    cannot do with a positional list, so its leftovers are read here: each must be ID=option, or it is a usage error."""
+    parser = _parser()
+    args, extra = parser.parse_known_args(argv)
+    if getattr(args, "handler", None) is None or args.command != "decide":
+        if extra:
+            parser.error(f"unrecognized arguments: {' '.join(extra)}")
+        return args
+    bad = [tok for tok in extra if not _ANSWER.fullmatch(tok)]
+    if bad:
+        parser.error(f"unrecognized arguments: {' '.join(bad)} (answers take the form D1=opt-a)")
+    args.answers = [*args.answers, *extra]
+    return args
+
+
+_ANSWER = re.compile(r"[A-Za-z][\w-]*=[^\s]+")
+
+
 def main(argv: list[str] | None = None, *, worker_factory=None, tracker_factory=None, prs_factory=None) -> int:
     """Run one command and return its exit code. `python -m factory_engine` raises it as SystemExit."""
     argv = sys.argv[1:] if argv is None else list(argv)
     _WANTS_JSON["on"] = "--json" in argv
-    args = _parser().parse_args(argv)
+    args = _parse(argv)
     f = Factories(worker_factory=worker_factory, tracker_factory=tracker_factory, prs_factory=prs_factory)
     try:
         result = args.handler(args, f)
