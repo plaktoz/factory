@@ -86,11 +86,11 @@ The **router skill** maps chat phrases to these same commands and shows decision
 
 Acceptance criteria:
 
-- [ ] Every command documented above exists, supports `--json` and uses the shared exit codes.
-- [ ] Two repos on different kit versions are driven by their own engine through one launcher.
-- [ ] `decide`, `retry`, `goto` and `skip` start an engine only when no live lock exists.
-- [ ] Two ticks fired together: the second exits at once and no run starts twice.
-- [ ] `tick` takes the `Config` from `load_config(None)`, with no repo part, and reads each repo's own settings through `load_config(repo)`; no `MachineConfig` type exists.
-- [ ] `tick` polls open pull requests, routes red CI back to fix, and finishes runs whose PR merged.
-- [ ] `schedule install` writes a working entry on Linux and macOS (launchd, cron or a systemd timer); `remove` deletes it. Windows is phase 2.
-- [ ] `init --github` composes `init_repo` (3) with `ensure_labels` (7).
+- [ ] Every command documented above exists, supports `--json` and uses the shared exit codes. (not ticked: `factory watch`, `factory plugins` and `factory where`/`events` have no CLI test; `plugins` is phase 1b; `watch` is not built)
+- [ ] Two repos on different kit versions are driven by their own engine through one launcher. (not ticked: the dispatch passes a repo's own kit, but no test drives two kit versions)
+- [ ] `decide`, `retry`, `goto` and `skip` start an engine only when no live lock exists. (not ticked: the live-lock case is tested for `retry` and the shared spawn only; `decide` and `skip` have no live-lock test)
+- [x] Two ticks fired together: the second exits at once and no run starts twice. (test: factory/launcher/tests/test_tick.py::test_a_tick_that_finds_another_tick_holding_the_lock_exits_at_once; factory/launcher/tests/test_tick.py::test_two_ticks_in_a_row_do_not_start_a_run_twice)
+- [x] `tick` takes the `Config` from `load_config(None)`, with no repo part, and reads each repo's own settings through `load_config(repo)`; no `MachineConfig` type exists. (test: factory/launcher/tests/test_tick.py::test_a_tick_syncs_each_repo_with_its_own_settings)
+- [ ] `tick` polls open pull requests, routes red CI back to fix, and finishes runs whose PR merged. (not ticked: the engine never calls delivery.watch_pr on a live run, so there is no poll, red-CI route or merged-finish path to test; the tick reports this as unsupported)
+- [x] `schedule install` writes a working entry on Linux and macOS (launchd, cron or a systemd timer); `remove` deletes it. Windows is phase 2. (test: factory/launcher/tests/test_schedule.py::test_install_on_macos_writes_a_launchd_plist_with_the_interval; factory/launcher/tests/test_schedule.py::test_install_on_linux_writes_a_systemd_timer_and_its_service; factory/launcher/tests/test_schedule.py::test_remove_deletes_the_macos_entry_and_reports_it; factory/launcher/tests/test_schedule.py::test_remove_deletes_both_linux_units)
+- [x] `init --github` composes `init_repo` (3) with `ensure_labels` (7). (test: factory/engine/tests/drivers/test_cli.py::test_init_github_creates_the_layout_and_the_factory_labels)
