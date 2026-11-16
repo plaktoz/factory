@@ -21,13 +21,17 @@ from .adapters.worker.base import WorkerAdapter
 from .adapters.worker.claude import ClaudeAdapter
 from .clock import SystemClock
 from .config import Config
+from .decisions import Outcome
 from .engine import Engine, EngineResult
 from .errors import FactoryError
 from .gh import FileTracker, GitHubPullRequests, GitHubTracker
-from .types import Source
+from .housekeeping import GcPlan
+from .intake import SyncReport
 from .loadcfg import load_config
+from .notes import NoteRef
 from .prs import PullRequests
-from .types import RunRef
+from .types import RunRef, Source
+from .usage import UsageReport
 
 
 def _gh_runner(repo: Path) -> Callable[[list[str]], subprocess.CompletedProcess]:
@@ -95,12 +99,12 @@ def _engine(repo: Path) -> Engine:
 
 # ---- intake and runs ---------------------------------------------------------------------------------------------
 
-def add(repo, title, *, type=None, body=None, files=None) -> "RunRef":
+def add(repo, title, *, type=None, body=None, files=None) -> RunRef:
     """Create a run from CLI text or files. Starts no engine; the CLI decides that (`--no-run`)."""
     return intake.add(Path(repo), load_config(Path(repo)), title, type=type, body=body, files=files)
 
 
-def sync(repo) -> "intake.SyncReport":
+def sync(repo) -> SyncReport:
     """Read each source once and create runs for new requests. Starts no engine."""
     repo = Path(repo)
     cfg = load_config(repo)
@@ -117,7 +121,7 @@ def run(repo, run_ids=None) -> EngineResult:
 
 
 def decide(repo, run_id, stage, *, packet_sha, choices=None, questions=None,
-           notes="", by, channel) -> "decisions.Outcome":
+           notes="", by, channel) -> Outcome:
     """Record an answer to a human stop. Refuses a stale packet or a bad choice, and changes nothing then."""
     ref = _ref(Path(repo), run_id)
     visit = decisions.latest_visit(state.read_run(ref.run_dir), stage)
@@ -125,7 +129,7 @@ def decide(repo, run_id, stage, *, packet_sha, choices=None, questions=None,
                            notes=notes, by=by, channel=channel)
 
 
-def note(repo, run_id, task_id, text, *, deny=None) -> "notes_store.NoteRef":
+def note(repo, run_id, task_id, text, *, deny=None) -> NoteRef:
     """Queue a note that the task's next attempt receives."""
     ref = _ref(Path(repo), run_id)
     return notes_store.queue_note(ref.run_dir, task_id, text, deny=deny, by="cli")
@@ -168,7 +172,7 @@ def recover(repo, run_id, *, rebuild=False) -> None:
 
 # ---- reporting and housekeeping --------------------------------------------------------------------------------
 
-def usage(repo, run_id=None, since=None) -> "usage_mod.UsageReport":
+def usage(repo, run_id=None, since=None) -> UsageReport:
     """Token totals per observed model, for one run or every run of this repo. `since` drops earlier days."""
     repo = Path(repo)
     if run_id is not None:
@@ -179,7 +183,7 @@ def usage(repo, run_id=None, since=None) -> "usage_mod.UsageReport":
     return usage_mod.summarize(dirs, since=since)
 
 
-def gc(repo, *, apply=False) -> "housekeeping.GcPlan":
+def gc(repo, *, apply=False) -> GcPlan:
     """The housekeeping plan. With apply, carry it out; the plan is returned either way."""
     repo = Path(repo)
     plan = housekeeping.plan(state.factory_home(), load_config(repo), now=SystemClock().now())
