@@ -10,8 +10,10 @@ from factory_engine import decisions, delivery, gitops, notes, state, usage
 from factory_engine.adapters.tracker.fake import FakeTracker
 from factory_engine.errors import FactoryError
 from factory_engine.fake_prs import FakePullRequests
+from factory_engine.state import read_run
 from factory_engine.types import StageState
 from factory_engine.summary import render_summary
+from factory_engine.yamlio import load_yaml
 
 from delivery_helpers import POLICY, commit_change, git, make_run, pass_gates, set_run, write_task
 
@@ -306,6 +308,18 @@ def test_adr_and_report_names_contain_the_run_id_never_a_counter(home, tmp_path,
     assert adr.parent == wt / "docs" / "adr"
     assert re.fullmatch(rf"\d{{4}}-\d{{2}}-\d{{2}}-{re.escape(run_dir.name)}\.md", adr.name)
     assert "docs/adr/" in git(wt, "show", "--name-only", "--format=", "HEAD")
+
+
+def test_an_adr_starts_with_front_matter_naming_its_scope_status_and_supersedes(home, tmp_path, cfg):
+    run_dir, wt, repo = chore(home, tmp_path, cfg)
+    approve(run_dir, "architecture")
+    text = delivery.write_adr(run_dir, wt).read_text()
+    assert text.startswith("---\n")
+    front, _, body = text[4:].partition("\n---\n")
+    meta = load_yaml(front)
+    assert meta == {"scope": "repo", "repo": read_run(run_dir).repo, "topic": "architecture", "status": "accepted",
+                    "supersedes": []}
+    assert body.lstrip().startswith("# ")
 
 
 def test_the_research_report_name_is_the_run_id(home, tmp_path, cfg):

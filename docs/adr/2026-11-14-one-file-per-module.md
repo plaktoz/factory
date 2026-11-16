@@ -1,6 +1,12 @@
-# One spec file per module
+---
+scope: repo
+repo: factory
+topic: spec-layout
+status: accepted
+supersedes: []
+---
 
-Status: accepted, 2026-11-14
+# One spec file per module
 
 ## Decision
 

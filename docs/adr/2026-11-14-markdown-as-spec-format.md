@@ -1,6 +1,12 @@
-# Markdown is the spec format
+---
+scope: repo
+repo: factory
+topic: spec-format
+status: accepted
+supersedes: []
+---
 
-Status: accepted, 2026-11-14
+# Markdown is the spec format
 
 ## Decision
 
