@@ -81,9 +81,10 @@ def default_prs(repo: Path, cfg: Config) -> PullRequests:
 
 
 def engine_for(repo: Path, cfg: Config, *, workers: Mapping[str, WorkerAdapter], tracker, prs,
-               owner: str = "cli") -> Engine:
-    """An engine on these adapters. The CLI and the tests pass their own; the api defaults are the real ones."""
-    return Engine(repo, cfg, workers=dict(workers), tracker=tracker, prs=prs, owner=owner)
+               command: WorkerAdapter | None = None, owner: str = "cli") -> Engine:
+    """An engine on these adapters. The CLI and the tests pass their own; the api defaults are the real ones.
+    `command` runs the `cmd`, script and python tasks; left out, it is the real CommandAdapter under srt."""
+    return Engine(repo, cfg, workers=dict(workers), tracker=tracker, prs=prs, command=command, owner=owner)
 
 
 def _ref(repo: Path, run_id: str) -> RunRef:

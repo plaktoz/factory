@@ -213,6 +213,12 @@ def _blocked(run: Run, stage_id: str, summary: str, when: datetime) -> Routing:
     return Routing("blocked", reason=summary)
 
 
+def block(run: Run, stage_id: str, reason: str, when: datetime) -> Routing:
+    """Block the run for a person with this reason (module 8). The engine uses it when a stage's own check fails in a way
+    no loop can fix, such as a verify stage with no test results (T1)."""
+    return _blocked(run, stage_id, reason, when)
+
+
 def _go(run: Run, wf: Workflow, stage: Stage, goto: str, *, key: str, limit: int | None, why: str) -> Routing:
     """Take one loop on an edge, or block the run when the loop reaches the edge's limit. None is unlimited.
 

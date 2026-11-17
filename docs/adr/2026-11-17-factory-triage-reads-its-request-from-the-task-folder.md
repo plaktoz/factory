@@ -2,7 +2,7 @@
 scope: repo
 repo: factory
 topic: factory-triage-reads-its-request-from-the-task-folder
-status: proposed
+status: accepted
 supersedes: []
 ---
 
@@ -10,7 +10,7 @@ supersedes: []
 
 ## Decision
 
-Open. This ADR asks how the `rules` task's command, `factory triage`, gets the run's request once `cmd` tasks run through `CommandAdapter` under `srt` (item 12 in `docs/tasks.md`).
+Accepted by the owner on 2026-11-17: option `copy-request-into-task-folder`. Before a `cmd` task starts, the engine copies the run's `request.json` into that task's `work/` folder. `factory triage` reads `$FACTORY_TASK_DIR/request.json` and writes `$FACTORY_TASK_DIR/triage.json`.
 
 ## Context
 

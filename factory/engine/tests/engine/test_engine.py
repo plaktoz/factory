@@ -143,7 +143,7 @@ def test_a_queued_note_restarts_the_worker_and_is_marked_delivered(new_run, repo
     script, writes = chore_script(run_dir, change=[ok(work("change", "change.json")), ok(work("change", "change.json"))])
     inner = FakeWorkerAdapter(script, writes=writes)
     worker = BlockingWorker(inner)
-    eng = Engine(repo, cfg, workers={"fake": worker}, tracker=tracker, prs=prs, clock=clock)
+    eng = Engine(repo, cfg, workers={"fake": worker}, command=worker, tracker=tracker, prs=prs, clock=clock)
     # triage and the first worker start and block; the test queues a note while `change` is running, then releases it
     worker.release("rules")
     t = threading.Thread(target=lambda: eng.run(["bump-q1w2e"]), daemon=True)
@@ -201,7 +201,7 @@ def _run_blocking(new_run, repo, cfg, tracker, prs, clock, tasks: str, names: li
     inner = FakeWorkerAdapter(script, writes=writes)
     worker = BlockingWorker(inner)
     cfg.repo["concurrency"] = concurrency
-    eng = Engine(repo, cfg, workers={"fake": worker}, tracker=tracker, prs=prs, clock=clock)
+    eng = Engine(repo, cfg, workers={"fake": worker}, command=worker, tracker=tracker, prs=prs, clock=clock)
     _fan_workflow(eng, tasks)
     worker.release("rules")
     t = threading.Thread(target=lambda: eng.run(["bump-q1w2e"]), daemon=True)
@@ -269,7 +269,7 @@ def test_after_each_join_conflict_signals_are_written_to_run_json(new_run, repo,
     script, writes = chore_script(run_dir)
     inner = FakeWorkerAdapter(script, writes=writes)
     worker = BlockingWorker(inner)
-    eng = Engine(repo, cfg, workers={"fake": worker}, tracker=tracker, prs=prs, clock=clock)
+    eng = Engine(repo, cfg, workers={"fake": worker}, command=worker, tracker=tracker, prs=prs, clock=clock)
     worker.release("rules")
     t = threading.Thread(target=lambda: eng.run(["bump-q1w2e"]), daemon=True)
     t.start()
@@ -321,7 +321,8 @@ class Mixed(Spy):
             return Hang.wait(self, handle, timeout_s)
         return handle.data["result"]
 cfg = Config(machine={cfg_machine!r}, repo={{"base_branch": "main"}})
-eng = Engine(Path({repo!r}), cfg, workers={{"fake": Mixed(script, writes=writes)}}, tracker=FakeTracker(),
+w = Mixed(script, writes=writes)
+eng = Engine(Path({repo!r}), cfg, workers={{"fake": w}}, command=w, tracker=FakeTracker(),
              prs=FakePullRequests(), clock=FakeClock())
 eng.run(["bump-q1w2e"])
 """
@@ -376,7 +377,7 @@ def test_restarts_stop_at_max_restarts_and_the_note_stays_queued(new_run, repo, 
     script, writes = chore_script(run_dir, change=[ok(work("change", "change.json")), ok(work("change", "change.json"))])
     inner = FakeWorkerAdapter(script, writes=writes)
     worker = BlockingWorker(inner)
-    eng = Engine(repo, cfg, workers={"fake": worker}, tracker=tracker, prs=prs, clock=clock)
+    eng = Engine(repo, cfg, workers={"fake": worker}, command=worker, tracker=tracker, prs=prs, clock=clock)
     worker.release("rules")
     worker.release("check")
     t = threading.Thread(target=lambda: eng.run(["bump-q1w2e"]), daemon=True)

@@ -22,7 +22,7 @@ from .validate import SCHEMA_DIR, validate
 
 TAIL_LINES = 200
 
-# (argv, ctx) -> (exit code, combined output). Module 9's CommandAdapter replaces the default when it is built.
+# (argv, ctx) -> (exit code, combined output). The default runs CommandAdapter under srt.
 CommandRunner = Callable[[list[str], GateContext], tuple[int, str]]
 
 
@@ -58,17 +58,43 @@ def parse_junit(paths: list[Path]) -> TestReport:
     return TestReport(total=total, failed=failed)
 
 
-def _default_runner(cmd: list[str], ctx: GateContext) -> tuple[int, str]:
-    raise FactoryError("config.invalid", "a cmd gate needs module 9's CommandAdapter, which is not built",
-                       hint="build module 9 before a workflow with a cmd gate runs")
+GATE_TIMEOUT_SECONDS = 30 * 60
 
 
-_runner: CommandRunner = _default_runner
+def _adapter_runner(cmd: list[str], ctx: GateContext) -> tuple[int, str]:
+    """Run a gate command through CommandAdapter under srt, in the worktree (module 8, Gate commands run sandboxed).
+
+    The adapter's wait returns no exit code for a command, so this reads the exit code from the adapter's
+    AttemptResult and the output from the worker log it writes. srt starts the command through a shell, so a missing
+    binary reaches the adapter as exit 127 with "command not found", not as a failed start. That case raises
+    FileNotFoundError, which _cmd_gate turns into gate.command_missing (a task error, not a failed gate)."""
+    from .adapters.worker.base import HarnessConfig, TaskContext
+    from .adapters.worker.command import CommandAdapter
+
+    task_dir = ctx.task_dir or ctx.worktree
+    task_dir.mkdir(parents=True, exist_ok=True)
+    adapter = CommandAdapter()
+    gate_ctx = TaskContext(
+        run_id=ctx.run.run_id, task_id=ctx.task_id or "gate", stage=ctx.stage, attempt=1, skill=None,
+        request=ctx.run.request, worktree=ctx.worktree, task_dir=task_dir, scope=list(ctx.scope),
+        deny=list(ctx.deny), helpers=None, feedback=[], notes=[], progress=None, output_schema=None, model=None,
+        mcp=[], practices=[], cmd=list(cmd))
+    log = task_dir / "gate-command.log"
+    handle = adapter.start(gate_ctx, HarnessConfig(adapter.name, None, [], {}), log)
+    outcome = adapter.wait(handle, GATE_TIMEOUT_SECONDS)
+    output = log.read_text(errors="replace") if log.is_file() else ""
+    if outcome.error_kind == "binary_missing" or (outcome.exit_code == 127 and "command not found" in output):
+        raise FileNotFoundError(2, "no such binary", cmd[0])
+    code = outcome.exit_code if outcome.exit_code is not None else 1
+    return code, output
+
+
+_runner: CommandRunner = _adapter_runner
 
 
 @contextmanager
 def use_command_runner(runner: CommandRunner) -> Iterator[None]:
-    """Run cmd gates through `runner` inside the block. Module 9 wires CommandAdapter here; tests pass a stub."""
+    """Run cmd gates through `runner` inside the block. The default is CommandAdapter under srt; tests pass a stub."""
     global _runner
     previous, _runner = _runner, runner
     try:
