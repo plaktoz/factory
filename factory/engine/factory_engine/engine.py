@@ -20,6 +20,7 @@ from . import (decisions, delivery, gates, gitops, housekeeping, notes, notify, 
 from . import usage as usage_mod
 from . import workflow as wf_mod
 from .adapters.worker.base import AttemptResult, HarnessConfig, TaskContext, WorkerAdapter
+from .adapters.worker.command import CommandAdapter
 from .clock import SystemClock
 from .config import Config
 from .errors import FactoryError
@@ -68,10 +69,11 @@ class Engine:
     """One engine process. It holds a run's lock while it drives the run, and releases it when the run waits or ends."""
 
     def __init__(self, repo: Path, cfg: Config, *, workers: dict[str, WorkerAdapter], tracker, prs,
-                 clock: Clock = SystemClock(), owner: str | None = None):
+                 command: WorkerAdapter | None = None, clock: Clock = SystemClock(), owner: str | None = None):
         self.repo = repo
         self.cfg = cfg
         self.workers = workers
+        self.command = command if command is not None else CommandAdapter()
         self.tracker = tracker
         self.prs = prs
         self.clock = clock
@@ -507,7 +509,7 @@ class Engine:
                 base_branches=[f"{run.run_id}--{n}" for n in spec.needs] or [run.run_id])
             ts.task_base = f"{run.run_id}--{spec.needs[0]}" if spec.needs else run.run_id
         ts.worktree = worktree
-        harness = next(iter(self.workers))
+        harness = self._harness_of(spec)
         attempt = usage_mod.start_attempt(run_dir, run, spec.id, stage=stage.id, harness=harness, model_requested=spec.model)
         ts.attempt, ts.status = attempt, "running"
         state.write_task(run_dir, ts, lock=lock)
@@ -516,9 +518,38 @@ class Engine:
             stage_state.tasks.append(spec.id)
         state.write_run(run_dir, run, lock=lock)
         self._deliver_notes(run_dir, spec, attempt)
+        if self._request_copy_for(run_dir, spec):
+            self._copy_request(run_dir, spec)
         ctx = self._context(run, run_dir, stage, spec, attempt, worktree)
-        handle = self.workers[harness].start(ctx, HarnessConfig(harness, None, [], {}), run_dir / "tasks" / spec.id / "worker.log")
+        handle = self._worker_for(spec).start(ctx, HarnessConfig(harness, None, [], {}), run_dir / "tasks" / spec.id / "worker.log")
         return spec, (harness, handle), ts
+
+    def _request_copy_for(self, run_dir: Path, spec: TaskSpec) -> bool:
+        """A deterministic task gets a copy of the run's request.json in its work folder: the sandbox denies reads of the
+        factory home, where the request lives (ADR 2026-11-17-factory-triage-reads-its-request-from-the-task-folder)."""
+        return self._is_deterministic(spec) and (run_dir / "request.json").is_file()
+
+    @staticmethod
+    def _copy_request(run_dir: Path, spec: TaskSpec) -> None:
+        import shutil
+        work = run_dir / "tasks" / spec.id / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(run_dir / "request.json", work / "request.json")
+
+    def _worker_for(self, spec: TaskSpec) -> WorkerAdapter:
+        """A deterministic task (cmd, script or python) runs through CommandAdapter; a skill task goes to the worker
+        registered for the configured harness (module 9, Deterministic tasks)."""
+        return self.command if self._is_deterministic(spec) else self.workers[self._harness_of(spec)]
+
+    def _harness_of(self, spec: TaskSpec) -> str:
+        return self.command.name if self._is_deterministic(spec) else next(iter(self.workers))
+
+    @staticmethod
+    def _is_deterministic(spec: TaskSpec) -> bool:
+        return spec.cmd is not None or spec.run is not None
+
+    def _adapter_named(self, harness: str) -> WorkerAdapter:
+        return self.command if harness == self.command.name else self.workers[harness]
 
     def _deliver_notes(self, run_dir: Path, spec: TaskSpec, attempt: int) -> None:
         pending = notes.pending_notes(run_dir, spec.id)
@@ -564,7 +595,7 @@ class Engine:
         job = _Running(spec=spec_, harness=harness, handle=handle, ts=ts)
 
         def wait() -> None:
-            job.outcome = self.workers[harness].wait(handle, spec_.timeout_minutes * 60)
+            job.outcome = self._adapter_named(harness).wait(handle, spec_.timeout_minutes * 60)
 
         job.thread = threading.Thread(target=wait, name=f"worker-{spec_.id}", daemon=True)
         job.thread.start()
@@ -583,7 +614,7 @@ class Engine:
         state.write_task(run_dir, job.ts, lock=lock)
         state.append_event(run_dir, "worker_restarted", task_id=job.spec.id, restarts=job.ts.restarts)
         job.restart_for_note = True
-        self.workers[job.harness].stop(job.handle)
+        self._adapter_named(job.harness).stop(job.handle)
 
     def _max_restarts(self) -> int:
         return int((self.cfg.repo or {}).get("max_restarts", 3))
@@ -672,7 +703,12 @@ class Engine:
             return self._apply(run, run_dir, lock, wf, stage, routing, result)
         base = (self.cfg.repo or {}).get("base_branch", "main")
         run.signals = gitops.conflict_signals(self.repo, run, self._other_runs(run), base)
-        failed = self._run_stage_gates(run, run_dir, wf, stage, specs, result)
+        report = None
+        if any(g.kind == "schema" and g.schema == "test-report" for g in stage.gate):
+            report = self._test_report_for_stage(run_dir, [s.id for s in specs])
+            if json.loads(report.read_text()).get("total", 0) == 0:
+                return self._no_test_results(run, run_dir, lock, wf, stage, specs, result)
+        failed = self._run_stage_gates(run, run_dir, wf, stage, specs, result, report=report)
         if failed is not None:
             # A failed gate undoes the join: the run branch goes back to where it was, so the rework starts clean.
             # Unspecified in modules 6 to 8; recorded as a decision in the module 6 file.
@@ -689,14 +725,32 @@ class Engine:
         result.finished.append(stage.id)
         return result
 
+    def _no_test_results(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, specs: list[TaskSpec],
+                         result: TickResult) -> TickResult:
+        """T1: a verify stage whose tasks report 0 test cases blocks the run, with a reason that names each JUnit file the
+        stage expected and did not find or that holds no test case. No pull request opens (module 8)."""
+        missing = [s.out for s in specs if s.out and s.out.endswith(".junit.xml")]
+        reason = ("no test results: the verify stage reported 0 test cases; expected "
+                  + ", ".join(missing or ["a JUnit file"]) + " with at least one test case")
+        state.append_event(run_dir, "gate_failed", gate="test-report", code="gate.no_test_results", stage=stage.id)
+        return self._apply(run, run_dir, lock, wf, stage, rework.block(run, stage.id, reason, self.clock.now()), result)
+
+    def _test_report_for_stage(self, run_dir: Path, task_ids: list[str]) -> Path:
+        """Write the stage's test-report.json from its tasks' JUnit files (module 5). The engine owns the file, so it
+        lives in the run folder, not in a task's work folder; the {schema: test-report} gate reads it there."""
+        junit = [p for t in task_ids for p in (run_dir / "tasks" / t / "work").glob("*.junit.xml")]
+        return gates.write_test_report(junit, run_dir / "test-report.json")
+
     def _run_stage_gates(self, run: Run, run_dir: Path, wf: Workflow, stage: Stage, specs: list[TaskSpec],
-                         result: TickResult) -> GateResult | None:
+                         result: TickResult, *, report: Path | None = None) -> GateResult | None:
         """The stage's gates run once for each task, each with that task's own scope, deny paths, base and artifact
         (the checks read them). Returns the first failure, or None when every gate passed for every task."""
         for spec in specs:
             ts = state.read_task(run_dir, spec.id)
             artifact = run_dir / "tasks" / spec.id / "work" / (spec.out or "artifact.json")
             denied = [*spec.deny, *wf.policy.deny_paths, *notes.delivered_deny(run_dir, spec.id)]
+            if report is not None:
+                artifact = report  # the test-report gate reads the stage's report, not one task's JUnit file
             ctx = GateContext(run=run, stage=stage.id, task_id=spec.id, worktree=ts.worktree or run.worktree,
                               task_dir=run_dir / "tasks" / spec.id / "work", artifact=artifact if artifact.is_file() else None,
                               task_base=ts.task_base, scope=list(spec.scope), deny=denied, cfg=self.cfg)

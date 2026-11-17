@@ -57,10 +57,19 @@ def _add(seeded, capsys, spawned, title="Bump the lint config", *extra) -> str:
     return doc["data"]["run_id"]
 
 
+# The cmd tasks of the shipped workflows: triage's `rules`, chore's `check` and bug-fix's verify tasks. The engine sends
+# them to the command adapter, not the worker (item 12), so the fakes split the scripts the same way.
+CMD_TASKS = {"rules", "check", "be-tests", "fe-tests", "e2e"}
+
+
 def _factories(worker_script=None, writes=None):
-    worker = FakeWorkerAdapter(worker_script or {}, writes=writes)
-    return dict(worker_factory=lambda cfg: {"claude": worker}, tracker_factory=lambda repo, cfg: FakeTracker(),
-                prs_factory=lambda repo, cfg: FakePullRequests())
+    script, wr = worker_script or {}, writes or {}
+    worker = FakeWorkerAdapter({t: r for t, r in script.items() if t not in CMD_TASKS},
+                               writes={t: w for t, w in wr.items() if t not in CMD_TASKS})
+    command = FakeWorkerAdapter({t: r for t, r in script.items() if t in CMD_TASKS},
+                                writes={t: w for t, w in wr.items() if t in CMD_TASKS})
+    return dict(worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
+                tracker_factory=lambda repo, cfg: FakeTracker(), prs_factory=lambda repo, cfg: FakePullRequests())
 
 
 # ---- every command exists and parses -----------------------------------------------------------------------------

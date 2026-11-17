@@ -119,7 +119,8 @@ class CommandAdapter:
             raise
         return WorkerHandle(ctx.task_id, ctx.attempt, {
             "proc": proc, "kind": kind, "folder": folder, "log": log, "task_dir": ctx.task_dir,
-            "argv": argv, "stdout": out_path, "stderr": err_path, "stopped": False})
+            "argv": argv, "stdout": out_path, "stderr": err_path, "stopped": False,
+            "artifact": ctx.task_dir / ctx.artifact_name})
 
     def wait(self, handle: WorkerHandle, timeout_s: int) -> AttemptResult:
         data = handle.data
@@ -138,7 +139,12 @@ class CommandAdapter:
             return AttemptResult("timeout", None, None, None, None, [], None)
         if data.get("stopped") or rc < 0:
             return AttemptResult("killed", rc if rc >= 0 else None, None, None, None, [], None)
-        return AttemptResult("ok" if rc == 0 else "failed", rc, None, None, None, [], None)
+        if rc != 0:
+            return AttemptResult("failed", rc, None, None, None, [], None)
+        # A command writes its own `out` file into the task folder (module 9). The engine marks the task done only
+        # when this returns the file, so a command that exits 0 without writing it is not done.
+        artifact = data["artifact"] if data["artifact"].is_file() else None
+        return AttemptResult("ok", rc, artifact, None, None, [], None)
 
     def _finish_log(self, data: dict) -> None:
         """Copies the captured output into worker.log, then deletes the capture files and the attempt folder."""

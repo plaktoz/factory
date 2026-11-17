@@ -1,11 +1,11 @@
 """End to end through the CLI only: a seeded repo, `add`, then `run`, to a finished `chore` run.
 
-The worker and the pull request service are the fakes, injected through the CLI's factories. Nothing calls the
-engine's Python API. The run's state is read from its folder, which is what the CLI writes.
+The worker, the command adapter and the pull request service are fakes, injected through the CLI's factories. Nothing
+calls the engine's Python API. The run's state is read from its folder, which is what the CLI writes.
 
 The second test runs the shipped bug-fix workflow the same way (decision M2). The seeded repo has no repro script, no
 Makefile and no `web/` folder, so the `cmd` gates are stubbed through `gates.use_command_runner`. The `cmd` tasks are not
-stubbed that way: they go to the worker, so the scripted worker writes their reports. The run stops at `propose`, a
+stubbed that way: they go to the command fake, which writes their reports. The run stops at `propose`, a
 `factory decide` answers it, and a second `factory run` finishes it.
 """
 
@@ -50,16 +50,18 @@ def test_a_chore_run_reaches_done_through_the_cli_alone(seeded, capsys, monkeypa
 
     run_dir = state.find_run(state.factory_home(), run_id).run_dir
     script, writes = chore_script(run_dir)
-    worker = FakeWorkerAdapter(script, writes=writes)
+    worker, command = _split_worker_and_command(script, writes)
 
     code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys,
-                        worker_factory=lambda cfg: {"claude": worker},
+                        worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
                         tracker_factory=lambda repo, cfg: _tracker(),
                         prs_factory=lambda repo, cfg: prs)
     assert code == 0, driven
     assert driven["data"]["runs"] == {run_id: "done"}
     assert state.read_run(run_dir).status == "done"
     assert spawned == []  # `add --no-run` and `run` start no detached engine
+    assert {c.task_id for c in command.started} == {"rules", "check"}  # the cmd tasks, not the skill tasks
+    assert {c.task_id for c in worker.started} == {"change"}
 
 
 BUG_FIX_TASKS = ["repro", "cause", "plan", "backend", "frontend", "be-tests", "fe-tests", "e2e", "standards", "spec"]
@@ -73,7 +75,9 @@ def _stage_report(stage: str) -> str:
     return json.dumps({"schema_version": 1, "stage": stage, "summary": f"{stage} done", "claims": [claim]})
 
 
-_TEST_REPORT = json.dumps({"schema_version": 1, "total": 3, "failed": []})
+# A JUnit file, as a test runner writes it: the engine counts the <testcase> elements, so the verify gate sees 3 tests.
+_JUNIT_THREE_PASS = ('<testsuite name="s" tests="3" failures="0">'
+                     '<testcase name="a"/><testcase name="b"/><testcase name="c"/></testsuite>')
 _REVIEW_FINDINGS = json.dumps({"schema_version": 1, "findings": [
     {"file": "services/api.py", "line": 1, "severity": "low", "rule": "naming", "message": "a nit"}]})
 
@@ -89,7 +93,7 @@ def bug_fix_script(run_dir: Path) -> tuple[dict, dict]:
         out = BUG_FIX_OUT[task]
         script[task] = [ok(run_dir / "tasks" / task / "work" / out)]
         if task in ("be-tests", "fe-tests", "e2e"):
-            writes[task] = {out: _TEST_REPORT}
+            writes[task] = {out: _JUNIT_THREE_PASS}
         elif task in ("standards", "spec"):
             writes[task] = {out: _REVIEW_FINDINGS}
         else:
@@ -114,16 +118,17 @@ def test_a_bug_fix_run_stops_at_propose_is_answered_by_decide_and_reaches_done(s
     run_dir = state.find_run(state.factory_home(), run_id).run_dir
     script, writes = bug_fix_script(run_dir)
     # Claude reports native subagents, so `backend` stays one task. The fake defaults to "none" and would split it.
-    worker = FakeWorkerAdapter(script, writes=writes, capabilities=Capabilities(subagents="native", usage=True))
-    factories = dict(worker_factory=lambda cfg: {"claude": worker}, tracker_factory=lambda repo, cfg: _tracker(),
-                     prs_factory=lambda repo, cfg: prs)
+    worker, command = _split_worker_and_command(script, writes, native=True)
+    factories = dict(worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
+                     tracker_factory=lambda repo, cfg: _tracker(), prs_factory=lambda repo, cfg: prs)
 
     with gates.use_command_runner(stub_runner):
         code, parked = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
         assert code == 3, parked  # the engine exits 3 when a run waits on a person
         assert parked["data"]["runs"] == {run_id: "awaiting_approval"}
         assert state.read_run(run_dir).stage == "propose"
-        assert {c.task_id for c in worker.started} == {"rules", "repro", "cause", "plan"}  # nothing past the stop ran
+        assert {c.task_id for c in worker.started} == {"repro", "cause", "plan"}  # nothing past the stop ran
+        assert {c.task_id for c in command.started} == {"rules"}
 
         packet = decisions.read_decision(run_dir, "propose", 1)["packet"]
         code, decided = _cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", packet["sha"],
@@ -136,11 +141,29 @@ def test_a_bug_fix_run_stops_at_propose_is_answered_by_decide_and_reaches_done(s
     assert code == 0, driven
     assert driven["data"]["runs"] == {run_id: "done"}
     assert state.read_run(run_dir).status == "done"
-    assert sorted(c.task_id for c in worker.started) == sorted(["rules", *BUG_FIX_TASKS])
+    skill_tasks = [t for t in BUG_FIX_TASKS if t not in CMD_TASKS]
+    assert sorted(c.task_id for c in worker.started) == sorted(skill_tasks)
+    assert sorted(c.task_id for c in command.started) == sorted(["rules", *CMD_TASKS & set(BUG_FIX_TASKS)])
     assert ["scripts/repro-fails.sh"] in gate_commands and ["make", "build"] in gate_commands
     assert ["scripts/repro-now-passes.sh"] in gate_commands
     assert spawned == [run_id]  # only `decide` started an engine, and the test ran it by hand instead
     assert prs.calls == ["create"]
+
+
+CMD_TASKS = {"rules", "check", "be-tests", "fe-tests", "e2e"}  # the cmd tasks of the shipped workflows
+
+
+def _split_worker_and_command(script, writes, *, native: bool = False):
+    """The cmd tasks go to a command fake and the skill tasks to the worker fake, as the engine routes them (item 12).
+    Claude reports native subagents, so `backend` stays one task. The fake defaults to "none" and would split it."""
+    cap = Capabilities(subagents="native", usage=True) if native else None
+    worker_script = {t: r for t, r in script.items() if t not in CMD_TASKS}
+    command_script = {t: r for t, r in script.items() if t in CMD_TASKS}
+    worker = FakeWorkerAdapter(worker_script, writes={t: w for t, w in writes.items() if t not in CMD_TASKS},
+                               capabilities=cap)
+    command = FakeWorkerAdapter(command_script, writes={t: w for t, w in writes.items() if t in CMD_TASKS},
+                                capabilities=Capabilities(subagents="none", usage=False))
+    return worker, command
 
 
 def _tracker():

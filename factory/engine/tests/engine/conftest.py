@@ -92,7 +92,7 @@ def new_run(repo, cfg, tmp_path):
 def engine(repo, cfg, tracker, prs, clock):
     def make(script: dict, writes: dict | None = None) -> tuple[Engine, FakeWorkerAdapter]:
         worker = FakeWorkerAdapter(script, writes=writes)
-        return Engine(repo, cfg, workers={"fake": worker}, tracker=tracker, prs=prs, clock=clock), worker
+        return Engine(repo, cfg, workers={"fake": worker}, command=worker, tracker=tracker, prs=prs, clock=clock), worker
     return make
 
 

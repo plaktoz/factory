@@ -218,6 +218,7 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `git.worktree_dirty` | `human` | A worktree with changes was not removed; show the files, and a removal only with force (module 7) |
 | `notes.task_finished` | `fail_fast` | A note for a finished task is refused |
 | `gate.command_missing` | `human` | A gate command's binary was not found, so the gate did not run; install it or fix the command (module 8) |
+| `gate.no_test_results` | `human` | A verify stage's tasks reported 0 test cases, so no pull request opens; name the missing JUnit files, or skip the gate for a repo with no tests (module 8, T1) |
 | `sandbox.unavailable` | `human` | The OS refused to start the sandbox (`sandbox_apply: Operation not permitted`, exit 71) |
 | `sandbox.settings_invalid` | `fail_fast` | The settings file parses but a field fails validation; name the field |
 | `sandbox.settings_unreadable` | `fail_fast` | The `--settings` file is missing or unreadable; name the path |

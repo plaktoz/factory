@@ -112,6 +112,13 @@ def _pairs(items: list[str] | None) -> dict[str, str]:
 # ---- handlers --------------------------------------------------------------------------------------------------
 # Each handler takes (args, factories) and returns a _Result. Anything that starts an engine calls factories.spawn.
 
+def _triage(args, f) -> _Result:
+    """Internal (module 16): the `rules` task's command. It reads the request the engine copied into its task folder."""
+    from .triage_cli import run_triage
+    run_triage()
+    return _Result({"triage": "written"}, message="triage.json written")
+
+
 def _init(args, f) -> _Result:
     repo = _repo_here(args)
     report = kit.init_repo(repo)
@@ -331,8 +338,9 @@ def _code_of_status(status: str) -> int:
 class Factories:
     """Builds the adapters. The factories passed to main() replace the real ones; the defaults are the real adapters."""
 
-    def __init__(self, *, worker_factory=None, tracker_factory=None, prs_factory=None):
+    def __init__(self, *, worker_factory=None, tracker_factory=None, prs_factory=None, command_factory=None):
         self._worker = worker_factory or api.default_workers
+        self._command = command_factory
         self._tracker = tracker_factory or api.default_tracker
         self._prs = prs_factory or api.default_prs
 
@@ -345,8 +353,9 @@ class Factories:
 
     def engine(self, repo: Path):
         cfg = load_config(repo)
+        command = self._command(cfg) if self._command else None
         return api.engine_for(repo, cfg, workers=self._worker(cfg), tracker=self._tracker(repo, cfg),
-                              prs=self._prs(repo, cfg))
+                              prs=self._prs(repo, cfg), command=command)
 
 
 # ---- the parser ------------------------------------------------------------------------------------------------
@@ -363,6 +372,8 @@ def _parser() -> argparse.ArgumentParser:
         sp.set_defaults(handler=handler)
         return sp
 
+    sp = add("triage", _triage, help="the rules task of the triage stage: write triage.json from the task's request",
+             repo=False)
     sp = add("init", _init, help="create .factory/ and the kit for this repo")
     sp.add_argument("--github", action="store_true", help="also create the factory labels on GitHub")
 
@@ -479,12 +490,14 @@ def _parse(argv: list[str]) -> argparse.Namespace:
 _ANSWER = re.compile(r"[A-Za-z][\w-]*=[^\s]+")
 
 
-def main(argv: list[str] | None = None, *, worker_factory=None, tracker_factory=None, prs_factory=None) -> int:
+def main(argv: list[str] | None = None, *, worker_factory=None, tracker_factory=None, prs_factory=None,
+         command_factory=None) -> int:
     """Run one command and return its exit code. `python -m factory_engine` raises it as SystemExit."""
     argv = sys.argv[1:] if argv is None else list(argv)
     _WANTS_JSON["on"] = "--json" in argv
     args = _parse(argv)
-    f = Factories(worker_factory=worker_factory, tracker_factory=tracker_factory, prs_factory=prs_factory)
+    f = Factories(worker_factory=worker_factory, tracker_factory=tracker_factory, prs_factory=prs_factory,
+                  command_factory=command_factory)
     try:
         result = args.handler(args, f)
     except FactoryError as e:
