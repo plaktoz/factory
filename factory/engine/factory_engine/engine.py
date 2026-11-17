@@ -30,6 +30,7 @@ from .types import (AttentionItem, Clock, GateContext, GateResult, Request, Run,
 from .workflow import expand_helpers
 
 TRIAGE = "_triage"
+NO_TEST_RESULTS = "no-test-results"  # the skip name of the T1 block, which is not a gate in the workflow
 DEFAULT_MAX_INTERRUPTIONS = 3
 POLL_SECONDS = 0.05  # how often the main thread looks at running workers; a restart waits for the next checkpoint
 # Run statuses that end a run, and those where the engine waits for a person or for infrastructure.
@@ -168,19 +169,25 @@ class Engine:
             state.release(lock)
 
     def skip(self, run_id: str, gate: str, *, reason: str, by: str = "cli") -> None:
-        """Pass a gate the workflow marks `skippable: true`. The skip is logged with its reason, and the stage is
-        marked skipped, which stops auto-merge (module 13). A gate that is not marked refuses."""
+        """Pass a gate the workflow marks `skippable: true`, or the T1 block by its name `no-test-results`. The skip is
+        logged with its reason, and the stage is marked skipped, which stops auto-merge (module 13). A gate that is not
+        marked refuses, and so does `no-test-results` when the run is blocked for another reason."""
         if not reason or not reason.strip():
             raise FactoryError("config.invalid", "a skip needs a reason", hint='pass --reason "why this gate is passed"')
         run_dir, lock, run, wf = self._blocked(run_id)
         try:
             stage = self._stage_of(wf, run.stage)
             spec = next((g for g in stage.gate if gates.gate_name(g) == gate), None)
-            if spec is None:
+            if gate == NO_TEST_RESULTS:
+                blocks = [ev for ev in state.read_events(run_dir) if ev.type == "run_blocked"]
+                if not blocks or blocks[-1].data.get("code") != "gate.no_test_results":
+                    raise FactoryError("config.invalid", f"run {run_id} is not blocked by no test results",
+                                       hint="`no-test-results` skips only that block; see factory status for this one")
+            elif spec is None:
                 names = ", ".join(gates.gate_name(g) for g in stage.gate) or "none"
                 raise FactoryError("config.invalid", f"stage {stage.id!r} has no gate named {gate!r} (gates: {names})",
                                    hint="copy the gate name from the blocked card or from a gate_failed event")
-            if not spec.skippable:
+            elif not spec.skippable:
                 raise FactoryError("config.invalid", f"gate {gate!r} is not marked skippable",
                                    hint="add `skippable: true` to the gate in the workflow file")
             state.append_event(run_dir, "gate_skipped", stage=stage.id, gate=gate, reason=reason.strip(), by=by)
@@ -732,8 +739,10 @@ class Engine:
         missing = [s.out for s in specs if s.out and s.out.endswith(".junit.xml")]
         reason = ("no test results: the verify stage reported 0 test cases; expected "
                   + ", ".join(missing or ["a JUnit file"]) + " with at least one test case")
-        state.append_event(run_dir, "gate_failed", gate="test-report", code="gate.no_test_results", stage=stage.id)
-        return self._apply(run, run_dir, lock, wf, stage, rework.block(run, stage.id, reason, self.clock.now()), result)
+        state.append_event(run_dir, "gate_failed", gate=NO_TEST_RESULTS, code="gate.no_test_results", stage=stage.id)
+        skip = f'factory skip {run.run_id} --gate {NO_TEST_RESULTS} --reason "..."'
+        routing = rework.block(run, stage.id, reason, self.clock.now(), code="gate.no_test_results", command=skip)
+        return self._apply(run, run_dir, lock, wf, stage, routing, result)
 
     def _test_report_for_stage(self, run_dir: Path, task_ids: list[str]) -> Path:
         """Write the stage's test-report.json from its tasks' JUnit files (module 5). The engine owns the file, so it
