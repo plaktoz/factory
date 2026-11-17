@@ -80,7 +80,7 @@ class Clock(Protocol):
 
 @dataclass
 class GateSpec:       kind: Literal["cmd", "check", "schema"]; cmd: list[str] | None
-                      check: str | None; schema: str | None; args: dict
+                      check: str | None; schema: str | None; args: dict; skippable: bool
 
 @dataclass
 class GateContext:    run: Run; stage: str; task_id: str | None; worktree: Path

@@ -33,6 +33,18 @@ textarea{width:100%;min-height:54px;margin-top:10px;padding:8px;border:1px solid
 .bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
 button{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
 button.alt{background:transparent;color:var(--accent)}
+.q{font-size:16px;font-weight:600;margin:0 0 10px}
+.ta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
+@media(max-width:560px){.ta{grid-template-columns:1fr}}
+.ta div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+.ta b,.pv b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.pv{margin:0 0 12px}
+.pv pre{margin:0;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line);font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.see{display:block;margin:4px 0 0 24px}
+.asks{display:block;margin:2px 0 0 24px;font-size:13px;color:var(--mute)}
+details.how{margin:6px 0 0 24px;font-size:13px;color:var(--mute)}
+details.how summary{cursor:pointer;color:var(--accent)}
+@media(max-width:560px){.see,.asks,details.how{margin-left:0}}
 #out{display:none;margin-top:24px}
 #out textarea{min-height:320px;font:13px/1.45 ui-monospace,Menlo,monospace}
 </style>
@@ -71,11 +83,17 @@ D.forEach(d=>{
   const el=document.createElement("section");el.className="card";
   el.innerHTML=
    `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
-   `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`+
+   (d.today ? (d.question?`<p class="q">${esc(d.question)}</p>`:"")+
+     `<div class="ta"><div><b>Today</b>${esc(d.today)}</div><div><b>After the recommended option</b>${esc(d.after)}</div></div>`+
+     `<div class="pv"><b>What it looks like</b><pre>${esc(d.preview)}</pre></div>`
+   : `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`)+
    `<div class="opts">`+d.options.map(o=>
      `<label class="opt"><input type="radio" name="${esc(d.id)}" value="${esc(o.id)}" ${o.id===cur?"checked":""}>`+
      `<span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">Recommended</span>':""}`+
-     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div></label>`).join("")+
+     (o.see?`<span class="see">What you'll see: ${esc(o.see)}</span>`:"")+
+     (o.asks?`<span class="asks">Asks of you: ${esc(o.asks)}</span>`:"")+
+     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div>`+
+     (o.how?`<details class="how"><summary>How it works</summary>${esc(o.how)}</details>`:"")+`</label>`).join("")+
    `<label class="opt"><input type="radio" name="${esc(d.id)}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
    `<p class="why">Why recommended: ${esc(d.why)}</p>`+
    `<textarea data-q="${esc(d.id)}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;

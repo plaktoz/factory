@@ -1,10 +1,13 @@
 [project]
 name = "factory-launcher"
 version = "0.1.0"
-description = "Machine launcher for the factory: the dashboard server (module 15). Module 16 adds the machine commands."
+description = "Machine launcher for the factory: the `factory` command, tick, schedule and the dashboard server (modules 15 and 16)."
 # Python 3.10 is the floor, the same as the engine.
 requires-python = ">=3.10"
 dependencies = ["factory-engine"]
+
+[project.scripts]
+factory = "factory_launcher.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8"]

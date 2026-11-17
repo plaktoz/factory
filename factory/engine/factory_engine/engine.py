@@ -129,6 +129,99 @@ class Engine:
         finally:
             state.release(lock)
 
+    # ---- blocked-run actions (module 8, driven by module 16) -------------------------------------------------------
+
+    def retry(self, run_id: str, *, stage: str | None = None, note: str | None = None, by: str = "cli") -> None:
+        """Run a blocked stage once more. The note, if any, is queued on that stage's tasks and reaches the worker as
+        feedback. Loop counters stay as they are: a retry is one more attempt, not another loop."""
+        run_dir, lock, run, wf = self._blocked(run_id)
+        try:
+            target = self._stage_of(wf, stage or run.stage)
+            for spec in self._specs(target, run_dir):
+                if (run_dir / "tasks" / spec.id / "task.json").is_file() and state.read_task(run_dir, spec.id).status == "failed":
+                    (run_dir / "tasks" / spec.id / "task.json").unlink()  # a failed task starts again with a fresh state
+                if note and note.strip():
+                    self._task_state(run_dir, lock, target, spec)  # a fresh pending task can take the note
+                    notes.queue_note(run_dir, spec.id, note.strip(), by=by)
+            self._unblock(run, run_dir, lock, target.id)
+            state.append_event(run_dir, "run_retried", stage=target.id, by=by, note=bool(note and note.strip()))
+        finally:
+            state.release(lock)
+
+    def goto(self, run_id: str, stage: str, *, by: str = "cli") -> None:
+        """Send a blocked run to any earlier stage. That stage and every later one start again, with no loop limit,
+        because a person chose the route."""
+        run_dir, lock, run, wf = self._blocked(run_id)
+        try:
+            target = self._stage_of(wf, stage)
+            order = [s.id for s in wf.stages]
+            if run.stage in order and order.index(target.id) > order.index(run.stage):
+                raise FactoryError("config.invalid", f"{target.id!r} is after the blocked stage {run.stage!r}",
+                                   hint="goto sends a run back to this stage or an earlier one")
+            reset = rework._reset_from(run, wf, target.id)
+            self._reset_tasks(run_dir, wf, reset)
+            self._unblock(run, run_dir, lock, target.id)
+            state.append_event(run_dir, "run_routed", to_stage=target.id, reset=reset, by=by)
+        finally:
+            state.release(lock)
+
+    def skip(self, run_id: str, gate: str, *, reason: str, by: str = "cli") -> None:
+        """Pass a gate the workflow marks `skippable: true`. The skip is logged with its reason, and the stage is
+        marked skipped, which stops auto-merge (module 13). A gate that is not marked refuses."""
+        if not reason or not reason.strip():
+            raise FactoryError("config.invalid", "a skip needs a reason", hint='pass --reason "why this gate is passed"')
+        run_dir, lock, run, wf = self._blocked(run_id)
+        try:
+            stage = self._stage_of(wf, run.stage)
+            spec = next((g for g in stage.gate if gates.gate_name(g) == gate), None)
+            if spec is None:
+                names = ", ".join(gates.gate_name(g) for g in stage.gate) or "none"
+                raise FactoryError("config.invalid", f"stage {stage.id!r} has no gate named {gate!r} (gates: {names})",
+                                   hint="copy the gate name from the blocked card or from a gate_failed event")
+            if not spec.skippable:
+                raise FactoryError("config.invalid", f"gate {gate!r} is not marked skippable",
+                                   hint="add `skippable: true` to the gate in the workflow file")
+            state.append_event(run_dir, "gate_skipped", stage=stage.id, gate=gate, reason=reason.strip(), by=by)
+            self._set_stage(run, stage.id, "skipped").ended = self.clock.now().isoformat()
+            self._unblock(run, run_dir, lock, self._next_stage_id(wf, stage.id))
+        finally:
+            state.release(lock)
+
+    def _blocked(self, run_id: str):
+        """Take the run's lock and load a blocked run and its workflow. Refuses a run that is not blocked."""
+        run_dir = self._run_dir(run_id)
+        lock = state.acquire_lock(run_dir, self.owner)
+        try:
+            run = state.read_run(run_dir)
+            if run.status != "blocked":
+                raise FactoryError("config.invalid", f"run {run_id} is not blocked (it is {run.status})",
+                                   hint="retry, goto and skip apply to a blocked run")
+            if run.workflow is None:
+                raise FactoryError("config.invalid", f"run {run_id} is blocked before a workflow was chosen",
+                                   hint="set the request type and retry from triage")
+            return run_dir, lock, run, self._load(run.workflow)
+        except BaseException:
+            state.release(lock)
+            raise
+
+    @staticmethod
+    def _stage_of(wf: Workflow, stage_id: str | None) -> Stage:
+        found = next((s for s in wf.stages if s.id == stage_id), None)
+        if found is None:
+            raise FactoryError("config.invalid", f"{stage_id!r} is not a stage of {wf.name}",
+                               hint="stages: " + ", ".join(s.id for s in wf.stages))
+        return found
+
+    @staticmethod
+    def _next_stage_id(wf: Workflow, stage_id: str) -> str | None:
+        order = [s.id for s in wf.stages]
+        i = order.index(stage_id) + 1
+        return order[i] if i < len(order) else None
+
+    def _unblock(self, run: Run, run_dir: Path, lock: Lock, stage_id: str | None) -> None:
+        run.status, run.attention, run.stage = "running", None, stage_id
+        state.write_run(run_dir, run, lock=lock)
+
     # ---- the loop ------------------------------------------------------------------------------------------------
 
     def _drive(self, run_id: str) -> RunStatus:
@@ -318,7 +411,8 @@ class Engine:
     def _specs(self, stage: Stage, run_dir: Path | None = None) -> list[TaskSpec]:
         if stage.tasks_from and run_dir is not None:
             return wf_mod.expand_tasks_from(stage, run_dir / "tasks" / stage.tasks_from)
-        native = next(iter(self.workers.values())).capabilities.subagents
+        first = next(iter(self.workers.values()), None)  # the blocked-run actions build an engine with no worker
+        native = first.capabilities.subagents if first is not None else False
         out: list[TaskSpec] = []
         for spec in stage.tasks:
             out.extend(expand_helpers(spec, native))

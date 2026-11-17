@@ -84,6 +84,7 @@ class GateSpec:
     check: str | None
     schema: str | None
     args: dict
+    skippable: bool = False
 
 
 @dataclass

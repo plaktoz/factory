@@ -1,0 +1,79 @@
+{
+  "title": "Closing an expected failure: strict xfail or skip",
+  "intro": "E1 is decided and built, and the rebuild test now passes with no marker. Still open is E2 from `rebuild-run-decisions`, asked here as two questions: what to record for the rebuild test (Q1), and the rule for any later gap (Q2). Both have the same two options.",
+  "target": "docs/adr/",
+  "storage_key": "e2-expected-failure-v1",
+  "decisions": [
+    {
+      "id": "Q1",
+      "title": "What the record says happened to the rebuild test",
+      "ref": "E2 on `docs/reviews/rebuild-run-decisions.json`; commit 663ed74; module 6A acceptance criteria",
+      "context": "The E2 page asked how to close the rebuild test's expected failure once E1 landed. E1 landed in 663ed74, and that commit removed the strict marker in the same change; no `xfail` is left under `factory/`. Before that the test was `xfail(strict=True)`. E2 has no ADR, so `records.py` fails on it. The ADR cannot be added until you say which mechanism to record.",
+      "options": [
+        {
+          "id": "strict-xfail",
+          "name": "Record strict xfail: the marker was kept until the fix and removed in the same change",
+          "recommended": true,
+          "pros": [
+            "It matches the history: the test was `xfail(strict=True)` until 663ed74 removed it with the E1 code",
+            "The record then describes what the repo did, so nobody has to reconcile an ADR with the git log"
+          ],
+          "cons": [
+            "The marker is already gone, so the record is of a finished case and changes no behavior",
+            "The record does not say why you preferred strict xfail over skip, unless you add a note"
+          ]
+        },
+        {
+          "id": "skip",
+          "name": "Record skip: the test should have been skipped with a reason until the fix",
+          "recommended": false,
+          "pros": [
+            "Nothing failed or showed as failing while the gap was open"
+          ],
+          "cons": [
+            "It does not match the history: the test was a strict xfail, not a skip, so the ADR would disagree with 663ed74 and the earlier tasks.md log",
+            "The case is closed, so choosing it changes only the wording of the record"
+          ]
+        }
+      ],
+      "why": "Strict xfail is what was done, and the E2 page already recommended it; the ADR then agrees with the git history."
+    },
+    {
+      "id": "Q2",
+      "title": "The rule for the next known gap",
+      "ref": "AGENTS.md Working rules (acceptance criteria); module acceptance tests",
+      "context": "Waves 1 to 3 are not all built, so more criteria may fail for a known spec gap. Checked with pytest 9.2.0: a strict xfail that passes fails the suite with `XPASS(strict)`, a strict xfail that still fails shows as `XFAIL`, and a skipped test is not run and shows as `SKIPPED`. The repo uses `skip` or `skipif` today only for missing tools (Chrome, `srt`, `npm`, `uv`, a live-run switch), in six test files under `factory/engine/tests`.",
+      "options": [
+        {
+          "id": "strict-xfail",
+          "name": "Mark the failing criterion `xfail(strict=True)` with the gap named in the reason, and remove the marker in the change that closes it",
+          "recommended": true,
+          "pros": [
+            "The test still runs, so a fix that makes it pass is noticed at once: the suite fails with `XPASS(strict)` until the marker is removed (checked with pytest)",
+            "The gap shows as `XFAIL` in every run until it is closed",
+            "A skip in this repo then keeps its one meaning: a tool is missing"
+          ],
+          "cons": [
+            "The author of the fix must remove the marker, or the suite fails",
+            "If the test fails for a different reason than the named gap, it still shows as `XFAIL` and the new failure is hidden"
+          ]
+        },
+        {
+          "id": "skip",
+          "name": "Mark the criterion `skip` with the gap named in the reason, and remove the marker when the gap closes",
+          "recommended": false,
+          "pros": [
+            "Nothing fails and nothing shows as failing while the gap is open",
+            "No one is forced to touch the marker when a fix happens to land"
+          ],
+          "cons": [
+            "The test does not run, so a fix that makes it pass goes unnoticed and the skip can stay for ever",
+            "The gap shows only as one line in the `SKIPPED` summary, next to the skips for missing tools",
+            "Under AGENTS.md a criterion is ticked only with test evidence, and a skipped test gives none"
+          ]
+        }
+      ],
+      "why": "A strict xfail keeps the test running and forces the marker out with the fix; a skip does neither."
+    }
+  ]
+}

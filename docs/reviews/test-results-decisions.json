@@ -1,0 +1,93 @@
+{
+  "title": "Test results in a real bug-fix run",
+  "intro": "Already settled by the spec, so not asked: the factory itself reads the test results (module 5), and commands run through the sandboxed command runner (modules 8 and 9). That wiring is missing in the code today and is a task, not a question. Two things the spec does not settle are asked here.",
+  "target": "docs/design/modules/08-gates-error-handling-and-rework.md",
+  "storage_key": "test-results-decisions-v1",
+  "decisions": [
+    {
+      "id": "T1",
+      "title": "When a bug-fix run's tests report nothing, what should you get?",
+      "ref": "The check after the tests in a bug-fix run (the verify stage). Lands in module 8 and docs/tasks.md item 12.",
+      "context": "Today: when you open a bug-fix pull request, its summary line \"Tests N passed, M failed\" comes from the test result files. If the test command ran but wrote no result file (wrong path, a test runner that does not write one), that line is simply missing, and nothing tells you why. Checked on 2026-11-17: the report the factory builds from no result file says 0 tests, 0 failed, and that report passes today's check. After the recommended option: a run whose tests report nothing stops before a pull request opens, and you get a message saying the tests produced no results. Example of what you would see: \"Needs you: fix-the-login-bug, verify: the tests ran but reported 0 results (be.junit.xml missing)\".",
+      "options": [
+        {
+          "id": "stop-on-zero-tests",
+          "name": "What you'll see: a run with no test results stops and asks you; it never opens a pull request that claims tests passed",
+          "recommended": true,
+          "pros": [
+            "A pull request you get has always run at least one test",
+            "The message names the missing result file, so you know where to look",
+            "Asks nothing of you up front; you act only when it happens"
+          ],
+          "cons": [
+            "A repo with no tests at all cannot finish a bug-fix run until you add one or skip the check by hand (factory skip, which also turns off auto-merge for that run)",
+            "One more stop for you to answer when a test command is set up wrong"
+          ]
+        },
+        {
+          "id": "pass-and-warn",
+          "name": "What you'll see: the run finishes and opens the pull request, with a line in its summary saying no tests were found",
+          "recommended": false,
+          "pros": [
+            "Runs never stop for this, so a repo without tests still gets pull requests",
+            "Asks nothing of you"
+          ],
+          "cons": [
+            "You must read each pull request summary to notice; one you skim can merge with nothing tested",
+            "If auto-merge is on, a change with no tests run can merge without you seeing it"
+          ]
+        },
+        {
+          "id": "pass-silently",
+          "name": "What you'll see: no change from today; a run with no test results looks the same as one whose tests passed, except the Tests line is missing",
+          "recommended": false,
+          "pros": [
+            "No new stop and no new message",
+            "Asks nothing of you"
+          ],
+          "cons": [
+            "\"No tests ran\" and \"all tests passed\" look the same to you",
+            "The missing Tests line is the only sign, and it says nothing about why"
+          ]
+        }
+      ],
+      "why": "A pull request should never look tested when no test ran, and a stop is the only option that guarantees you notice."
+    },
+    {
+      "id": "T2",
+      "title": "When should real bug-fix runs start working?",
+      "ref": "Order of work in docs/tasks.md: item 12 against module 16 (the last build step).",
+      "context": "Today: a real run cannot work as designed. Every run starts with a command step (the rules that pick bug-fix or chore), and the factory hands that command to Claude instead of running it itself; any check that runs a command (such as \"make build\") stops with \"a cmd gate needs module 9's CommandAdapter, which is not built\". Both were checked on 2026-11-17 by running the engine; what Claude then does with a command it was handed was not tried. The automated tests do not show this, because they swap in a stand-in runner. After the recommended option: the command wiring is built next, and you can try a first real run on a test repo once it lands.",
+      "options": [
+        {
+          "id": "wire-commands-next",
+          "name": "What you'll see: the next change makes real runs work end to end; the remaining module 16 items wait",
+          "recommended": true,
+          "pros": [
+            "You can try a first real run on a test repo once it lands",
+            "The pilot needs this anyway; nothing else gives you a run you can watch",
+            "Shows whether the report formats hold up against real tool output sooner"
+          ],
+          "cons": [
+            "The four open module 16 items (watch command, two kit versions, live-lock tests, PR polling) move later",
+            "Touches the engine's core loop, which other finished modules rely on, so it needs the full 18-minute test run before merge"
+          ]
+        },
+        {
+          "id": "finish-module-16-first",
+          "name": "What you'll see: module 16's open items close first; real runs still stop at the first step until after that",
+          "recommended": false,
+          "pros": [
+            "Module 16 is closed out in one piece, in the planned build order",
+            "No change to the engine's core loop until then"
+          ],
+          "cons": [
+            "No real run is possible until both are done, so the pilot waits longer",
+            "The PR polling item needs real runs to test properly, so part of module 16 cannot be finished well first"
+          ]
+        }
+      ],
+      "why": "Nothing else lets you see a real run, and the pilot is blocked on it."
+    }
+  ]
+}

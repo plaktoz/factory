@@ -77,6 +77,9 @@
           "properties": {
             "cmd": {
               "$ref": "#/$defs/command"
+            },
+            "skippable": {
+              "type": "boolean"
             }
           },
           "required": ["cmd"],
@@ -86,6 +89,9 @@
           "properties": {
             "check": {
               "type": "string"
+            },
+            "skippable": {
+              "type": "boolean"
             }
           },
           "required": ["check"],
@@ -95,6 +101,9 @@
           "properties": {
             "schema": {
               "type": "string"
+            },
+            "skippable": {
+              "type": "boolean"
             }
           },
           "required": ["schema"],
