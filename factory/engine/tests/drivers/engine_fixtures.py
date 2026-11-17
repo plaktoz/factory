@@ -18,3 +18,4 @@ module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(module)
 
 chore_script = module.chore_script
+TRIAGE_JSON = module.TRIAGE_JSON
