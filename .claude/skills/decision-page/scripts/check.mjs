@@ -28,6 +28,24 @@ const ids = await page.$$eval("section.card:not(#out) textarea[data-q]", e => e.
 ok(cards > 0 && cards === ids.length, `${cards} decision cards rendered`);
 ok((await page.$$eval("input[type=radio]:checked", e => e.length)) === cards, "one option preselected per card");
 
+// a card in the user-side shape shows the question, Today and After, a preview, and "What you'll see" first on each option
+const shape = await page.$$eval("section.card:not(#out)", cs => cs.map(c => ({
+  ta: !!c.querySelector(".ta"), q: !!c.querySelector(".q"), pv: !!c.querySelector(".pv pre"),
+  opts: [...c.querySelectorAll("label.opt")].filter(l => l.querySelector("input").value !== "unsure")
+    .map(l => ({ see: !!l.querySelector(".see"), asks: !!l.querySelector(".asks"),
+                 firstAfterName: (l.querySelector(".name") || {}).nextElementSibling })),
+})));
+const modern = shape.filter(s => s.ta);
+if (modern.length) {
+  ok(modern.every(s => s.q && s.pv), "each card shows its question and a preview");
+  ok(modern.every(s => s.opts.every(o => o.see && o.asks)), "each option shows what you'll see and what it asks of you");
+  const seeFirst = await page.$$eval("section.card:not(#out) label.opt", ls => ls.filter(l => l.querySelector(".see"))
+    .every(l => { const n = l.querySelector(".see").previousElementSibling; return n && (n.classList.contains("name") || n.classList.contains("rec")); }));
+  ok(seeFirst, "'What you'll see' is the first line under each option name");
+  const how = await page.$("details.how");
+  if (how) ok(await page.$eval("details.how", d => !d.open), "how it works starts folded");
+}
+
 // choose a non-recommended option on the first card and mark the last card unsure with a note
 const first = ids[0], last = ids[ids.length - 1];
 const alt = await page.$$eval(`input[name="${first}"]`, e => e.map(x => x.value).filter(v => v !== "unsure"));

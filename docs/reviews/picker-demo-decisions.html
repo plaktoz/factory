@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>Decision ids, resume status, and keeping docs honest</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--mute:#666660;--line:#dcdcd6;--accent:#2b5fd9;--accent-bg:#e8eefc;--pro:#1b7a3e;--con:#b3261e;--rec:#8a5a00;--rec-bg:#fdf1d6}
+@media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f2c260;--rec-bg:#3a2f12}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 120px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--mute);margin:0 0 20px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.card h2{font-size:17px;margin:0 0 2px}
+.tag{font-size:12px;color:var(--mute);margin:0 0 10px}
+.ctx{margin:0 0 12px}
+.ctx b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.opts{display:grid;gap:8px}
+label.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+label.opt:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}
+label.opt input{margin-right:8px}
+.name{font-weight:600}
+.rec{font-size:11px;font-weight:600;color:var(--rec);background:var(--rec-bg);border-radius:4px;padding:1px 6px;margin-left:6px}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 0 24px;font-size:13px}
+@media(max-width:560px){.pc{grid-template-columns:1fr;margin-left:0}}
+.pc ul{margin:0;padding-left:16px}
+.pro li::marker{color:var(--pro)} .con li::marker{color:var(--con)}
+.why{font-size:13px;color:var(--mute);margin:10px 0 0}
+textarea{width:100%;min-height:54px;margin-top:10px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);font:inherit}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px;display:flex;gap:12px;align-items:center;justify-content:center}
+button{font:inherit;padding:8px 16px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+.q{font-size:16px;font-weight:600;margin:0 0 10px}
+.ta{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:0 0 12px}
+@media(max-width:560px){.ta{grid-template-columns:1fr}}
+.ta div{border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:14px}
+.ta b,.pv b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.pv{margin:0 0 12px}
+.pv pre{margin:0;padding:10px 12px;border-radius:8px;background:var(--bg);border:1px solid var(--line);font:13px/1.45 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
+.see{display:block;margin:4px 0 0 24px}
+.asks{display:block;margin:2px 0 0 24px;font-size:13px;color:var(--mute)}
+details.how{margin:6px 0 0 24px;font-size:13px;color:var(--mute)}
+details.how summary{cursor:pointer;color:var(--accent)}
+@media(max-width:560px){.see,.asks,details.how{margin-left:0}}
+#out{display:none;margin-top:24px}
+#out textarea{min-height:320px;font:13px/1.45 ui-monospace,Menlo,monospace}
+</style>
+</head>
+<body>
+<main>
+<h1 id="h1"></h1>
+<p class="sub" id="intro"></p>
+<div id="list"></div>
+<section id="out" class="card">
+  <h2>Prompt</h2>
+  <p class="tag">Copy this and paste it into the Claude Code session.</p>
+  <textarea id="prompt" readonly></textarea>
+</section>
+</main>
+<div class="bar">
+  <span id="count"></span>
+  <button id="gen">Generate prompt</button>
+  <button id="copy" class="alt">Copy</button>
+  <button id="reset" class="alt">Reset to recommended</button>
+</div>
+<script id="data" type="application/json">{"title": "Decision ids, resume status, and keeping docs honest", "intro": "A demo of the user-side picker on this repo's own docs. Nothing here is applied; it shows the new card shape on three real problems.", "target": "docs/tasks.md", "storage_key": "picker-demo-v1", "decisions": [{"id": "P1", "title": "Decision ids that mean one thing", "ref": "Names used in docs/design and docs/reviews", "question": "When a doc says a decision was made \"per D7\", how do I know which decision that is?", "today": "You cannot tell from the doc. \"D1\" is three different decisions on three different pages: \"Draft report schemas\" on one, \"Sandbox promise for Codex workers\" on another, \"Your work email in a commit\" on a third. docs/design has 38 mentions of ids numbered 1 to 14 (the \"D\" ids) and nothing says which page each came from.", "after": "Every mention reads as a name you can recognise on sight, such as \"the sandbox decision (D7)\", and the ids on a new page never repeat an id an earlier page used.", "preview": "Before:  Residual risk accepted for Codex workers only (D7).\nAfter:   Residual risk accepted for Codex workers only (sandbox decision, ADR 2026-11-14-claude-sandbox-for-workers).\n\nNew page ids:  wave3-D1 -> report-schemas\n               pr43-D1   -> codex-sandbox-promise\n               open-D1   -> work-email", "options": [{"id": "name-in-text", "name": "Say the name next to the id", "recommended": true, "see": "Each time a doc says D7 it also says in words what D7 is, so you never have to look it up.", "asks": "nothing; you read the docs as before.", "how": "A one-time edit of the 38 mentions, and a rule that new mentions carry the name.", "pros": ["You can read any line without opening another file", "Old ids keep working, so old links and pasted prompts still make sense"], "cons": ["38 lines to edit once", "Lines get a little longer"]}, {"id": "page-prefix-ids", "name": "Give every id a page prefix from now on", "recommended": false, "see": "New decisions are called things like wave3-D1, so two pages can never share an id.", "asks": "a habit: you type the longer id when you answer.", "how": "The page tool adds the prefix to every id it shows and puts in the prompt.", "pros": ["An id is unique for good", "Nothing old is edited"], "cons": ["Old ids stay ambiguous", "Longer ids to type and to read"]}], "why": "Writing the name beside the id fixes the old mentions as well as the new ones."}, {"id": "P2", "title": "Where a new session picks up", "ref": "docs/tasks.md, Resume here", "question": "When I start a new session, how do I know where the work stands?", "today": "The top of docs/tasks.md says \"State at 2026-11-16 (wave 3: 6B and PR #43 merged, 16 not started)\" and \"main is at 683e3e5\". main has since moved to 74501b6, and the command-line part of the factory (module 16, the last piece) is built on a branch that is not merged. The line is a day old and wrong on two counts, and the file's own rule is that a new session continues from it alone.", "after": "The first lines of the file always match the repo: which branch has the work, what is merged, and the single next step.", "preview": "Resume here\n  Branch:  wave4/m16-drivers (not pushed), 5 commits ahead of main\n  main:    74501b6 (2026-11-16)\n  Next:    item 12, make a real run work end to end\n  Stale?   no, checked 2026-11-17", "options": [{"id": "refresh-on-finish", "name": "Refresh the top of the file whenever a piece of work finishes", "recommended": true, "see": "The top of tasks.md is rewritten at the end of each piece of work, so it is right when you open it.", "asks": "nothing; the session that finishes the work does it.", "how": "Part of each session's last step, like the log entry it already writes.", "pros": ["No new tool", "The author knows the state best at that moment"], "cons": ["Depends on the session remembering to do it", "A session that stops early leaves it stale, as today"]}, {"id": "generate-the-top", "name": "Fill the top of the file in from the repo each time you open it", "recommended": false, "see": "The branch name, what is merged and how far the work is ahead are filled in for you when you open the file, so they cannot be out of date.", "asks": "a one-time choice of which lines are generated and which stay hand-written.", "how": "A small command that rewrites those lines.", "pros": ["The facts are always current", "Nothing to remember"], "cons": ["Another command to keep working", "The next step still has to be written by hand"]}], "why": "Refreshing at the end of a piece of work needs no new tool and covers the next step too."}, {"id": "P3", "title": "Who notices when the docs go wrong", "ref": "scripts/docs-check, run by hand today", "question": "If a doc link breaks or a decision has no record, when would I find out?", "today": "Only if someone runs the checks by hand. The repo has no automatic check and no commit hook (0 of each), so a broken link or an unrecorded answer waits until a session happens to run records.py. The stale line in the last card is the kind of thing that waits this way.", "after": "A change that breaks a doc check is stopped before it is committed, with a message naming the file and the fix.", "preview": "git commit\n  records: docs/reviews/new-page.json: no record new-page.md and no ADR for Q1\n  commit stopped. Write the record, then commit again.", "options": [{"id": "check-on-commit", "name": "Run the checks every time you commit", "recommended": true, "see": "A commit that breaks a link or leaves an answer unrecorded is stopped, with the file and the fix in the message.", "asks": "a one-time install on each machine, and a skip switch for the rare commit that must go through.", "how": "A commit hook that runs the three quick checks.", "pros": ["Mistakes are caught at the cheapest moment", "No one has to remember"], "cons": ["Each commit takes a second or two longer", "Every clone needs the install"]}, {"id": "remind-at-end", "name": "Keep running them by hand, and make it the last step of every session", "recommended": false, "see": "Nothing changes on your machine; each session's final report says whether the checks passed.", "asks": "nothing.", "how": "A line in the session checklist.", "pros": ["No install", "No new failure to meet while committing"], "cons": ["A session that forgets leaves the problem in place, as today", "You only learn of it from the report"]}], "why": "Catching the mistake when it is made costs a second; finding it later costs a session."}]}</script>
+<script>
+const P=JSON.parse(document.getElementById("data").textContent), D=P.decisions;
+const KEY="decision-page:"+P.storage_key;
+let state={};
+try{state=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch(e){}}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function recOf(d){return d.options.find(o=>o.recommended).id}
+document.getElementById("h1").textContent=P.title;
+document.getElementById("intro").innerHTML=esc(P.intro)+" Spec: <code>"+esc(P.target)+"</code>. Recommended options are preselected. Pick one per card, add a question if you are unsure, then press <b>Generate prompt</b> and paste it back into Claude Code.";
+const list=document.getElementById("list");
+D.forEach(d=>{
+  const cur=(state[d.id]&&state[d.id].choice)||recOf(d);
+  const el=document.createElement("section");el.className="card";
+  el.innerHTML=
+   `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   (d.today ? (d.question?`<p class="q">${esc(d.question)}</p>`:"")+
+     `<div class="ta"><div><b>Today</b>${esc(d.today)}</div><div><b>After the recommended option</b>${esc(d.after)}</div></div>`+
+     `<div class="pv"><b>What it looks like</b><pre>${esc(d.preview)}</pre></div>`
+   : `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`)+
+   `<div class="opts">`+d.options.map(o=>
+     `<label class="opt"><input type="radio" name="${esc(d.id)}" value="${esc(o.id)}" ${o.id===cur?"checked":""}>`+
+     `<span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">Recommended</span>':""}`+
+     (o.see?`<span class="see">What you'll see: ${esc(o.see)}</span>`:"")+
+     (o.asks?`<span class="asks">Asks of you: ${esc(o.asks)}</span>`:"")+
+     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div>`+
+     (o.how?`<details class="how"><summary>How it works</summary>${esc(o.how)}</details>`:"")+`</label>`).join("")+
+   `<label class="opt"><input type="radio" name="${esc(d.id)}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
+   `<p class="why">Why recommended: ${esc(d.why)}</p>`+
+   `<textarea data-q="${esc(d.id)}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;
+  list.appendChild(el);
+});
+list.addEventListener("input",e=>{
+  const t=e.target;
+  if(t.type==="radio"){state[t.name]=Object.assign(state[t.name]||{},{choice:t.value})}
+  else if(t.dataset.q){state[t.dataset.q]=Object.assign(state[t.dataset.q]||{},{note:t.value})}
+  save();
+});
+function build(){
+  const lines=["Decisions on "+P.target+" (from the decision page \""+P.title+"\").","Apply each choice, update everything it touches, and keep related sections consistent. Where I asked a question, answer it and wait for me before applying that item.",""];
+  let unsure=0;
+  D.forEach(d=>{
+    const s=state[d.id]||{};const ch=s.choice||recOf(d);const note=(s.note||"").trim();
+    if(ch==="unsure"){unsure++;lines.push(`${d.id} ${d.title}: NOT SURE.`+(note?` Question: ${note}`:" (no question written)"))}
+    else{const o=d.options.find(x=>x.id===ch);
+      lines.push(`${d.id} ${d.title}: ${o.name} [${o.id}]`+(o.recommended?" (recommended)":" (not the recommendation)")+(note?`. Note: ${note}`:""))}
+  });
+  document.getElementById("count").textContent=`${D.length} decisions, ${unsure} unsure`;
+  return lines.join("\n");
+}
+const out=document.getElementById("out"),ta=document.getElementById("prompt");
+document.getElementById("gen").onclick=()=>{ta.value=build();out.style.display="block";out.scrollIntoView({behavior:"smooth"})};
+document.getElementById("copy").onclick=async()=>{
+  ta.value=build();out.style.display="block";
+  try{await navigator.clipboard.writeText(ta.value);flash("Copied")}catch(e){ta.select();flash(document.execCommand&&document.execCommand("copy")?"Copied":"Select and copy")}
+};
+document.getElementById("reset").onclick=()=>{state={};save();location.reload()};
+function flash(m){const b=document.getElementById("copy");const t=b.textContent;b.textContent=m;setTimeout(()=>b.textContent=t,1200)}
+document.getElementById("count").textContent=`${D.length} decisions`;
+</script>
+</body>
+</html>

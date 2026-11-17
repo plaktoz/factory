@@ -1,0 +1,140 @@
+{
+  "title": "Decision ids, resume status, and keeping docs honest",
+  "intro": "A demo of the user-side picker on this repo's own docs. Nothing here is applied; it shows the new card shape on three real problems.",
+  "target": "docs/tasks.md",
+  "storage_key": "picker-demo-v1",
+  "decisions": [
+    {
+      "id": "P1",
+      "title": "Decision ids that mean one thing",
+      "ref": "Names used in docs/design and docs/reviews",
+      "question": "When a doc says a decision was made \"per D7\", how do I know which decision that is?",
+      "today": "You cannot tell from the doc. \"D1\" is three different decisions on three different pages: \"Draft report schemas\" on one, \"Sandbox promise for Codex workers\" on another, \"Your work email in a commit\" on a third. docs/design has 38 mentions of ids numbered 1 to 14 (the \"D\" ids) and nothing says which page each came from.",
+      "after": "Every mention reads as a name you can recognise on sight, such as \"the sandbox decision (D7)\", and the ids on a new page never repeat an id an earlier page used.",
+      "preview": "Before:  Residual risk accepted for Codex workers only (D7).\nAfter:   Residual risk accepted for Codex workers only (sandbox decision, ADR 2026-11-14-claude-sandbox-for-workers).\n\nNew page ids:  wave3-D1 -> report-schemas\n               pr43-D1   -> codex-sandbox-promise\n               open-D1   -> work-email",
+      "options": [
+        {
+          "id": "name-in-text",
+          "name": "Say the name next to the id",
+          "recommended": true,
+          "see": "Each time a doc says D7 it also says in words what D7 is, so you never have to look it up.",
+          "asks": "nothing; you read the docs as before.",
+          "how": "A one-time edit of the 38 mentions, and a rule that new mentions carry the name.",
+          "pros": [
+            "You can read any line without opening another file",
+            "Old ids keep working, so old links and pasted prompts still make sense"
+          ],
+          "cons": [
+            "38 lines to edit once",
+            "Lines get a little longer"
+          ]
+        },
+        {
+          "id": "page-prefix-ids",
+          "name": "Give every id a page prefix from now on",
+          "recommended": false,
+          "see": "New decisions are called things like wave3-D1, so two pages can never share an id.",
+          "asks": "a habit: you type the longer id when you answer.",
+          "how": "The page tool adds the prefix to every id it shows and puts in the prompt.",
+          "pros": [
+            "An id is unique for good",
+            "Nothing old is edited"
+          ],
+          "cons": [
+            "Old ids stay ambiguous",
+            "Longer ids to type and to read"
+          ]
+        }
+      ],
+      "why": "Writing the name beside the id fixes the old mentions as well as the new ones."
+    },
+    {
+      "id": "P2",
+      "title": "Where a new session picks up",
+      "ref": "docs/tasks.md, Resume here",
+      "question": "When I start a new session, how do I know where the work stands?",
+      "today": "The top of docs/tasks.md says \"State at 2026-11-16 (wave 3: 6B and PR #43 merged, 16 not started)\" and \"main is at 683e3e5\". main has since moved to 74501b6, and the command-line part of the factory (module 16, the last piece) is built on a branch that is not merged. The line is a day old and wrong on two counts, and the file's own rule is that a new session continues from it alone.",
+      "after": "The first lines of the file always match the repo: which branch has the work, what is merged, and the single next step.",
+      "preview": "Resume here\n  Branch:  wave4/m16-drivers (not pushed), 5 commits ahead of main\n  main:    74501b6 (2026-11-16)\n  Next:    item 12, make a real run work end to end\n  Stale?   no, checked 2026-11-17",
+      "options": [
+        {
+          "id": "refresh-on-finish",
+          "name": "Refresh the top of the file whenever a piece of work finishes",
+          "recommended": true,
+          "see": "The top of tasks.md is rewritten at the end of each piece of work, so it is right when you open it.",
+          "asks": "nothing; the session that finishes the work does it.",
+          "how": "Part of each session's last step, like the log entry it already writes.",
+          "pros": [
+            "No new tool",
+            "The author knows the state best at that moment"
+          ],
+          "cons": [
+            "Depends on the session remembering to do it",
+            "A session that stops early leaves it stale, as today"
+          ]
+        },
+        {
+          "id": "generate-the-top",
+          "name": "Fill the top of the file in from the repo each time you open it",
+          "recommended": false,
+          "see": "The branch name, what is merged and how far the work is ahead are filled in for you when you open the file, so they cannot be out of date.",
+          "asks": "a one-time choice of which lines are generated and which stay hand-written.",
+          "how": "A small command that rewrites those lines.",
+          "pros": [
+            "The facts are always current",
+            "Nothing to remember"
+          ],
+          "cons": [
+            "Another command to keep working",
+            "The next step still has to be written by hand"
+          ]
+        }
+      ],
+      "why": "Refreshing at the end of a piece of work needs no new tool and covers the next step too."
+    },
+    {
+      "id": "P3",
+      "title": "Who notices when the docs go wrong",
+      "ref": "scripts/docs-check, run by hand today",
+      "question": "If a doc link breaks or a decision has no record, when would I find out?",
+      "today": "Only if someone runs the checks by hand. The repo has no automatic check and no commit hook (0 of each), so a broken link or an unrecorded answer waits until a session happens to run records.py. The stale line in the last card is the kind of thing that waits this way.",
+      "after": "A change that breaks a doc check is stopped before it is committed, with a message naming the file and the fix.",
+      "preview": "git commit\n  records: docs/reviews/new-page.json: no record new-page.md and no ADR for Q1\n  commit stopped. Write the record, then commit again.",
+      "options": [
+        {
+          "id": "check-on-commit",
+          "name": "Run the checks every time you commit",
+          "recommended": true,
+          "see": "A commit that breaks a link or leaves an answer unrecorded is stopped, with the file and the fix in the message.",
+          "asks": "a one-time install on each machine, and a skip switch for the rare commit that must go through.",
+          "how": "A commit hook that runs the three quick checks.",
+          "pros": [
+            "Mistakes are caught at the cheapest moment",
+            "No one has to remember"
+          ],
+          "cons": [
+            "Each commit takes a second or two longer",
+            "Every clone needs the install"
+          ]
+        },
+        {
+          "id": "remind-at-end",
+          "name": "Keep running them by hand, and make it the last step of every session",
+          "recommended": false,
+          "see": "Nothing changes on your machine; each session's final report says whether the checks passed.",
+          "asks": "nothing.",
+          "how": "A line in the session checklist.",
+          "pros": [
+            "No install",
+            "No new failure to meet while committing"
+          ],
+          "cons": [
+            "A session that forgets leaves the problem in place, as today",
+            "You only learn of it from the report"
+          ]
+        }
+      ],
+      "why": "Catching the mistake when it is made costs a second; finding it later costs a session."
+    }
+  ]
+}
