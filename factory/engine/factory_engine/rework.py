@@ -64,6 +64,7 @@ class Routing:
     loop: int = 0
     max: int = 0
     reason: str = ""
+    code: str | None = None  # the error code of a block the engine raised itself, such as gate.no_test_results
 
 
 def _hook_kind(output: str) -> ErrorKind:
@@ -213,10 +214,13 @@ def _blocked(run: Run, stage_id: str, summary: str, when: datetime) -> Routing:
     return Routing("blocked", reason=summary)
 
 
-def block(run: Run, stage_id: str, reason: str, when: datetime) -> Routing:
+def block(run: Run, stage_id: str, reason: str, when: datetime, *, code: str, command: str) -> Routing:
     """Block the run for a person with this reason (module 8). The engine uses it when a stage's own check fails in a way
-    no loop can fix, such as a verify stage with no test results (T1)."""
-    return _blocked(run, stage_id, reason, when)
+    no loop can fix, such as a verify stage with no test results (T1). `command` is the one the blocked card offers."""
+    routing = _blocked(run, stage_id, reason, when)
+    run.attention.command = command
+    routing.code = code
+    return routing
 
 
 def _go(run: Run, wf: Workflow, stage: Stage, goto: str, *, key: str, limit: int | None, why: str) -> Routing:
@@ -325,4 +329,4 @@ def record_blocked(run_dir: Path, run: Run, routing: Routing) -> None:
     """Log run_blocked once for a run that route or infra_tick just blocked."""
     if routing.action != "blocked":
         raise ValueError("record_blocked takes the routing of a blocked run")
-    append_event(run_dir, "run_blocked", stage=run.stage, reason=routing.reason)
+    append_event(run_dir, "run_blocked", stage=run.stage, reason=routing.reason, code=routing.code)
