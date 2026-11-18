@@ -37,9 +37,9 @@ class Stub:
         self.set(result=str(RECORDED / "ok.json"))
 
     def set(self, **cfg) -> "Stub":
-        """Keys: result (a recorded JSON file), stderr, exit, sleep, artifact ([name, text]), helpers."""
+        """Keys: result (a recorded JSON file), stderr, exit, sleep, artifact ([name, text]), helpers, early_out, early_err."""
         base = {"result": str(RECORDED / "ok.json"), "stderr": "", "exit": 0, "sleep": 0, "artifact": None,
-                "helpers": 0, "record": str(self.record)}
+                "helpers": 0, "early_out": "", "early_err": "", "record": str(self.record)}
         base.update(cfg)
         self.config_path.write_text(json.dumps(base))
         return self
@@ -120,3 +120,21 @@ def make_ctx(worktree, task_dir):
 
 def harness(command: str, env: dict | None = None, model: str | None = None, args: list | None = None) -> HarnessConfig:
     return HarnessConfig(command=command, model=model, args=list(args or []), env=dict(env or {}))
+
+
+def log_seen_while_running(adapter, handle, log: Path, needle: str, limit_s: float = 30.0) -> tuple[bool, bool]:
+    """Runs adapter.wait in a thread and polls worker.log until `needle` is in it. Returns (seen, still_running).
+    The worker is stopped before this returns."""
+    import threading
+    import time
+    t = threading.Thread(target=lambda: adapter.wait(handle, 120), daemon=True)
+    t.start()
+    seen, deadline = False, time.monotonic() + limit_s
+    while time.monotonic() < deadline and not seen:
+        seen = log.is_file() and needle in log.read_text()
+        if not seen:
+            time.sleep(0.1)
+    running = t.is_alive()
+    adapter.stop(handle)
+    t.join(30)
+    return seen, running

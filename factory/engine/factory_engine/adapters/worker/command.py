@@ -19,7 +19,8 @@ from ...errors import FactoryError
 from ...types import CheckResult, RunSpec
 from . import sandbox
 from .base import AttemptResult, Capabilities, HarnessConfig, TaskContext, WorkerHandle
-from .runtime import attempt_folder, base_env, cache_env, kill_group, read_text, remove_attempt, write_log, write_private
+from .runtime import (LogTail, attempt_folder, base_env, cache_env, kill_group, read_text, remove_attempt, wait_tailing,
+                      write_log, write_private)
 
 PASS, CHECK_FAILED, TASK_ERROR = "passed", "check_failed", "task_error"
 
@@ -130,7 +131,8 @@ class CommandAdapter:
             remove_attempt(data["folder"])
             return AttemptResult("failed", None, None, None, None, [], "binary_missing")
         try:
-            rc = proc.wait(timeout=timeout_s)
+            tail = LogTail(data["log"], [(data["stdout"], str), (data["stderr"], str)], [])
+            rc = wait_tailing(proc, timeout_s, tail)
         except subprocess.TimeoutExpired:
             kill_group(proc)
             rc = None

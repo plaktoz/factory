@@ -480,10 +480,12 @@ def _parse(argv: list[str]) -> argparse.Namespace:
         if extra:
             parser.error(f"unrecognized arguments: {' '.join(extra)}")
         return args
-    bad = [tok for tok in extra if not _ANSWER.fullmatch(tok)]
+    # Python 3.14 and later keep a stray token in `answers`; earlier versions return it in `extra`. Check both.
+    answers = [*args.answers, *extra]
+    bad = [tok for tok in answers if not _ANSWER.fullmatch(tok)]
     if bad:
         parser.error(f"unrecognized arguments: {' '.join(bad)} (answers take the form D1=opt-a)")
-    args.answers = [*args.answers, *extra]
+    args.answers = answers
     return args
 
 

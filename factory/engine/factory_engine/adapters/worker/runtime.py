@@ -12,7 +12,8 @@ import shutil
 import signal
 import subprocess
 import tempfile
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ...interpolate import resolve
@@ -91,6 +92,52 @@ def write_log(path: Path, text: str, secrets: list[str]) -> None:
     """worker.log is raw text (module 6). Resolved secrets are masked before the file is written."""
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(mask(text, secrets))
+
+
+class LogTail:
+    """Copies a running worker's output into worker.log, so the live view has something to show (module 12).
+
+    Each source is a capture file and a function that turns its new text into log text. Only complete lines are
+    copied: `mask` cannot match a secret that sits across two chunks, so a partial last line waits for its newline.
+    The end-of-attempt `write_log` replaces this file with the full log, so the finished log does not depend on it.
+    """
+
+    def __init__(self, log: Path, sources: list[tuple[Path, Callable[[str], str]]], secrets: list[str]):
+        self.log, self.secrets = log, secrets
+        self._sources = [[path, render, 0] for path, render in sources]
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("")  # the previous attempt's log is not this one's
+
+    def poll(self) -> None:
+        for src in self._sources:
+            path, render, offset = src
+            try:
+                with open(path, "rb") as f:
+                    f.seek(offset)
+                    data = f.read()
+            except FileNotFoundError:
+                continue
+            end = data.rfind(b"\n") + 1
+            if end == 0:
+                continue
+            src[2] = offset + end
+            text = render(data[:end].decode(errors="replace")).strip("\n")
+            if text:
+                with open(self.log, "a") as out:
+                    out.write(mask(text, self.secrets) + "\n")
+
+
+def wait_tailing(proc: subprocess.Popen, timeout_s: float, tail: LogTail, interval: float = 1.0) -> int:
+    """proc.wait(timeout_s), copying new output into worker.log every `interval` seconds. Raises TimeoutExpired."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        left = deadline - time.monotonic()
+        try:
+            return proc.wait(timeout=max(0.0, min(interval, left)))
+        except subprocess.TimeoutExpired:
+            tail.poll()
+            if left <= interval:
+                raise
 
 
 def read_text(path: Path | None) -> str:

@@ -16,7 +16,7 @@ from factory_engine.adapters.worker.command import CommandAdapter, classify_exit
 from factory_engine.errors import FactoryError
 from factory_engine.types import RunSpec
 
-from conftest import harness
+from conftest import harness, log_seen_while_running
 
 SRT = shutil.which("srt")
 needs_srt = pytest.mark.skipif(SRT is None or sandbox.node_version() is None or sandbox.node_version()[:2] < (22, 12),
@@ -343,3 +343,12 @@ def test_a_command_gets_the_minimal_base_the_run_ids_and_the_cache_folders(cmd_c
     assert env["FACTORY_RUN_ID"] == "run-1" and env["FACTORY_TASK_ID"] == "backend"
     assert env["npm_config_cache"].startswith(str(task_dir))
     assert "AWS_SECRET_ACCESS_KEY" not in env
+
+
+@needs_srt
+def test_worker_log_has_a_cmd_tasks_output_while_it_is_still_running(cmd_ctx, tmp_path, factory_home):
+    ctx = cmd_ctx(cmd=["sh", "-c", "echo step one; sleep 60"])
+    adapter, log = CommandAdapter(dict(os.environ)), tmp_path / "worker.log"
+    handle = adapter.start(ctx, harness("command"), log)
+    seen, running = log_seen_while_running(adapter, handle, log, "step one")
+    assert seen and running

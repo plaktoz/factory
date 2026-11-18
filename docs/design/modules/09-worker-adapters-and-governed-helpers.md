@@ -21,7 +21,7 @@ capabilities: {subagents: native | none, usage: yes | no}
 | Rules file | `AGENTS.md`, imported by `CLAUDE.md` |
 | Native helpers | Claude Code subagents |
 | Usage data | From the JSON result |
-| Live log | Parsed into plain-text `worker.log` |
+| Live log | Parsed into plain-text `worker.log` while the task runs (see Live log below) |
 
 Check each CLI with `--help` on the installed version before relying on a flag, because options change between releases. The adapter is the only place that knows them.
 
@@ -67,6 +67,7 @@ flowchart LR
   res --> rec["usage.jsonl: models observed,<br/>tokens per model"]
 ```
 - **Worker environment:** each worker gets a minimal base (PATH, HOME, locale, `FACTORY_TASK_DIR`) plus only the variables declared for its harness, never the engine's whole environment. For Claude the declared variables are the key or token, `ANTHROPIC_BASE_URL` and `ANTHROPIC_MODEL`, all read from the machine's environment when the attempt starts (decision, 2026-11-14). Tested on Claude Code 2.1.325 with only PATH, HOME, the token and the model passed: a worker without `ANTHROPIC_BASE_URL`, or with it empty, ended with `Not logged in · Please run /login`, and with it passed the worker ran. A run that only has a token and no base URL is therefore a configuration error, not a login. Whether a token issued by Anthropic itself works without a base URL is Unspecified: only a gateway token was tested.
+- **Live log:** while a worker runs, `wait` copies each complete new line of its output into `worker.log` about once a second, masked, using `LogTail` and `wait_tailing` in `runtime.py`. A partial last line waits for its newline, because `mask` cannot match a secret split across two chunks. The write at the end of the attempt replaces the file with the full log. Claude's output is one JSON result line, so its live log holds stderr until the attempt ends.
 - **Secret masking:** resolved secret values are masked as `***` in `worker.log`, `events.jsonl` and feedback records.
 - **Other providers:** cloud setups such as Bedrock or Vertex are configured through the CLI's own environment variables, declared under `env` the same way. Confirm the variable names with each CLI's documentation.
 - **`factory doctor`** checks each harness before a run: the binary exists, the version, the variables resolve, and the auth status. It also checks `git` and `gh auth status`, and runs the sandbox canary described under Threat model and isolation.
@@ -283,6 +284,7 @@ Acceptance criteria:
 - [x] A `--model` flag wins over `ANTHROPIC_MODEL`, and an empty `ANTHROPIC_MODEL` is passed as unset. (test: factory/engine/tests/workers/test_claude_adapter.py::test_a_model_flag_from_the_task_wins_over_anthropic_model, ::test_an_empty_anthropic_model_is_passed_as_unset)
 - [x] A worker started from a scrubbed environment receives `ANTHROPIC_BASE_URL` from the machine's environment, as it does the key or token and the model. With the variable missing or empty, the worker ends as `auth` (`Not logged in`) and needs a human. A test with the stub binary replays both. (test: factory/engine/tests/workers/test_claude_adapter.py::test_the_base_url_reaches_the_worker_from_the_machine_when_the_config_does_not_declare_it, ::test_a_missing_base_url_ends_as_auth_and_needs_a_human (stub binary))
 - [x] A recorded result with two `modelUsage` keys gives both names in `models_observed`, and tokens summed across them. (test: factory/engine/tests/workers/test_claude_adapter.py::test_a_result_with_two_modelusage_keys_gives_both_names_and_summed_tokens)
+- [x] `worker.log` has a running worker's output before the attempt ends, and a secret split across two writes is masked. (test: factory/engine/tests/workers/test_log_tail.py::test_a_secret_split_across_two_writes_is_never_in_the_log, ::test_wait_tailing_copies_output_while_the_process_is_still_running, and the three adapter tests named in module 12)
 - [x] Secret values never appear in `worker.log`. (test: factory/engine/tests/workers/test_claude_adapter.py::test_secret_values_never_appear_in_the_worker_log)
 - [x] `stop` ends the worker and any helper sessions it started. (test: factory/engine/tests/workers/test_claude_adapter.py::test_stop_ends_the_worker_and_its_helper_sessions)
 - [x] The same request gives gate evidence of the same shape with helpers off and on. (test: factory/engine/tests/workers/test_prompt_and_ledger.py::test_the_same_request_gives_gate_evidence_of_the_same_shape_with_helpers_off_and_on, factory/engine/tests/workers/test_claude_adapter.py::test_helpers_on_and_off_give_attempt_evidence_of_the_same_shape)

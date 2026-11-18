@@ -277,6 +277,21 @@ def test_decide_rejects_a_token_that_is_not_an_answer_with_exit_2_and_asks_for_n
     assert json.loads(capsys.readouterr().out)["code"] == "cli.usage"
 
 
+@pytest.mark.parametrize("tokens", [["oops"], ["D1=opt-a", "oops"], ["oops", "D1=opt-a"]])
+def test_parse_rejects_a_stray_token_wherever_argparse_puts_it(tokens, capsys):
+    """Python 3.14 and later put a lone stray token in `answers`, not in the leftovers. `_parse` must check both."""
+    with pytest.raises(SystemExit) as e:
+        cli._parse(["decide", "R1", "--packet", "661cb74d", *tokens])
+    assert e.value.code == EXIT_INVALID
+    seen = capsys.readouterr()  # stderr or JSON on stdout, depending on whether an earlier `main` left --json on
+    assert "unrecognized arguments: oops" in seen.out + seen.err
+
+
+def test_parse_keeps_every_answer_in_order_wherever_argparse_puts_them():
+    args = cli._parse(["decide", "R1", "D1=opt-a", "--packet", "661cb74d", "D2=opt-b"])
+    assert args.answers == ["D1=opt-a", "D2=opt-b"]
+
+
 def test_a_command_other_than_decide_still_rejects_a_stray_token(seeded, capsys, spawned):
     with pytest.raises(SystemExit) as e:
         cli.main(["sync", "D1=opt-a", "--repo", str(seeded), "--json"])

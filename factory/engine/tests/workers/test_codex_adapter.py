@@ -21,7 +21,7 @@ from factory_engine.adapters.worker.codex import CodexAdapter
 from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy
 
-from conftest import HERE, RECORDED, harness
+from conftest import HERE, RECORDED, harness, log_seen_while_running
 
 SRT = shutil.which("srt")
 needs_srt = pytest.mark.skipif(SRT is None or sandbox.node_version() is None or sandbox.node_version()[:2] < (22, 12),
@@ -299,6 +299,15 @@ def test_the_worker_log_is_plain_text_and_masks_the_key(stub, machine, make_ctx,
     assert "***" in text
     assert "done" in text and "$ /bin/zsh" in text  # the agent message and the command line, as plain text
     assert not text.lstrip().startswith("{")
+
+
+def test_worker_log_has_the_agent_text_while_the_worker_is_still_running(stub, machine, make_ctx, tmp_path):
+    stub.set(early_out='{"type": "item.completed", "item": {"type": "agent_message", "text": "reading the failing test"}}', sleep=60)
+    adapter, log = gateway_adapter(machine), tmp_path / "worker.log"
+    handle = adapter.start(make_ctx(), conf_for(stub), log)
+    seen, running = log_seen_while_running(adapter, handle, log, "reading the failing test")
+    assert seen and running
+    assert not log.read_text().lstrip().startswith("{")  # plain text, not the event line
 
 
 # ---- stop -----------------------------------------------------------------------------------------------------
