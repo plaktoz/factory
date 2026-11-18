@@ -49,6 +49,12 @@ def main():
     if pids and rec is not None:
         (rec / "helper-pids.txt").write_text("\n".join(map(str, pids)) + "\n")
 
+    if cfg.get("early_out"):  # printed before the sleep, so a test can read worker.log while the worker runs
+        sys.stdout.write(cfg["early_out"] + "\n")
+        sys.stdout.flush()
+    if cfg.get("early_err"):
+        sys.stderr.write(cfg["early_err"] + "\n")
+        sys.stderr.flush()
     if cfg.get("sleep"):
         time.sleep(float(cfg["sleep"]))
 

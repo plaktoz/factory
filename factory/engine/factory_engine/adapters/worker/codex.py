@@ -21,8 +21,8 @@ from ...prompt import build_prompt
 from ...types import CheckResult, HelperPolicy
 from . import sandbox
 from .base import AttemptResult, Capabilities, HarnessConfig, TaskContext, WorkerHandle
-from .runtime import (FORBIDDEN_ENV, attempt_folder, base_env, cache_env, declared_env, kill_group, read_text,
-                      remove_attempt, secret_values, write_log, write_private)
+from .runtime import (FORBIDDEN_ENV, LogTail, attempt_folder, base_env, cache_env, declared_env, kill_group, read_text,
+                      remove_attempt, secret_values, wait_tailing, write_log, write_private)
 
 # The variables the Codex harness reads from the environment. OPENAI_API_KEY is the gateway key.
 CODEX_VARS = ("OPENAI_API_KEY", "OPENAI_BASE_URL")
@@ -301,7 +301,8 @@ class CodexAdapter:
             return AttemptResult("failed", 127, None, None, None, [], "binary_missing")
         timed_out = False
         try:
-            rc = proc.wait(timeout=timeout_s)
+            tail = LogTail(data["log"], [(data["stdout"], plain_log), (data["stderr"], str)], data["secrets"])
+            rc = wait_tailing(proc, timeout_s, tail)
         except subprocess.TimeoutExpired:
             timed_out = True
             kill_group(proc)

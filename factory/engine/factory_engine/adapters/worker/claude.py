@@ -22,8 +22,8 @@ from ...prompt import build_prompt
 from ...types import CheckResult, HelperPolicy, McpServer
 from . import sandbox
 from .base import AttemptResult, Capabilities, HarnessConfig, TaskContext, WorkerHandle
-from .runtime import (FORBIDDEN_ENV, attempt_folder, base_env, cache_env, declared_env, kill_group, read_text,
-                      remove_attempt, resolve_mcp, secret_values, write_log, write_private)
+from .runtime import (FORBIDDEN_ENV, LogTail, attempt_folder, base_env, cache_env, declared_env, kill_group, read_text,
+                      remove_attempt, resolve_mcp, secret_values, wait_tailing, write_log, write_private)
 
 # The variables the Claude harness reads from the environment (module 9, Connecting to the LLMs).
 CLAUDE_VARS = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "ANTHROPIC_MODEL")
@@ -327,7 +327,8 @@ class ClaudeAdapter:
             return AttemptResult("failed", 127, None, None, None, [], "binary_missing")
         timed_out = False
         try:
-            rc = proc.wait(timeout=timeout_s)
+            tail = LogTail(data["log"], [(data["stdout"], str), (data["stderr"], str)], data["secrets"])
+            rc = wait_tailing(proc, timeout_s, tail)
         except subprocess.TimeoutExpired:
             timed_out = True
             kill_group(proc)

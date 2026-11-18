@@ -12,7 +12,7 @@ from factory_engine.adapters.worker.claude import ClaudeAdapter
 from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy, McpServer
 
-from conftest import ENV_GW, RECORDED, harness
+from conftest import ENV_GW, RECORDED, harness, log_seen_while_running
 
 
 def attempt(adapter, ctx, conf, tmp_path, timeout=60):
@@ -186,6 +186,16 @@ def test_secret_values_never_appear_in_the_worker_log(stub, machine, make_ctx, t
     text = log.read_text()
     assert ENV_GW["ANTHROPIC_AUTH_TOKEN"] not in text
     assert "***" in text
+
+
+def test_worker_log_has_the_output_while_the_worker_is_still_running_and_masks_it(stub, machine, make_ctx, tmp_path):
+    token = ENV_GW["ANTHROPIC_AUTH_TOKEN"]
+    stub.set(early_err=f"warming up, token {token}", sleep=60)
+    adapter, log = gateway_adapter(machine), tmp_path / "worker.log"
+    handle = adapter.start(make_ctx(), GW_CONF, log)
+    seen, running = log_seen_while_running(adapter, handle, log, "warming up")
+    assert seen and running
+    assert token not in log.read_text()
 
 
 # ---- the sandbox settings file ------------------------------------------------------------------------------------
