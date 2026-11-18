@@ -4,10 +4,6 @@ Made on 2026-11-14 from `open-decisions.html` (source `open-decisions.json`). Th
 
 | # | Decision | Chosen | Applied in |
 | --- | --- | --- | --- |
-| R1 | Which shared types wave 0 freezes | `freeze-shared`: freeze the 20 shared types now, with the shapes proposed in [the readiness review](ready-for-development.md), in section 18 | [18](../design/shared/18-shared-contracts.md) |
-| R2 | One configuration type or two | `one-config`: one `Config` with a machine part and a repo part; `tick` takes a `Config` loaded with `repo=None` | [3](../design/modules/03-kit-and-configuration.md), [16](../design/modules/16-drivers.md), [17](../design/modules/17-housekeeping.md), [18](../design/shared/18-shared-contracts.md) |
-| R3 | Where the worktree comparison comes from | `repo-script`: the repo supplies the comparison as a command and sets `cleanup_check`; the spec stays as written | No spec change. Checked in [3](../design/modules/03-kit-and-configuration.md) and [17](../design/modules/17-housekeeping.md) |
-| D7 | Worker isolation | `claude-sandbox`: Claude Code's own sandbox setting on for every worker, reads of secrets denied, writes only to the worktree and `$FACTORY_TASK_DIR`, `doctor` runs the canary each time | [9](../design/modules/09-worker-adapters-and-governed-helpers.md), [phase split](../design/phase-1.md), [decision log](phase-1-decisions.md) |
 
 ```mermaid
 flowchart LR

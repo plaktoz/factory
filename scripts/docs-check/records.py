@@ -5,7 +5,8 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
 1. Every docs/reviews/<name>.json (a decision page source) has a <name>.md, or an ADR in docs/adr/
    whose Source line names the page and each decision id. If it has a .md, then for each
    decision id the .md has a table row that starts with that id and names one of that
-   decision's option ids (or NOT SURE). A page answered in the browser and pasted back is
+   decision's option ids (or NOT SURE), or an ADR names the page and that id (a closed row may
+   be removed from the .md once its ADR exists). A page answered in the browser and pasted back is
    not durable until this passes.
 2. The .html beside each .json is the rendering of it (same data), so the page cannot show
    a question the record has already closed.
@@ -58,7 +59,8 @@ for src in sorted((root / "docs/reviews").glob("*.json")):
         ids = {o["id"] for o in d["options"]}
         mine = [r for r in table if re.match(rf"\|\s*{re.escape(d['id'])}\b", r)]
         if not mine:
-            problems.append(f"{rec.name}: no table row for {d['id']}")
+            if d["id"] not in in_adr:
+                problems.append(f"{rec.name}: no table row and no ADR for {d['id']}")
         elif not any(any(f"`{i}`" in r or i in r for i in ids) or "NOT SURE" in r for r in mine):
             problems.append(f"{rec.name}: row for {d['id']} names none of its options {sorted(ids)}")
 
