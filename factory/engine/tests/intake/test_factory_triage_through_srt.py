@@ -18,6 +18,13 @@ from factory_engine.state import _dataclass_doc
 from factory_engine.triage_cli import REQUEST_FILE
 
 
+ENGINE_DIR = Path(__file__).resolve().parents[2]
+
+# `python -m factory_engine triage`, from the checkout under test. The adapter passes the child no PYTHONPATH, so the
+# child would otherwise import whatever the virtualenv's editable install points at, which may be another checkout.
+_RUN_THIS_CHECKOUTS_TRIAGE = ("import runpy, sys; sys.path.insert(0, sys.argv[1]); sys.argv = ['factory_engine', 'triage']; "
+                              "runpy.run_module('factory_engine', run_name='__main__', alter_sys=True)")
+
 needs_srt = pytest.mark.skipif(shutil.which("srt") is None or sandbox.node_version() is None
                                or sandbox.node_version()[:2] < (22, 12),
                                reason="srt 0.0.83 and Node 22.12+ are required (module 9)")
@@ -34,10 +41,9 @@ def test_factory_triage_run_under_srt_reads_the_copied_request_and_writes_triage
                   "sha", "app", "Fix the crash", None, None, None, [])
     (task_dir / REQUEST_FILE).write_text(json.dumps({"schema_version": 1, **_dataclass_doc(req)}))
 
-    ctx = _task_context(worktree, task_dir, cmd=[sys.executable, "-m", "factory_engine", "triage"])
+    ctx = _task_context(worktree, task_dir, cmd=[sys.executable, "-c", _RUN_THIS_CHECKOUTS_TRIAGE, str(ENGINE_DIR)])
     env = dict(os.environ)
     env["FACTORY_TASK_DIR"] = str(task_dir)
-    env["PYTHONPATH"] = str(Path(__file__).resolve().parents[2])
     adapter = CommandAdapter(env)
     handle = adapter.start(ctx, HarnessConfig("command", None, [], {}), tmp_path / "worker.log")
     result = adapter.wait(handle, 120)
