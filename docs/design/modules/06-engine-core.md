@@ -217,7 +217,7 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 
 **Run rebuild**
 
-Decision E1, option `[snapshot-event]` (decision page `docs/reviews/rebuild-run-decisions.html`; the event catalogue named no fields, so a run could not be rebuilt from it).
+Decision E1, option `[snapshot-event]` (ADR [rebuild-run-from-last-snapshot](../../adr/2026-11-15-rebuild-run-from-last-snapshot.md); the event catalogue named no fields, so a run could not be rebuilt from it).
 
 - After each change to a run, the engine writes one `run_snapshot` event to `events.jsonl`. It carries the whole run.
 - `recover --rebuild`, and the read of an unreadable `run.json`, replay only the last `run_snapshot`. They do not read the other events to rebuild.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a decisions JSON file to a single self-contained HTML page.
 
-    python3 -I render.py docs/reviews/<name>.json      -> docs/reviews/<name>.html
+    python3 -I render.py docs/decision-pages/<name>.json      -> docs/decision-pages/<name>.html
 
 Validates the schema in SKILL.md and exits non-zero on any problem. A page in the old shape (a single `context`, no
 `see` or `asks` per option) still renders, with a warning, so pages already answered stay readable.

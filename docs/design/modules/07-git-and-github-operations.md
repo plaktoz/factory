@@ -31,7 +31,7 @@ Only skill tasks: reproduce, root cause, propose, fix, review, architecture pack
 **Rules**
 
 - The engine never force-pushes and never pushes to the base branch.
-- **Commit authority.** Workers never commit. The engine commits in two places only: checkpoint commits on a task branch, which stay local and are never pushed, and one join commit per task on the run branch, which is the only history that is pushed. A repo whose own rules say "no commit without a request" (the pilot repo, see [pilot repo decisions](../../reviews/phase-1-decisions.md#pilot-repo-decisions-p1-to-p4)) accepts these engine commits when its owner runs `factory init` there ([module 3](03-kit-and-configuration.md)). There is no switch to turn checkpoints off: crash recovery (D12), note delivery and the reset target all need them.
+- **Commit authority.** Workers never commit. The engine commits in two places only: checkpoint commits on a task branch, which stay local and are never pushed, and one join commit per task on the run branch, which is the only history that is pushed. A repo whose own rules say "no commit without a request" (the pilot repo, see [checkpoint commits stay local](../../adr/2026-11-14-checkpoint-commits-stay-local.md)) accepts these engine commits when its owner runs `factory init` there ([module 3](03-kit-and-configuration.md)). There is no switch to turn checkpoints off: crash recovery (D12), note delivery and the reset target all need them.
 
 ```mermaid
 flowchart LR

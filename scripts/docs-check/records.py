@@ -2,7 +2,7 @@
 
 Run from the repo root: python3 -I scripts/docs-check/records.py .
 
-1. Every docs/reviews/<name>.json (a decision page source) has a <name>.md, or an ADR in docs/adr/
+1. Every docs/decision-pages/<name>.json (a decision page source) has a <name>.md, or an ADR in docs/adr/
    whose Source line names the page and each decision id. If it has a .md, then for each
    decision id the .md has a table row that starts with that id and names one of that
    decision's option ids (or NOT SURE), or an ADR names the page and that id (a closed row may
@@ -30,7 +30,7 @@ def rows(md):
     return [l for l in md.splitlines() if l.startswith("|")]
 
 
-for src in sorted((root / "docs/reviews").glob("*.json")):
+for src in sorted((root / "docs/decision-pages").glob("*.json")):
     doc = json.loads(src.read_text(encoding="utf-8"))
     if "decisions" not in doc:
         continue
@@ -38,7 +38,7 @@ for src in sorted((root / "docs/reviews").glob("*.json")):
     html = src.with_suffix(".html")
     adrs = [a.read_text(encoding="utf-8") for a in (root / "docs/adr").glob("*.md")]
     in_adr = {d["id"] for d in doc["decisions"]
-              if any(f"page `docs/reviews/{src.name}`" in a and f"decision `{d['id']}`" in a for a in adrs)}
+              if any(f"page `docs/decision-pages/{src.name}`" in a and f"decision `{d['id']}`" in a for a in adrs)}
     if not rec.exists():
         missing = [d["id"] for d in doc["decisions"] if d["id"] not in in_adr]
         if missing:

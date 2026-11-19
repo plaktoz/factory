@@ -70,7 +70,7 @@ class FactoryError(Exception):
 
 **Frozen cross-module types** (`types.py`)
 
-These 21 types, `ErrorKind` above and the 20 below, are used by two or more modules, or appear in a field of a shared type. Their shapes were accepted on 2026-11-14 (decision R1, see [open decisions](../../reviews/open-decisions.md)), so every module in waves 1 to 3 and every wave 0 fake codes to one shape. A change to one of them is made in this section and in every module in its **Used by** cell, in the same commit.
+These 21 types, `ErrorKind` above and the 20 below, are used by two or more modules, or appear in a field of a shared type. Their shapes were accepted on 2026-11-14 (decision R1, see [freeze the shared types](../../adr/2026-11-14-freeze-shared-types.md)), so every module in waves 1 to 3 and every wave 0 fake codes to one shape. A change to one of them is made in this section and in every module in its **Used by** cell, in the same commit.
 
 ```python
 # types.py
@@ -168,7 +168,7 @@ class UsageRecord:    run_id: str; task_id: str; stage: str; attempt: int; harne
 | `UsageRecord` | 13, 14, 15, 16 | The `usage.jsonl` table in 14, with P4 |
 | `ErrorKind` | 8, 19 | The five handling types in [section 19](19-error-handling-types.md) |
 
-**Commands are argument lists.** `GateSpec.cmd`, `TaskSpec.cmd` and `Workflow.join_cmd` hold a list of strings, never a shell string. A string in a workflow or plugin file fails at load with `config.invalid`, the file, the line and the list form to write. The decision is Q3 in [open decisions](../../reviews/open-decisions.md).
+**Commands are argument lists.** `GateSpec.cmd`, `TaskSpec.cmd` and `Workflow.join_cmd` hold a list of strings, never a shell string. A string in a workflow or plugin file fails at load with `config.invalid`, the file, the line and the list form to write. The decision is Q3, [commands are lists only](../../adr/2026-11-14-commands-are-lists-only.md).
 
 **`Config`.** `Config` is the one configuration type. It has a `.machine` part, read from the machine file, and a `.repo` part, read from `.factory/config/`. `load_config(repo)` ([module 3](../modules/03-kit-and-configuration.md)) builds it, and `.repo` is `None` when `repo` is `None`. A function that runs without a repo, such as `tick` ([module 16](../modules/16-drivers.md)), takes a `Config` loaded that way. The keys of each part are defined by the schemas in module 3, not here.
 

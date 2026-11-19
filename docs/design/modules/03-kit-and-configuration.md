@@ -84,7 +84,7 @@ max_workers: 6                   # machine-wide cap on running workers, shared b
 
 | Repo rule | How the engine meets it |
 | --- | --- |
-| "No commit without a request" | Checkpoint commits stay on a local task branch that is never pushed, and only the join commit is pushed ([module 7](07-git-and-github-operations.md)). The owner accepts this by running `factory init` in the repo; the decision is in [phase 1 decisions](../../reviews/phase-1-decisions.md#pilot-repo-decisions-p1-to-p4). |
+| "No commit without a request" | Checkpoint commits stay on a local task branch that is never pushed, and only the join commit is pushed ([module 7](07-git-and-github-operations.md)). The owner accepts this by running `factory init` in the repo; the decision is in [checkpoint commits stay local](../../adr/2026-11-14-checkpoint-commits-stay-local.md) (P1). |
 | "Remove a worktree only after comparing its files" | `cleanup_check` names the comparison. Unset: a worktree that is not clean is skipped and reported. Set: its exit code decides ([module 17](17-housekeeping.md)). |
 | "No model override" | The engine sends no model flag unless a model is set in config, and records the model the harness reports ([module 9](09-worker-adapters-and-governed-helpers.md), [module 14](14-token-tracking.md)). |
 
