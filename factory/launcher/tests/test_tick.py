@@ -51,6 +51,7 @@ def _repo(tmp_path: Path, name="repo") -> Path:
     ("running", "live", True, False, tick_mod.NOTHING),
     ("awaiting_approval", "free", True, True, tick_mod.START),
     ("awaiting_approval", "free", True, False, tick_mod.NOTHING),
+    ("awaiting_approval", "live", True, False, tick_mod.NOTHING),
     ("retrying", "free", True, False, tick_mod.START),
     ("blocked", "free", True, False, tick_mod.NOTHING),
     ("done", "free", True, False, tick_mod.NOTHING),
@@ -58,6 +59,16 @@ def _repo(tmp_path: Path, name="repo") -> Path:
 ])
 def test_each_status_and_lock_gets_the_action_module_6_gives(status, lock, repo_exists, answered, expected):
     assert tick_mod.decide(status, lock, repo_exists, answered=answered) == expected
+
+
+@pytest.mark.parametrize("status,lock,expected", [
+    ("awaiting_approval", "free", tick_mod.START),
+    ("awaiting_approval", "live", tick_mod.NOTHING),
+    ("running", "free", tick_mod.NOTHING),
+    ("done", "free", tick_mod.NOTHING),
+])
+def test_a_changed_pull_request_starts_an_engine_only_for_a_waiting_run_with_no_live_lock(status, lock, expected):
+    assert tick_mod.decide(status, lock, True, pr_changed=True) == expected
 
 
 # ---- a tick: start, resume, skip ----------------------------------------------------------------------------------
@@ -153,7 +164,81 @@ def test_a_tick_syncs_each_repo_with_its_own_settings(home, tmp_path, monkeypatc
     assert seen == [repo]
 
 
-def test_the_tick_report_names_the_steps_the_engine_cannot_do_yet(home, tmp_path):
-    report = tick_mod.tick(load_config(None, env={"FACTORY_HOME": str(home)}), repos=[], home=home,
-                           spawn=lambda r, rid: 1)
-    assert any("pull request" in u for u in report.unsupported)
+# ---- a run waiting on its pull request (module 6 step 3, module 13 watch_pr) ---------------------------------------
+
+@pytest.fixture
+def waiting(home, tmp_path):
+    """A run parked at its merge review, with a pull request on a FakePullRequests the tick reads."""
+    from factory_engine import gitops
+    from factory_engine.fake_prs import FakePullRequests
+    from factory_engine.types import PrRef, Request, Source
+
+    repo = _repo(tmp_path)
+    cfg = Config(machine={}, repo={"base_branch": "main"})
+    src = Source("cli", "acme/report#1", "Bump", "Bump it.", ["chore"], "alice", [])
+    request = Request("cli-1", src, "sha1", "repo", "Bump", "chore", "explicit", None, [])
+    ref = state.init_run(home, repo, state.repo_key(repo, cfg), "bump-q1w2e", request, branch="bump-q1w2e",
+                         worktree=tmp_path / "wt", kit_hash="0" * 12)
+    prs = FakePullRequests()
+    body = tmp_path / "body.md"
+    body.write_text("body")
+    pr = prs.create(tmp_path, base="main", head="bump-q1w2e", title="Bump", body_file=body, labels=[])
+    run = state.read_run(ref.run_dir)
+    run.status, run.pr, run.workflow = "awaiting_approval", PrRef(**pr.__dict__), "chore"
+    lock = acquire_lock(ref.run_dir, "test")
+    state.write_run(ref.run_dir, run, lock=lock)
+    release(lock)
+    return ref, prs, pr
+
+
+def _tick(home, prs, spawned):
+    return tick_mod.tick(load_config(None, env={"FACTORY_HOME": str(home)}), repos=[], home=home,
+                         spawn=lambda r, rid: spawned.append(rid) or 1, prs_for=lambda repo: prs)
+
+
+def test_a_tick_leaves_a_run_whose_pull_request_is_open_and_not_red(waiting, home):
+    ref, prs, pr = waiting
+    spawned: list[str] = []
+    for ci in ("pending", "green"):
+        prs.set_ci(pr, ci)
+        report = _tick(home, prs, spawned)
+        assert spawned == [] and report.started == []
+
+
+@pytest.mark.parametrize("change", ["merge", "close", "red"])
+def test_a_tick_starts_an_engine_for_a_run_whose_pull_request_merged_closed_or_went_red(waiting, home, change):
+    ref, prs, pr = waiting
+    {"merge": prs.human_merge, "close": prs.close, "red": lambda p: prs.set_ci(p, "red", "lint: FAILURE")}[change](pr)
+    spawned: list[str] = []
+    report = _tick(home, prs, spawned)
+    assert spawned == ["bump-q1w2e"] and report.started == ["bump-q1w2e"]
+
+
+def test_a_tick_writes_no_run_state_when_it_reads_a_pull_request(waiting, home):
+    ref, prs, pr = waiting
+    prs.human_merge(pr)
+    before = (ref.run_dir / "run.json").read_text()
+    _tick(home, prs, [])
+    assert (ref.run_dir / "run.json").read_text() == before
+    assert state.read_run(ref.run_dir).status == "awaiting_approval"
+
+
+def test_a_tick_that_cannot_read_github_reports_it_and_starts_nothing(waiting, home):
+    from factory_engine.errors import FactoryError
+    ref, prs, pr = waiting
+    prs.fail_next = FactoryError("git.network", "gh is unreachable")
+    spawned: list[str] = []
+    report = _tick(home, prs, spawned)
+    assert spawned == [] and any("gh is unreachable" in e for e in report.errors)
+
+
+def test_a_tick_does_not_read_a_pull_request_while_an_engine_holds_the_run(waiting, home):
+    ref, prs, pr = waiting
+    prs.human_merge(pr)
+    lock = acquire_lock(ref.run_dir, "live")
+    try:
+        spawned: list[str] = []
+        _tick(home, prs, spawned)
+        assert spawned == [] and "state" not in prs.calls
+    finally:
+        release(lock)

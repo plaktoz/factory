@@ -10,7 +10,7 @@ The engine owns the run lifecycle, the state files, the scheduler, the lock on e
 2. `factory run` starts an engine process. It takes the lock on each run it drives, schedules tasks, runs gates, joins and moves stages.
 3. At a human stop, the run waits as `awaiting_approval` or `blocked`; while GitHub or the network is down it waits as `retrying`. When every run it drives is done or waiting on a human, the engine process exits.
 4. An answer (dashboard, CLI, chat or file edit) restarts an engine on that run, which continues where it stopped ([module 11](11-human-stops.md)).
-5. Delivery opens the pull request or writes the sink. The run ends `done`, `failed` or `aborted`, and writes `summary.md`.
+5. Delivery opens the pull request or writes the sink and writes `summary.md`. A run with a pull request then waits as `awaiting_approval` at its merge review, and ends `done` when GitHub merges the pull request or `aborted` when it is closed; red CI sends it back through the last stage's `on_fail` edge ([ADR](../../adr/2026-11-20-run-state-while-the-pull-request-is-open.md)). A run with any other sink ends `done` at once. A run can also end `failed`.
 
 **Scheduled ticks**
 
@@ -84,7 +84,7 @@ It then takes one action per run:
 | running | stale (no process holds the lock) | Resumes it: ends any worker left over, closes open attempts as interrupted, starts an engine |
 | awaiting\_approval, decision now answered | free | Starts an engine, as a safety net if the answer did not already start one |
 | awaiting\_approval, still unanswered | free | Sends a reminder if one is due |
-| awaiting\_approval, merge review | free | Checks the pull request: merged, closed or red CI |
+| awaiting\_approval, merge review | free | Reads the pull request (`watch_pr`) and writes nothing; starts an engine when it is merged, closed or red, and that engine ends or routes the run |
 | retrying | free | Starts an engine that repeats the failed operation; blocks the run once `infra_wait_hours` have passed |
 | blocked | free | Reminder only; it waits for you |
 | done, failed or aborted | free | Housekeeping candidate |

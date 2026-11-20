@@ -43,15 +43,17 @@ def test_every_attempt_has_a_usage_record_written_before_the_worker_starts(new_r
 from conftest import chore_script  # noqa: E402
 
 
-def test_a_clean_chore_run_ends_done_and_opens_a_pull_request(new_run, engine, prs):
+def test_a_clean_chore_run_waits_at_its_merge_review_and_is_done_once_the_pull_request_merges(new_run, engine, prs):
     run_dir = new_run()
     script, writes = chore_script(run_dir)
     eng, _ = engine(script, writes)
     result = eng.run(["bump-q1w2e"])
     run = state.read_run(run_dir)
-    assert result.runs == {"bump-q1w2e": "done"} and result.exit_code == 0
+    assert result.runs == {"bump-q1w2e": "awaiting_approval"} and result.exit_code == 3
     assert [s.status for s in run.stages] == ["done", "done", "done"]
     assert run.pr is not None and len(prs.prs) == 1
+    prs.human_merge(run.pr)
+    assert eng.run(["bump-q1w2e"]).runs == {"bump-q1w2e": "done"}
 
 
 def test_a_failed_gate_routes_back_with_a_feedback_record_and_blocks_at_the_loop_maximum(new_run, engine):
@@ -110,7 +112,7 @@ def test_a_task_over_its_timeout_is_recorded_and_a_worker_error_starts_a_new_att
     eng, _ = engine(script, writes)
     result = eng.run(["bump-q1w2e"])
     records = usage.read_usage(run_dir, "change")
-    assert result.runs["bump-q1w2e"] == "done"
+    assert result.runs["bump-q1w2e"] == "awaiting_approval"
     assert [r.exit for r in records] == ["failed", "failed", "ok"]   # timeout and crash are worker errors, then success
     assert [r.attempt for r in records] == [1, 2, 3]
 
@@ -354,7 +356,7 @@ def test_kill_the_engine_mid_task_then_resume(new_run, engine, repo, cfg, tmp_pa
     status = state.read_run(run_dir).status
     ran = [c.task_id for c in worker.started]
     records = usage.read_usage(run_dir, "change")
-    assert status == "done"
+    assert status == "awaiting_approval"  # the pull request is open; the run waits at its merge review
     assert "rules" not in ran and ran.count("change") == 1
     assert [r.exit for r in records] == ["interrupted", "ok"]
     patches = list((run_dir / "tasks" / "change").glob("discarded-*.patch"))
@@ -507,7 +509,9 @@ def test_an_answered_approval_stop_lets_a_new_engine_continue_the_run_to_done(ne
     assert eng.run(["bump-q1w2e"]).runs["bump-q1w2e"] == "awaiting_approval"
     _answer(run_dir, "implement", "approve")
     result = eng.run(["bump-q1w2e"])                      # the driver starts a new engine once the answer is in
-    assert result.runs["bump-q1w2e"] == "done" and result.exit_code == 0
+    assert result.runs["bump-q1w2e"] == "awaiting_approval" and result.exit_code == 3
+    eng.prs.human_merge(state.read_run(run_dir).pr)
+    assert eng.run(["bump-q1w2e"]).runs["bump-q1w2e"] == "done"
 
 
 def test_an_unanswered_approval_stop_stays_parked_when_an_engine_starts(new_run, engine):
@@ -532,5 +536,5 @@ def test_an_answered_triage_stop_continues_with_the_chosen_workflow(new_run, eng
     result = eng.run(["bump-q1w2e"])
     run = state.read_run(run_dir)
     assert run.workflow == "chore" and run.request.type == "chore" and run.request.type_source == "explicit"
-    assert result.runs["bump-q1w2e"] == "done"
+    assert result.runs["bump-q1w2e"] == "awaiting_approval"
     assert [e.type for e in state.read_events(run_dir) if e.type == "triage_answered"]

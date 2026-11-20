@@ -76,7 +76,7 @@ def _tick(args, home: Path) -> int:
     report = tick_mod.tick(cfg, repos=repos, home=home)
     data = {"skipped_tick": report.skipped_tick, "started": report.started, "resumed": report.resumed,
             "skipped": report.skipped, "repo_missing": report.repo_missing, "synced": report.synced,
-            "errors": report.errors, "unsupported": report.unsupported}
+            "errors": report.errors}
     _emit(True, "ok" if not report.skipped_tick else "tick_skipped",
           "tick skipped: another tick holds the lock" if report.skipped_tick
           else f"started {len(report.started)}, resumed {len(report.resumed)}", "", data, args.json)

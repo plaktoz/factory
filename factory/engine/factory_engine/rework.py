@@ -279,6 +279,16 @@ def route_conflict(run: Run, wf: Workflow, stage: Stage) -> Routing:
                why=f"{stage.id} had a merge conflict at join")
 
 
+def route_red_ci(run: Run, wf: Workflow, stage: Stage) -> Routing:
+    """Red CI on the open pull request follows the last stage's on_fail edge, with its own loop count (module 13)."""
+    edge = stage.on_fail
+    if edge is None:
+        return _blocked(run, stage.id, f"CI is red on the pull request and {stage.id} has no on_fail edge",
+                        SystemClock().now())
+    return _go(run, wf, stage, edge.goto, key=f"{stage.id}->{edge.goto}:ci", limit=edge.max,
+               why="CI is red on the pull request")
+
+
 def _route_outcome(run: Run, wf: Workflow, stage: Stage, outcome: Outcome) -> Routing:
     """A human answer. Rework goes to on_reject with no limit, a question goes back to this stage, and reject aborts."""
     if outcome.status == "reject":
