@@ -57,7 +57,7 @@ So a repo on one kit version and a repo on another both run the one engine insta
 
 The owner chose the recommended option. It gives module 16's criterion a testable behavior: two repos with two stub engines, and the launcher runs each one's engine. It keeps the engine of a run tied to its snapshot, which module 3 requires, and it needs no new dependency or install step.
 
-The cost is accepted: dependencies stay shared until phase 1b, and every target repo commits a copy of the engine source. Measured on 2026-11-21 with the `KIT_KEEP` exclusion removed and the existing ignore patterns kept, the engine folder is 128 files and 1.3 MB with its `tests/` folder, and 60 files and 0.6 MB without it. The first draft of this ADR said "58 files, 1.4 MB"; that count was not measured. Whether the copy should leave out `tests/` is a build detail for the follow-up task.
+The cost is accepted: dependencies stay shared until phase 1b, and every target repo commits a copy of the engine source. Measured on 2026-11-21 with the `KIT_KEEP` exclusion removed and the existing ignore patterns kept, the engine folder is 128 files and 1.1 MB with its `tests/` folder, and 60 files and 0.6 MB without it. The first draft of this ADR said "58 files, 1.4 MB"; that count was not measured. Whether the copy should leave out `tests/` is a build detail for the follow-up task.
 
 ## Consequences
 
