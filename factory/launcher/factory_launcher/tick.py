@@ -4,8 +4,9 @@ A tick keeps no state of its own. It reads every run.json under the factory home
 its status and lock, starts a detached engine for each run that can move, and writes tick.json. It never runs a
 worker, so it returns within seconds.
 
-Steps of module 6 that the engine does not support yet are left out and named in the tick report: polling open pull
-requests and routing red CI back to fix. Nothing in the engine calls delivery.watch_pr on a live run yet.
+A run whose pull request is open waits at its merge review. The tick reads that pull request (module 13, watch_pr) and
+starts an engine only when GitHub has merged it, closed it or turned its CI red; the engine then ends or routes the run.
+The tick itself writes no run state.
 """
 
 from __future__ import annotations
@@ -18,10 +19,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from factory_engine import api, decisions, state
+from factory_engine import api, decisions, delivery, state
 from factory_engine.clock import SystemClock
 from factory_engine.config import Config
 from factory_engine.errors import FactoryError
+from factory_engine.loadcfg import load_config
+from factory_engine.prs import PullRequests
 
 # What a tick does with each run, from its status and its lock (module 6, "How a tick finds and judges runs").
 START = "start"
@@ -44,15 +47,12 @@ class TickReport:
     synced: dict[str, list[str]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
     skipped_tick: bool = False
-    unsupported: list[str] = field(default_factory=lambda: [
-        "poll open pull requests and route red CI (the engine does not call delivery.watch_pr yet)",
-        "finish runs whose pull request merged (no engine path yet)",
-    ])
 
 
-def decide(status: str, lock: str, repo_exists: bool, *, answered: bool = False) -> str:
+def decide(status: str, lock: str, repo_exists: bool, *, answered: bool = False, pr_changed: bool = False) -> str:
     """The action module 6's table gives for one run. Pure, so the table is tested without a file system.
-    `answered` is true when an awaiting_approval run's decision file holds an answer."""
+    `answered` is true when an awaiting_approval run's decision file holds an answer. `pr_changed` is true when the
+    run's open pull request was merged, closed or turned red, so its engine has something to do."""
     if not repo_exists:
         return MISSING
     if status in ("done", "failed", "aborted"):
@@ -61,7 +61,7 @@ def decide(status: str, lock: str, repo_exists: bool, *, answered: bool = False)
         return START
     if status == "running" and lock == "stale":
         return RESUME
-    if status == "awaiting_approval" and lock == "free" and answered:
+    if status == "awaiting_approval" and lock == "free" and (answered or pr_changed):
         return START
     if status == "retrying" and lock == "free":
         return START
@@ -123,12 +123,31 @@ def _start_or_resume(ref: state.RunRef, action: str, report: TickReport, spawn: 
             report.resumed.append(ref.run_id)
 
 
+def _pr_changed(ref: state.RunRef, prs_for: Callable[[Path], PullRequests], report: TickReport) -> bool:
+    """True when a run waiting on its pull request has news: merged, closed or red CI. Open with green or pending CI is
+    no news. A failed read is logged in the report and counts as no news, so the next tick reads it again."""
+    try:
+        run = state.read_run(ref.run_dir)
+        if not delivery.at_merge_review(run):
+            return False
+        pr = delivery.watch_pr(ref.run_dir, prs_for(ref.repo))
+    except FactoryError as e:
+        report.errors.append(f"{ref.run_id}: {e.code}: {e.message}")
+        return False
+    return pr.state != "open" or pr.ci == "red"
+
+
+def _default_prs(repo: Path) -> PullRequests:
+    return api.default_prs(repo, load_config(repo))
+
+
 def tick(cfg: Config, *, repos: list[Path], home: Path | None = None, spawn: Callable | None = None,
-         now: datetime | None = None) -> TickReport:
+         now: datetime | None = None, prs_for: Callable[[Path], PullRequests] | None = None) -> TickReport:
     """One pass. `cfg` is load_config(None): the machine part only. Each repo's own settings come from load_config(repo)
     where a step reads them (sync does). Takes the machine tick lock; a held lock returns at once with skipped_tick."""
     home = home or state.factory_home()
     spawn = spawn or api.spawn_engine
+    prs_for = prs_for or _default_prs
     report = TickReport()
     lock = _take_tick_lock(home)
     if lock is None:
@@ -140,8 +159,10 @@ def tick(cfg: Config, *, repos: list[Path], home: Path | None = None, spawn: Cal
         for ref in state.list_runs(home):
             repo_exists = ref.repo.is_dir()
             status, lock_state = _status_and_lock(ref)
+            waiting = repo_exists and status == "awaiting_approval" and lock_state == "free"
             action = decide(status, lock_state, repo_exists,
-                            answered=status == "awaiting_approval" and _answered(ref))
+                            answered=waiting and _answered(ref),
+                            pr_changed=waiting and _pr_changed(ref, prs_for, report))
             if action == MISSING:
                 report.repo_missing.append(ref.run_id)
                 continue

@@ -68,8 +68,9 @@ def _factories(worker_script=None, writes=None):
                                writes={t: w for t, w in wr.items() if t not in CMD_TASKS})
     command = FakeWorkerAdapter({t: r for t, r in script.items() if t in CMD_TASKS},
                                 writes={t: w for t, w in wr.items() if t in CMD_TASKS})
+    prs = FakePullRequests()  # one service for both runs, so a merge on it is seen by the next `run`
     return dict(worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
-                tracker_factory=lambda repo, cfg: FakeTracker(), prs_factory=lambda repo, cfg: FakePullRequests())
+                tracker_factory=lambda repo, cfg: FakeTracker(), prs_factory=lambda repo, cfg: prs)
 
 
 # ---- every command exists and parses -----------------------------------------------------------------------------
@@ -132,12 +133,16 @@ def test_run_with_no_run_id_and_no_all_is_refused(seeded, capsys):
     assert code == EXIT_INVALID and doc["ok"] is False
 
 
-def test_run_drives_a_chore_run_to_done_and_exits_0(seeded, capsys, spawned):
+def test_run_drives_a_chore_run_to_its_merge_review_then_to_done_once_merged(seeded, capsys, spawned):
     run_id = _add(seeded, capsys, spawned, "Bump the lint config")
     run_dir = state.find_run(state.factory_home(), run_id).run_dir
     script, writes = chore_script(run_dir)
-    code, doc = run_cli(["run", run_id, "--repo", str(seeded), "--json"], capsys,
-                        **_factories(script, writes))
+    factories = _factories(script, writes)
+    prs = factories["prs_factory"](None, None)
+    code, doc = run_cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+    assert code == 3 and doc["data"]["runs"] == {run_id: "awaiting_approval"}
+    prs.human_merge(state.read_run(run_dir).pr)
+    code, doc = run_cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
     assert code == EXIT_OK and doc["data"]["runs"] == {run_id: "done"}
 
 

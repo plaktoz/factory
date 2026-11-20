@@ -323,6 +323,12 @@ def merge_or_request_review(pr: PrRef, decision: MergeDecision, prs: PullRequest
         raise
 
 
+def at_merge_review(run: Run) -> bool:
+    """True while a run waits on its open pull request: parked, with a pull request, and no stage waiting on a person."""
+    return (run.status == "awaiting_approval" and run.pr is not None
+            and not any(s.status == "awaiting_approval" for s in run.stages))
+
+
 def watch_pr(run_dir: Path, prs: PullRequests) -> PrState:
     """The pull request's state, CI and checks output. Writes `merged` once, when the pull request is seen merged."""
     run = read_run(run_dir)

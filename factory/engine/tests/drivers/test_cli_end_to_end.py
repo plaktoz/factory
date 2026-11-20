@@ -52,10 +52,13 @@ def test_a_chore_run_reaches_done_through_the_cli_alone(seeded, capsys, monkeypa
     script, writes = chore_script(run_dir)
     worker, command = _split_worker_and_command(script, writes)
 
-    code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys,
-                        worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
-                        tracker_factory=lambda repo, cfg: _tracker(),
-                        prs_factory=lambda repo, cfg: prs)
+    factories = dict(worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
+                     tracker_factory=lambda repo, cfg: _tracker(), prs_factory=lambda repo, cfg: prs)
+    code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+    assert code == 3, driven
+    assert driven["data"]["runs"] == {run_id: "awaiting_approval"}
+    prs.human_merge(state.read_run(run_dir).pr)
+    code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
     assert code == 0, driven
     assert driven["data"]["runs"] == {run_id: "done"}
     assert state.read_run(run_dir).status == "done"
@@ -138,6 +141,11 @@ def test_a_bug_fix_run_stops_at_propose_is_answered_by_decide_and_reaches_done(s
 
         code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
 
+    assert code == 3, driven
+    assert driven["data"]["runs"] == {run_id: "awaiting_approval"}
+    prs.human_merge(state.read_run(run_dir).pr)
+    with gates.use_command_runner(stub_runner):
+        code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
     assert code == 0, driven
     assert driven["data"]["runs"] == {run_id: "done"}
     assert state.read_run(run_dir).status == "done"
@@ -147,7 +155,7 @@ def test_a_bug_fix_run_stops_at_propose_is_answered_by_decide_and_reaches_done(s
     assert ["scripts/repro-fails.sh"] in gate_commands and ["make", "build"] in gate_commands
     assert ["scripts/repro-now-passes.sh"] in gate_commands
     assert spawned == [run_id]  # only `decide` started an engine, and the test ran it by hand instead
-    assert prs.calls == ["create"]
+    assert prs.calls == ["create", "state"]  # one read at the merge review, then the merge the test made on the fake
 
 
 CMD_TASKS = {"rules", "check", "be-tests", "fe-tests", "e2e"}  # the cmd tasks of the shipped workflows

@@ -237,17 +237,21 @@ class Engine:
         """Pass after pass until the run ends or parks. The lock is held across the passes and released at the end."""
         run_dir = self._run_dir(run_id)
         lock = state.acquire_lock(run_dir, self.owner)
+        worked = False  # this engine ran a pass that could have pushed, so a pull request read now may be stale
         try:
             for _ in range(10_000):  # a bound, so a routing bug cannot spin forever
                 run = state.read_run(run_dir)
                 if run.status in ENDED or run.status in PARKED:
                     if run.status != "awaiting_approval":
                         return run.status
+                    if worked and delivery.at_merge_review(run):
+                        return "awaiting_approval"  # the next tick reads the pull request after GitHub has seen the push
                     self._pass(run_dir, lock)  # an answered stop moves on; an unanswered one stays parked
                     if state.read_run(run_dir).status == "awaiting_approval":
                         return "awaiting_approval"
                     continue
                 self._pass(run_dir, lock)
+                worked = True
             raise FactoryError("config.invalid", f"run {run_id} made no progress in 10000 passes",
                                hint="a routing loop is not reaching a stop; check the workflow's on_fail edges")
         finally:
@@ -275,7 +279,9 @@ class Engine:
     def _answered_stop(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
         """A run waiting on a person. An answer already in the decision file moves it on (module 6, lifecycle step 4):
         a triage answer continues the triage stage, an approval answer goes through the stage's human stop. An
-        unanswered stop stays parked, and nothing is written."""
+        unanswered stop stays parked, and nothing is written. A run waiting on its pull request is read from GitHub."""
+        if delivery.at_merge_review(run):
+            return self._merge_review(run, run_dir, lock, result)
         stage_id = next((s.id for s in run.stages if s.status == "awaiting_approval"), run.stage)
         visit = decisions.latest_visit(run, stage_id)
         if decisions.evaluate(run_dir, stage_id, visit).status == "pending":
@@ -835,14 +841,50 @@ class Engine:
     # ---- finish ----------------------------------------------------------------------------------------------------
 
     def _finish(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
-        """Every stage is done: write the summary, deliver through the sink, and mark the run done."""
+        """Every stage is done: write the summary and deliver through the sink. A run with a pull request then waits at
+        its merge review and ends only when GitHub merges or closes the pull request; any other sink ends the run."""
         summary.render_summary(run_dir, usage_mod.summarize([run_dir]))
+        if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
+            gitops.push(run.worktree, run.pr.head)
         sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
         if sink.pr is not None:
             run.pr = sink.pr
+            run.status = "awaiting_approval"
+            result.attention = run.attention = notify.attention_for(run, now=self.clock.now().isoformat())
+            state.write_run(run_dir, run, lock=lock)
+            return result
         run.status = "done"
         state.write_run(run_dir, run, lock=lock)
         state.append_event(run_dir, "run_done", sink=sink.sink, target=sink.target)
+        return result
+
+    def _merge_review(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
+        """Read the run's pull request (module 13, watch_pr). Merged ends the run and removes its worktree, closed aborts
+        it, red CI goes back through the last stage's on_fail edge, and anything else leaves the run waiting."""
+        try:
+            pr = delivery.watch_pr(run_dir, self.prs)
+        except FactoryError as e:
+            if e.kind == "transient":
+                return result  # GitHub is unreachable; the next tick reads it again
+            raise
+        if pr.state == "merged":
+            run.status, run.attention = "done", None
+            state.write_run(run_dir, run, lock=lock)
+            state.append_event(run_dir, "run_done", sink="pull_request", target=run.pr.url)
+            housekeeping.cleanup_after_merge(self.repo, self.cfg, run)
+        elif pr.state == "closed":
+            run.status, run.attention = "aborted", None
+            state.write_run(run_dir, run, lock=lock)
+            state.append_event(run_dir, "run_aborted", reason=f"pull request #{run.pr.number} was closed without a merge")
+        elif pr.ci == "red":
+            wf = self._load(run.workflow)
+            stage = wf.stages[-1]
+            failed = GateResult(passed=False, gate="ci", code="gate.ci_red", output_tail=pr.checks_output, details={})
+            routing = rework.route_red_ci(run, wf, stage)
+            if routing.action == "goto":
+                rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
+                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
+            return self._apply(run, run_dir, lock, wf, stage, routing, result)
         return result
 
     # ---- helpers ---------------------------------------------------------------------------------------------------
