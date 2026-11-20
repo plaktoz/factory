@@ -228,6 +228,54 @@ def test_spawn_engine_returns_none_while_a_live_lock_holds_the_run(seeded, capsy
         release(holder)
 
 
+def _no_process(monkeypatch):
+    """Fail the test if the real spawn reaches Popen: a live lock must stop it before any process starts."""
+    def popen(*a, **k):
+        raise AssertionError("an engine process was started while a live lock held the run")
+    monkeypatch.setattr(api.subprocess, "Popen", popen)
+
+
+def test_skip_refuses_a_run_a_live_engine_holds(seeded, capsys, spawned):
+    """The skip takes the run's lock first, so a live engine makes it exit 5 and start nothing."""
+    run_id, run_dir = _blocked_run(seeded, capsys, spawned)
+    holder = acquire_lock(run_dir, "another-engine")
+    try:
+        code, doc = run_cli(["skip", run_id, "--gate", "lint-clean", "--reason", "flaky", "--repo", str(seeded),
+                             "--json"], capsys)
+    finally:
+        release(holder)
+    assert code == EXIT_LOCKED and doc["code"] == "state.locked" and doc["ok"] is False
+    assert spawned == []
+
+
+def test_goto_refuses_a_run_a_live_engine_holds(seeded, capsys, spawned):
+    run_id, run_dir = _blocked_run(seeded, capsys, spawned)
+    holder = acquire_lock(run_dir, "another-engine")
+    try:
+        code, doc = run_cli(["goto", run_id, "implement", "--repo", str(seeded), "--json"], capsys)
+    finally:
+        release(holder)
+    assert code == EXIT_LOCKED and doc["code"] == "state.locked" and spawned == []
+
+
+def test_decide_records_the_answer_but_starts_no_engine_while_a_live_engine_holds_the_run(seeded, capsys, spawned,
+                                                                                         monkeypatch):
+    """`decide` writes the decision file, not run.json, so it needs no lock. The spawn it asks for still returns None."""
+    run_id, run_dir = _blocked_run(seeded, capsys, spawned)
+    monkeypatch.setattr(cli, "_latest_stop_stage", lambda d: "implement")
+    monkeypatch.setattr(api, "decide", lambda repo, rid, stage, **kw: _outcome("approved"))
+    monkeypatch.setattr(api, "spawn_engine", REAL_SPAWN)
+    _no_process(monkeypatch)
+    holder = acquire_lock(run_dir, "another-engine")
+    try:
+        code, doc = run_cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "661cb74d", "D1=opt-a"],
+                            capsys)
+    finally:
+        release(holder)
+    assert code == EXIT_OK, doc
+    assert doc["data"]["status"] == "approved" and doc["data"]["started_pid"] is None
+
+
 def test_decide_refuses_a_stale_packet_with_exit_2(seeded, capsys, spawned):
     run_id = _add(seeded, capsys, spawned, "Bump the lint config", "--no-run")
     code, doc = run_cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", "not-the-sha", "D1=approve"],
@@ -334,3 +382,34 @@ def test_a_factory_error_prints_the_shared_shape_with_its_code(seeded, capsys, s
     code, doc = run_cli(["status", "no-such-run", "--repo", str(seeded), "--json"], capsys)
     assert code == EXIT_INVALID
     assert set(doc) == {"ok", "code", "message", "hint", "data"} and doc["code"] == "config.invalid"
+
+
+# ---- where and events read a run without changing it ----------------------------------------------------------------
+
+def test_where_names_the_run_folder_worktree_and_branch(seeded, capsys, spawned):
+    run_id = _add(seeded, capsys, spawned, "Bump the lint config", "--no-run")
+    run_dir = state.find_run(state.factory_home(), run_id).run_dir
+    code, doc = run_cli(["where", run_id, "--repo", str(seeded), "--json"], capsys)
+    assert code == EXIT_OK and doc["ok"] is True
+    run = state.read_run(run_dir)
+    assert doc["data"] == {"run_id": run_id, "repo": str(seeded), "run_dir": str(run_dir),
+                           "worktree": str(run.worktree), "branch": run.branch, "status": run.status}
+
+
+def test_events_lists_the_last_events_in_order_and_tail_limits_them(seeded, capsys, spawned):
+    run_id = _add(seeded, capsys, spawned, "Bump the lint config", "--no-run")
+    run_dir = state.find_run(state.factory_home(), run_id).run_dir
+    state.append_event(run_dir, "note_probe", n=1)
+    state.append_event(run_dir, "note_probe", n=2)
+    code, doc = run_cli(["events", run_id, "--repo", str(seeded), "--json"], capsys)
+    assert code == EXIT_OK
+    seqs = [e["seq"] for e in doc["data"]["events"]]
+    assert seqs == sorted(seqs) and doc["data"]["events"][-1]["data"] == {"n": 2}
+    code, doc = run_cli(["events", run_id, "--tail", "1", "--repo", str(seeded), "--json"], capsys)
+    assert [e["data"] for e in doc["data"]["events"]] == [{"n": 2}]
+
+
+def test_where_and_events_name_an_unknown_run_with_exit_2(seeded, capsys):
+    for cmd in ("where", "events"):
+        code, doc = run_cli([cmd, "no-such-run", "--repo", str(seeded), "--json"], capsys)
+        assert code == EXIT_INVALID and doc["ok"] is False

@@ -14,6 +14,7 @@ import argparse
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from factory_engine import state
@@ -23,7 +24,7 @@ from factory_engine.loadcfg import load_config
 from . import schedule as schedule_mod
 from . import tick as tick_mod
 
-MACHINE = {"tick", "schedule", "dashboard", "inbox", "doctor", "config"}
+MACHINE = {"tick", "watch", "schedule", "dashboard", "inbox", "doctor", "config"}
 RUN_COMMANDS = {"resume", "recover", "status", "where", "events", "logs", "open", "decide", "check", "reopen",
                 "note", "retry", "goto", "skip", "abort", "usage", "run", "add", "sync", "gc", "init", "upgrade",
                 "intake", "triage", "sink", "plugins"}
@@ -68,18 +69,51 @@ def _dispatch(argv: list[str], repo: Path, home: Path) -> int:
     return proc.returncode
 
 
-def _tick(args, home: Path) -> int:
+def _tick_repos(args, home: Path) -> list[Path]:
     repos = [Path(r).resolve() for r in (args.repo or [])]
     if args.all_repos:
         repos = sorted({ref.repo for ref in state.list_runs(home)}, key=str)
-    cfg = load_config(None, env={"FACTORY_HOME": str(home)})
-    report = tick_mod.tick(cfg, repos=repos, home=home)
-    data = {"skipped_tick": report.skipped_tick, "started": report.started, "resumed": report.resumed,
+    return repos
+
+
+def _tick_data(report: tick_mod.TickReport) -> dict:
+    return {"skipped_tick": report.skipped_tick, "started": report.started, "resumed": report.resumed,
             "skipped": report.skipped, "repo_missing": report.repo_missing, "synced": report.synced,
             "errors": report.errors}
-    _emit(True, "ok" if not report.skipped_tick else "tick_skipped",
-          "tick skipped: another tick holds the lock" if report.skipped_tick
-          else f"started {len(report.started)}, resumed {len(report.resumed)}", "", data, args.json)
+
+
+def _tick_message(report: tick_mod.TickReport) -> str:
+    return ("tick skipped: another tick holds the lock" if report.skipped_tick
+            else f"started {len(report.started)}, resumed {len(report.resumed)}")
+
+
+def _tick(args, home: Path) -> int:
+    cfg = load_config(None, env={"FACTORY_HOME": str(home)})
+    report = tick_mod.tick(cfg, repos=_tick_repos(args, home), home=home)
+    _emit(True, "ok" if not report.skipped_tick else "tick_skipped", _tick_message(report), "", _tick_data(report),
+          args.json)
+    return 0
+
+
+def _watch(args, home: Path, *, sleep=time.sleep, rounds: int | None = None) -> int:
+    """Run tick every --every until interrupted. Each tick prints as `tick` does, so --json gives one line per tick."""
+    seconds = schedule_mod.interval_seconds(args.every)
+    cfg = load_config(None, env={"FACTORY_HOME": str(home)})
+
+    def show(report: tick_mod.TickReport) -> None:
+        _emit(True, "ok" if not report.skipped_tick else "tick_skipped", _tick_message(report), "",
+              _tick_data(report), args.json)
+
+    done = 0
+    try:
+        while rounds is None or done < rounds:
+            show(tick_mod.tick(cfg, repos=_tick_repos(args, home), home=home))
+            done += 1
+            if rounds is not None and done >= rounds:
+                break
+            sleep(seconds)
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
@@ -161,6 +195,12 @@ def _parser() -> argparse.ArgumentParser:
     t.add_argument("--env-file", help="variables for the scheduler's environment (read by the harness, not here)")
     t.add_argument("--json", action="store_true")
 
+    w = sub.add_parser("watch", help="run tick in a foreground loop")
+    w.add_argument("--every", default="10m", help="interval between ticks, such as 10m")
+    w.add_argument("--all-repos", action="store_true", help="sync every repo that has a run")
+    w.add_argument("--repo", action="append", dest="repo", help="a repo to sync (repeatable)")
+    w.add_argument("--json", action="store_true")
+
     s = sub.add_parser("schedule", help="install or remove the OS scheduler entry for tick")
     s.add_argument("action", choices=["install", "remove"])
     s.add_argument("--every", default="10m", help="interval, such as 10m")
@@ -199,6 +239,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "tick":
             return _tick(args, home)
+        if args.command == "watch":
+            return _watch(args, home)
         if args.command == "schedule":
             return _schedule(args, home)
         if args.command == "dashboard":
