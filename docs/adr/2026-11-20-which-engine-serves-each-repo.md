@@ -32,7 +32,7 @@ Accepted by the owner on 2026-11-21, on page `docs/decision-pages/which-engine-o
 - **Follow-up decision `D3` (pushing the branch): option `push-docs-now`.** `wave4/m16-criteria` is pushed and one pull request is opened against `main` now, not after the engine change is built.
   - Not chosen, `hold-until-built`: push with the build, so one pull request holds the decision and its proof. The decision stays off `main` until then.
   - Not chosen, `keep-local`: push nothing until told to.
-  - The page said the pull request would be 26 files. That compared against a stale local copy of `main`. GitHub's `main` already had the earlier commit `af193d1` through pull request #61, so the pull request is 5 commits and 15 files on GitHub (pull request #62), 3 of them code.
+  - The page said the pull request would be 26 files. That compared against a stale local copy of `main`. GitHub's `main` already had the earlier commit `af193d1` through pull request #61, so the pull request is 6 commits and 15 files on GitHub (pull request #62), 3 of them code.
 
 ## Context
 
