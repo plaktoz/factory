@@ -183,7 +183,7 @@ The JSON Schemas in `factory/schemas/` are the source of truth for every file; t
 - **Fakes for parallel work:** each module that others call ships a fake, so downstream modules can be tested before it exists. The fakes are `FakeWorkerAdapter` (9), `FakeTracker` and `FakePullRequests` (7), and `FakeClock` (18), which implements `Clock` as `SystemClock` does.
 - **Two install layers:**
   - The machine-level launcher (`factory`) handles the machine commands: `tick`, `dashboard`, `inbox`, `config init`, `doctor`, `schedule`.
-  - It hands every command about a run to that run's own engine, `python -m factory_engine` from the run's kit snapshot, and every command that creates a run to the repo's committed kit, so repos and runs on different kit versions coexist.
+  - It hands every command about a run to that run's own engine, `python -m factory_engine` from the run's kit snapshot, and every command that creates a run to the repo's committed kit, so repos and runs on different kit versions coexist. In phase 1a the launcher selects that engine by setting `PYTHONPATH` to `kits/<kit hash>/factory/engine` (or the repo's `factory/engine` for a command that creates a run) and runs it with its own Python; the per-snapshot virtual environment of [module 3](../modules/03-kit-and-configuration.md) is phase 1b ([ADR](../../adr/2026-11-20-which-engine-serves-each-repo.md)).
   - The dashboard makes its writes by calling the launcher with `--json`, which puts each write through the right engine version.
 
 **CLI exit codes** (all commands)
