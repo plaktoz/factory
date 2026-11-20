@@ -16,6 +16,8 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    not merged" or "blocked") must not already be merged on origin/main.
 5. Every ADR dated TRACKED_FROM or later is named by file name in docs/tasks.md (Log or task), so
    the session that records a decision also updates the task list.
+6. docs/reviews/ is retired (last commit 746ec67): the folder must not exist, and
+   docs/tasks.md must not name it. ADRs may still cite it; they are not edited.
 """
 import json, re, subprocess, sys
 from pathlib import Path
@@ -96,6 +98,12 @@ for item in re.split(r"\n(?=\d+\. |\*\*)", tasks):
 for adr in sorted((root / "docs/adr").glob("*.md")):
     if adr.name[:10] >= TRACKED_FROM and adr.name not in tasks:
         problems.append(f"tasks.md does not name {adr.name}; a decision is not carried through until the task list says so")
+
+RETIRED = "docs/reviews"
+if (root / RETIRED).exists():
+    problems.append(f"{RETIRED}/ exists; the folder is retired, decisions are ADRs in docs/adr/")
+if RETIRED in tasks:
+    problems.append(f"tasks.md names {RETIRED}; point at the ADR, or at commit 746ec67 for an old report")
 
 for p in problems:
     print("records:", p)
