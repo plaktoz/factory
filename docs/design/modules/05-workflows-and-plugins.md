@@ -174,7 +174,7 @@ insert:
 
 **Report schemas**
 
-The spec gave no fields to four report schemas, so a gate that names one could not run. Wave 3 drafted them in `factory/schemas/`, and the owner accepted the drafts as the phase 1 schemas (wave 3, decision D1, `docs/reviews/wave3-decisions.md`). They are the smallest shape the skills and gates need. Real model output has not been run against them yet, so the first live run may show a field to change; change the schema and its tests together.
+The spec gave no fields to four report schemas, so a gate that names one could not run. Wave 3 drafted them in `factory/schemas/`, and the owner accepted the drafts as the phase 1 schemas (wave 3, decision D1, [accept draft report schemas](../../adr/2026-11-15-accept-draft-report-schemas.md)). They are the smallest shape the skills and gates need. Real model output has not been run against them yet, so the first live run may show a field to change; change the schema and its tests together.
 
 | Schema | Written by | Fields | Read by |
 | --- | --- | --- | --- |

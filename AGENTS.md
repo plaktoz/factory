@@ -49,7 +49,7 @@ A reusable software factory: a deterministic Python engine that turns a request 
 
 ## Build order
 
-Build phase 1a first (walking skeleton: Claude only, bug-fix and chore, macOS and Linux, read-only dashboard). Phase 1b adds the other workflows, plugins, MCP, practice packs and dashboard writes. The table is in spec section 1, "Phase split". Phase 2 items (Codex, Windows, answering by GitHub comment) are in `docs/design/phase-2.md`; do not build them in phase 1. Decisions D1 to D14 are in `docs/reviews/phase-1-decisions.md`; every later decision is an ADR in `docs/adr/`. Do not reopen either without a new ADR that supersedes it.
+Build phase 1a first (walking skeleton: Claude only, bug-fix and chore, macOS and Linux, read-only dashboard). Phase 1b adds the other workflows, plugins, MCP, practice packs and dashboard writes. The table is in spec section 1, "Phase split". Phase 2 items (Codex, Windows, answering by GitHub comment) are in `docs/design/phase-2.md`; do not build them in phase 1. Decisions D1 to D14 are the 2026-11-14 ADRs in `docs/adr/`, and every later decision is an ADR there too. Do not reopen either without a new ADR that supersedes it.
 
 
 Wave 0 (shared types, schemas, fakes) first. Then wave 1: 3, 6A, 7, 10, 14, 17A. Then wave 2: 4, 5, 8, 9, 11, 12, 17. Then wave 3: 13, 6B, 15. Then 16. See [the plan](docs/design/shared/20-dependencies-and-plan.md).

@@ -1,5 +1,5 @@
 // Browser check for a rendered decision page.
-//   node check.mjs docs/reviews/<name>.html
+//   node check.mjs docs/decision-pages/<name>.html
 // Needs puppeteer: `npm i puppeteer` in a scratch folder, then run with NODE_PATH pointing at its node_modules,
 // or run this file from that folder. Exits 1 on any failed check.
 import { createRequire } from "module";

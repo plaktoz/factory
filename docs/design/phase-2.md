@@ -94,7 +94,7 @@ Decided before the review ([phase 1 decisions](shared/21-decisions-and-sources.m
 
 ## P2-4 Pilot repo: plaktoz/test-adapters
 
-Moved into phase 1 on 2026-11-14. The pilot starts in phase 1a with one `factory`-labelled chore or bug-fix issue and a human merge (decision P3); feature work follows in 1b. Nothing here is built in phase 2. The decisions are in [phase 1 decisions](../reviews/phase-1-decisions.md#pilot-repo-decisions-p1-to-p4).
+Moved into phase 1 on 2026-11-14. The pilot starts in phase 1a with one `factory`-labelled chore or bug-fix issue and a human merge (decision P3); feature work follows in 1b. Nothing here is built in phase 2. The decisions are the ADRs [pilot starts in phase 1a](../adr/2026-11-14-pilot-starts-in-phase-1a.md), [checkpoint commits stay local](../adr/2026-11-14-checkpoint-commits-stay-local.md), [cleanup runs the repo comparison first](../adr/2026-11-14-cleanup-runs-repo-comparison-first.md) and [record the model the harness reports](../adr/2026-11-14-record-the-model-the-harness-reports.md).
 
 Repo: https://github.com/plaktoz/test-adapters. Python, standard library only at runtime, GitHub Issues as the tracker, one check command (`scripts/check`). Its open tasks (T13 to T20) are jest feature work, which needs the phase 1b feature workflow.
 
@@ -409,7 +409,7 @@ flowchart TD
 
 **Questions to answer.**
 
-- [ ] Whether the factory takes on work that is not software at all. This changes the stated purpose of the factory ("a reusable software factory" in `AGENTS.md`), so it needs a new ADR in [phase 1 decisions](../reviews/phase-1-decisions.md) before any of this is built. The ADR should say which kinds of non-software work are in scope (wireframes and design work, customer slide decks, other documents) and which are not. Unspecified.
+- [ ] Whether the factory takes on work that is not software at all. This changes the stated purpose of the factory ("a reusable software factory" in `AGENTS.md`), so it needs a new ADR in `docs/adr/` before any of this is built. The ADR should say which kinds of non-software work are in scope (wireframes and design work, customer slide decks, other documents) and which are not. Unspecified.
 - [ ] Which upstream skills make a wireframe or a slide deck, their licenses, and whether the factory ships its own instead. Unspecified.
 - [ ] The gates for output that is not code (a plan schema, a render check, a human review of the rendered pages), and which of them block. Unspecified.
 - [ ] The sink for output that does not go in the code repo, and where the file is stored. Unspecified.
@@ -442,7 +442,7 @@ flowchart TD
 
 - A gate is a `GateSpec` with a `check` or a `cmd` ([section 18](shared/18-shared-contracts.md)), so a new deterministic check needs no new gate kind.
 - Every module has a fake, so a new layer can be tested without a model.
-- The decision log in [phase 1 decisions](../reviews/phase-1-decisions.md) records why each rule exists, so the review does not reopen a settled decision without a new ADR.
+- The ADRs in `docs/adr/` record why each rule exists, so the review does not reopen a settled decision without a new ADR.
 
 **Where to look (candidates, not findings).** This list is a starting point from reading the module titles. It has not been assessed, and some items may already be covered.
 

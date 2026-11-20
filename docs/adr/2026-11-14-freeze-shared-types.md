@@ -10,7 +10,7 @@ supersedes: []
 
 ## Decision
 
-freeze the 20 shared types now, with the shapes proposed in [the readiness review](../reviews/ready-for-development.md), in section 18
+freeze the 20 shared types now, with the shapes proposed in the readiness review (`docs/reviews/ready-for-development.md`), in section 18
 
 Chosen option: `freeze-shared`.
 
