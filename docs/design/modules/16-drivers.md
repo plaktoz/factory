@@ -79,6 +79,8 @@ def schedule_install(every: str, *, dashboard: bool = False) -> None
 
 The launcher finds the repo from the current folder, `--repo`, or, for a run id, the repo path recorded in its run.json. So `factory decide <run>` works from any folder.
 
+**Which engine runs a command (phase 1a, owner decisions 2026-11-21, [ADR](../../adr/2026-11-20-which-engine-serves-each-repo.md)).** A command about an existing run runs on the engine in that run's kit snapshot, `kits/<kit_hash>/factory/engine`, and a command that creates a run runs on the repo's committed `factory/engine`. If that folder is missing, the launcher starts nothing and fails with `kit.no_engine` (exit 2); the message names the run and says to add `--installed-engine` to the command, which runs that one command on the installed engine, for a run started before the engine was part of the kit. `abort` takes the same option, so a stuck run can be aborted. There is no automatic fall back to the installed engine.
+
 The **router skill** maps chat phrases to these same commands and shows decision packets in the picker format. It never writes state.
 
 - **Run and test:** `pytest factory/engine/tests/api factory/launcher/tests`, plus an end-to-end test that runs the shipped bug-fix workflow on a seeded repo, driven only through the CLI. Its `cmd` gates are stubbed through the gate runner (`gates.use_command_runner`) and its worker is scripted with `FakeWorkerAdapter`, with `FakePullRequests` for the pull request step. The run stops at the `propose` approval, is answered with `factory decide`, and finishes.

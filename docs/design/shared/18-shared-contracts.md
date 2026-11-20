@@ -226,6 +226,7 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `sandbox.srt_missing` | `fail_fast` | `srt` is not installed; give the install command |
 | `sandbox.node_old` | `fail_fast` | Node is older than 22.12, which `srt` needs |
 | `sandbox.canary_open` | `human` | `doctor` found a read or write route that is not blocked; name the route |
+| `kit.no_engine` | `fail_fast` | A run's kit snapshot (or the repo's kit, for a command that creates a run) has no engine folder; the message names the run and the kit. Add `--installed-engine` to run that one command on the installed engine (module 16) |
 | `config.no_credentials` | `fail_fast` | Set `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`; a login session is not supported in phase 1 |
 
 **Versions.** Python 3.10 is the floor and the tests also run on the newest Python installed (decision G9, below). Node 22.12 is the floor for `srt`, and the factory is tested on Node 26 (decision, 2026-11-14).

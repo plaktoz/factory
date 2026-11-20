@@ -21,6 +21,19 @@ A run uses the engine in its own kit snapshot. The snapshot is `$FACTORY_HOME/ki
 
 Not chosen: `per-snapshot-venv` (needs a `requirements.lock` in every kit and a venv build for each snapshot) and `launcher-installed-engine` (a repo on an old kit would run newer engine code).
 
+## Follow-up decisions
+
+Accepted by the owner on 2026-11-21, on page `docs/decision-pages/which-engine-open-items.json`, each with the recommended option. They settle build choices this ADR left open. None of them changes the decision above. Each entry lists the options that were not chosen, so this record stands without the page.
+
+- **Follow-up decision `D1` (test files in each repo's engine copy): option `engine-without-tests`.** `init` and `upgrade` copy the engine without its `tests/` folder: 60 files and 0.6 MB, not 128 files and 1.1 MB (counted in bytes, with caches and the local environment left out). The rule is for `factory/engine/tests` only. `factory/launcher/tests` is copied today and stays. Nobody can run the engine's tests from inside a target repo; they run in the factory repo.
+  - Not chosen, `engine-with-tests`: copy the whole engine folder. One fewer rule, but 68 extra files (0.5 MB) in every repo and every saved run copy, committed into repos that never run them.
+- **Follow-up decision `D2` (a run whose saved kit has no engine): option `refuse-with-fix`.** When a run's `kits/<kit_hash>/factory/engine` folder is missing, the launcher starts nothing and fails with `kit.no_engine` (kind `fail_fast`, exit 2). The message names the run and the kit and says to add `--installed-engine`, a launcher option that runs that one command on the installed engine. Without it the launcher never falls back to the installed engine. `abort` is dispatched like every other run command, so a stuck run is cleared with `factory abort <run> --installed-engine`; the page did not say this, and it was found while applying the decision. A tick that meets such a run records the error in its report and goes on to the next run. No saved kit exists on the owner's machine (`~/.factory/kits` is missing, checked 2026-11-21), so no run is affected now.
+  - Not chosen, `fall-back-with-warning`: use the installed engine and print a warning. No old run is ever stuck, but a run can cross engine versions without anyone choosing it, which is what saving the kit is meant to stop, and a warning is easy to miss in a tick.
+- **Follow-up decision `D3` (pushing the branch): option `push-docs-now`.** `wave4/m16-criteria` is pushed and one pull request is opened against `main` now, not after the engine change is built.
+  - Not chosen, `hold-until-built`: push with the build, so one pull request holds the decision and its proof. The decision stays off `main` until then.
+  - Not chosen, `keep-local`: push nothing until told to.
+  - The page said the pull request would be 26 files. That compared against a stale local copy of `main`. GitHub's `main` already had the earlier commit `af193d1` through pull request #61, so the pull request is 4 commits and 13 files, 3 of them code.
+
 ## Context
 
 [Module 16](../design/modules/16-drivers.md) has an acceptance criterion: two repos on different kit versions are driven by their own engine through one launcher. Shared contracts (section 18) say the launcher hands each command about a run to "that run's own engine, `python -m factory_engine` from the run's kit snapshot", and that commands creating runs use "the repo's committed kit". [Module 3](../design/modules/03-kit-and-configuration.md) says the launcher starts a run's engine "from the snapshot with the virtual environment for that snapshot's `requirements.lock`".
@@ -68,4 +81,4 @@ The cost is accepted: dependencies stay shared until phase 1b, and every target 
 
 ## Source
 
-Written on 2026-11-20 by the session finishing module 16, and accepted on 2026-11-21. Answered on page `docs/decision-pages/which-engine-serves-each-repo.json`, decision `D1`. Module 16's two-kit criterion stays unticked until the follow-up task is built and tested.
+Written on 2026-11-20 by the session finishing module 16, and accepted on 2026-11-21. Answered on page `docs/decision-pages/which-engine-serves-each-repo.json`, decision `D1`; the follow-ups on page `docs/decision-pages/which-engine-open-items.json`, decisions `D1`, `D2` and `D3`. Module 16's two-kit criterion stays unticked until the follow-up task is built and tested.

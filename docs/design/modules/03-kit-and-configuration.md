@@ -19,7 +19,7 @@ factory/                    the kit: replaced whole on update, never edited
                             spec; the owner accepted the wave 3 drafts as the phase 1 schemas, see
                             [module 5](05-workflows-and-plugins.md#report-schemas)). `merge` has no schema yet; module 13 writes `merge.json`)
   policies/                 default scope and protected-path rules
-  engine/                   Python engine and the factory CLI (copied by init and upgrade, so each snapshot carries it)
+  engine/                   Python engine and the factory CLI (copied by init and upgrade without its tests/ folder, so each snapshot carries it)
   adapters/tracker/         file, github
   adapters/worker/          claude, command, fake
   dashboard/                the dashboard page (plain HTML in 1a, prebuilt React bundle in 1b), served by the launcher
