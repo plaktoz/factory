@@ -1,7 +1,7 @@
 """A run with a pull request waits at its merge review until GitHub merges or closes it (ADR 2026-11-20)."""
 
 import pytest
-from conftest import chore_script
+from engine_helpers import chore_script
 
 from factory_engine import delivery, state
 from factory_engine.errors import FactoryError

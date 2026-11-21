@@ -9,7 +9,7 @@ from factory_engine.adapters.worker.fake import FakeWorkerAdapter, failed, ok, t
 from factory_engine.prompt import build_prompt, check_helpers_ledger, helper_policy_words, LEDGER
 from factory_engine.types import GateContext, GateSpec, HelperPolicy
 
-from conftest import ctx_for, request
+from workers_helpers import ctx_for, request
 
 
 # ---- the prompt -------------------------------------------------------------------------------------------------

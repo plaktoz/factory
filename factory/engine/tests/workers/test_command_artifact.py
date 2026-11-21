@@ -10,7 +10,7 @@ import pytest
 from factory_engine.adapters.worker import sandbox
 from factory_engine.adapters.worker.command import CommandAdapter
 
-from conftest import harness
+from workers_helpers import harness
 
 needs_srt = pytest.mark.skipif(shutil.which("srt") is None or sandbox.node_version() is None
                                or sandbox.node_version()[:2] < (22, 12),

@@ -164,6 +164,7 @@ One word per idea, used the same way in the engine, the workflows, the CLI, the 
 | Skill | Instructions a worker follows for a stage, chosen through `stages.map.yaml`. | prompt |
 | Plugin | A manifest that adds stages, tasks, gates or hooks to workflows without editing them. Its tasks can be skills, commands, scripts or Python functions. | extension |
 | Gate | A deterministic check a stage must pass. | test (a test is one kind of gate) |
+| Scorecard | An advisory result from the `revise-spec` skill: a 1 to 5 score per dimension and a recommendation (`ready`, `needs-changes`, `rework`). Not a gate or an approval. | review, approval |
 | Human stop | Any point where the run waits for you: an approval, a decision, a blocked run, a merge review. | pause |
 | Approval | A human stop with the options approve, rework and reject. | review (review is a stage) |
 | Decision | Your answer at a human stop, recorded in `decisions/<stage>.<n>.yaml`, where n counts the visits to that stage. | ADR (written after approval) |

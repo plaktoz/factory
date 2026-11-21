@@ -11,7 +11,7 @@ from factory_engine import decisions as D
 from factory_engine import page
 from factory_engine.errors import FactoryError
 
-from conftest import architect_packet, decision, option
+from decisions_helpers import architect_packet, decision, option
 
 HOSTILE = '<img src=x onerror="alert(1)"><script>steal()</script> & "quotes"'
 CHROME = Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")

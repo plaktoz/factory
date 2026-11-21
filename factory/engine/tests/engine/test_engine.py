@@ -40,7 +40,7 @@ def test_every_attempt_has_a_usage_record_written_before_the_worker_starts(new_r
 
 # ---- a whole run, a failed gate, and a human stop ----------------------------------------------------------------
 
-from conftest import chore_script  # noqa: E402
+from engine_helpers import chore_script  # noqa: E402
 
 
 def test_a_clean_chore_run_waits_at_its_merge_review_and_is_done_once_the_pull_request_merges(new_run, engine, prs):

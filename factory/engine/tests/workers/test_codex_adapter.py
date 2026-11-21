@@ -21,7 +21,7 @@ from factory_engine.adapters.worker.codex import CodexAdapter
 from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy
 
-from conftest import HERE, RECORDED, harness, log_seen_while_running
+from workers_helpers import HERE, RECORDED, harness, log_seen_while_running
 
 SRT = shutil.which("srt")
 needs_srt = pytest.mark.skipif(SRT is None or sandbox.node_version() is None or sandbox.node_version()[:2] < (22, 12),

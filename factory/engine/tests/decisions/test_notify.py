@@ -11,7 +11,7 @@ from factory_engine.adapters.tracker.fake import FakeTracker
 from factory_engine.config import Config
 from factory_engine.types import AttentionItem, StageState
 
-from conftest import architect_packet, make_request, set_run
+from decisions_helpers import architect_packet, make_request, set_run
 
 NOW = "2026-11-15T10:00:00+08:00"
 

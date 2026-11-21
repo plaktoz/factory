@@ -14,7 +14,7 @@ import pytest
 from factory_engine.adapters.worker.codex import CodexAdapter
 from factory_engine.types import HelperPolicy
 
-from conftest import harness
+from workers_helpers import harness
 
 LIVE = os.environ.get("FACTORY_LIVE") == "1" and shutil.which("codex") is not None and bool(os.environ.get("OPENAI_API_KEY"))
 pytestmark = pytest.mark.skipif(not LIVE, reason="set FACTORY_LIVE=1, put codex on PATH and set OPENAI_API_KEY")

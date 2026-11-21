@@ -8,7 +8,7 @@ from factory_engine import state
 from factory_engine.adapters.worker.fake import FakeWorkerAdapter, ok
 from factory_engine.engine import Engine
 
-from conftest import TRIAGE_JSON
+from engine_helpers import TRIAGE_JSON
 
 JUNIT_TWO_PASS = '<testsuite><testcase name="a"/><testcase name="b"/></testsuite>'
 JUNIT_ONE_FAIL = '<testsuite><testcase name="c"><failure/></testcase></testsuite>'

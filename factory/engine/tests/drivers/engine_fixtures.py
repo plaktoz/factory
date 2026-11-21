@@ -1,4 +1,4 @@
-"""The engine tests' fixtures and `chore_script`, loaded by path under a unique module name.
+"""The engine tests' fixtures, loaded by path under a unique module name, and their helpers from `engine_helpers`.
 
 `tests/engine/conftest.py` cannot be imported as `conftest` when several test folders run in one session, because
 pytest keeps one module called `conftest` and another folder's file gets there first. Loading it by path avoids that.
@@ -17,5 +17,4 @@ _spec = importlib.util.spec_from_file_location("engine_tests_conftest", _ENGINE_
 module = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(module)
 
-chore_script = module.chore_script
-TRIAGE_JSON = module.TRIAGE_JSON
+from engine_helpers import TRIAGE_JSON, chore_script  # noqa: E402,F401

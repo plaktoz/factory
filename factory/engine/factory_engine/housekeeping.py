@@ -23,7 +23,8 @@ from .config import Config
 from .errors import FactoryError
 from .gitops import delete_branch, remove_worktree
 from .loadcfg import load_config
-from .types import Run
+from .prs import PullRequests
+from .types import PrRef, Run
 
 ENDED = ("done", "failed", "aborted")
 FAILED = ("failed", "aborted")
@@ -48,6 +49,7 @@ class GcItem:
     zip_path: Path | None = None    # archive: where the zip goes
     ended: str | None = None        # archive: when the run ended, for history.jsonl
     keep_bytes: int = 0             # worker_log: the newest part that is kept
+    check_unpushed: bool = True     # worktree: keep the branch when it has commits no remote has (not for a merged run)
 
 
 @dataclass
@@ -156,10 +158,36 @@ def _run_check(cfg: Config, path: Path) -> tuple[bool, str]:
     return False, f"cleanup_check exited {r.returncode}: {(r.stdout + r.stderr).strip()[-500:]}"
 
 
+def _unpushed(repo: Path, cfg: Config | None, branch: str) -> int | None:
+    """Commits on the branch that no remote-tracking ref has and that are not on the base branch. None when git cannot
+    count them. `git rev-list <branch> --not --remotes <base>`: the base is left out so a repo with no remote does not
+    count its own history, and it is left out only when the local base branch exists."""
+    base = (cfg.repo or {}).get("base_branch", "main") if cfg is not None else "main"
+    has_base = gitops.git(repo, "rev-parse", "--verify", "--quiet", f"refs/heads/{base}", check=False).returncode == 0
+    r = gitops.git(repo, "rev-list", "--count", branch, "--not", "--remotes", *([base] if has_base else []),
+                   check=False)
+    try:
+        return int(r.stdout.strip()) if r.returncode == 0 else None
+    except ValueError:
+        return None
+
+
+def _joined(repo: Path, branch: str) -> bool:
+    """A task branch whose diff the join applied: the join commit `task(<id>): joined from <branch>` is on a local ref.
+    The join makes that commit on the run branch (module 7), so this is read from git alone."""
+    r = gitops.git(repo, "log", "--all", "--fixed-strings", f"--grep=): joined from {branch}", "--format=%s",
+                   check=False)
+    if r.returncode != 0:
+        return False
+    return any(line.endswith(f": joined from {branch}") and line.startswith("task(") for line in r.stdout.splitlines())
+
+
 def _remove_worktree_safely(cfg: Config | None, path: Path, repo: Path | None, *,
-                            dirty: bool | None = None) -> _Outcome:
+                            dirty: bool | None = None, check_unpushed: bool = True) -> _Outcome:
     """Remove a worktree and its checked-out branch. A dirty one goes only when cleanup_check exits 0 in it.
 
+    With check_unpushed, a branch that holds commits no remote has keeps its worktree and itself, and is reported.
+    A task branch that the join applied is exempt: the join is its delivery, and task branches are never pushed.
     With the repo gone, nothing can be checked or removed through git, so the worktree stays and is reported."""
     if repo is None or not repo.is_dir():
         return _Outcome("kept", "the repo is gone, so the worktree cannot be checked or removed through git")
@@ -172,6 +200,13 @@ def _remove_worktree_safely(cfg: Config | None, path: Path, repo: Path | None, *
         if not ok:
             return _Outcome("kept", "not clean, and cleanup_check did not pass", detail)
     branch = _head_branch(path)
+    if branch and check_unpushed and not _joined(repo, branch):
+        n = _unpushed(repo, cfg, branch)
+        if n is None:
+            return _Outcome("kept", f"branch {branch}: git cannot count its unpushed commits; worktree and branch kept")
+        if n:
+            return _Outcome("kept", f"branch {branch} has {n} unpushed commit{'s' if n != 1 else ''}, "
+                                    "on no remote; worktree and branch kept", "push the branch or delete it by hand")
     try:
         remove_worktree(path, force=dirty)
     except FactoryError as e:
@@ -225,9 +260,12 @@ def _read_zip(zp: Path) -> _Snap | None:
     return _Snap(run, tasks, _ended_from_lines(events, fallback))
 
 
-def _worktrees(snap: _Snap) -> list[Path]:
-    out = [Path(snap.run["worktree"])] if snap.run.get("worktree") else []
-    out += [Path(t["worktree"]) for t in snap.tasks if t.get("worktree")]
+def _worktrees(snap: _Snap) -> list[tuple[Path, bool]]:
+    """(path, is the run's own worktree). Task worktrees come first: removing the run's branch before a joined task's
+    branch would make the join commit unreachable from every local ref, so that task's branch would count as unjoined."""
+    out = [(Path(t["worktree"]), False) for t in snap.tasks if t.get("worktree")]
+    if snap.run.get("worktree"):
+        out.append((Path(snap.run["worktree"]), True))
     return out
 
 
@@ -291,10 +329,30 @@ def _due(snap: _Snap, cfg: Config, repo_gone: bool) -> tuple[datetime, datetime]
     return snap.ended_at + timedelta(days=worktree_days), snap.ended_at + timedelta(days=archive_days)
 
 
+def _pr_hold(prs: PullRequests | None, run: dict, path: Path) -> tuple[Skipped | None, bool]:
+    """(why the run's worktree must wait, whether the pull request merged). A run with a pull request is held while
+    it is open or while its state cannot be read; a run without one is never held."""
+    raw = run.get("pr")
+    if not raw:
+        return None, False
+    run_id = run["run_id"]
+    if prs is None:
+        return Skipped(path, run_id, "pull request cannot be read",
+                       "gc was given no pull request service; the worktree and its branch are kept"), False
+    try:
+        pr_state = prs.state(PrRef(**raw))
+    except Exception as e:  # the pull request service is outside the engine: any failure keeps the worktree
+        return Skipped(path, run_id, "pull request cannot be read", f"{e}; the worktree and its branch are kept"), False
+    if pr_state.state == "open":
+        return Skipped(path, run_id, "pull request open", str(raw.get("url", ""))), False
+    return None, pr_state.state == "merged"
+
+
 def _plan_worktree(p: GcPlan, path: Path, cfg: Config, repo: Path | None, run_id: str, *, due: bool,
-                   seen: set[str]) -> None:
+                   seen: set[str], run_doc: dict | None = None, prs: PullRequests | None = None) -> None:
     """A due worktree is removed when clean, and handed to cleanup_check when not. One that is not due, or not
-    removable, is reported while it stays, so a later gc lists it again."""
+    removable, is reported while it stays, so a later gc lists it again. `run_doc` is given for the run's own
+    worktree: its pull request, if open or unreadable, holds the worktree and its branch."""
     key = str(path)
     if key in seen or not path.exists():
         return
@@ -310,22 +368,29 @@ def _plan_worktree(p: GcPlan, path: Path, cfg: Config, repo: Path | None, run_id
         if dirty:
             p.skipped.append(Skipped(path, run_id, "not clean; kept until it is due or removed by hand"))
         return
+    merged = False
+    if run_doc is not None:
+        hold, merged = _pr_hold(prs, run_doc, path)
+        if hold is not None:
+            p.skipped.append(hold)
+            return
     if dirty and not _has_check(cfg):
         p.skipped.append(Skipped(path, run_id, "not clean, and no cleanup_check is set",
                                  "the worktree stays until its files are compared or removed by hand"))
         return
-    p.items.append(GcItem("worktree", path, run_id=run_id, cfg=cfg, repo=repo, dirty=dirty))
+    p.items.append(GcItem("worktree", path, run_id=run_id, cfg=cfg, repo=repo, dirty=dirty,
+                          check_unpushed=not merged))
 
 
 def _plan_ended_worktrees(p: GcPlan, snap: _Snap, cfg: Config, *, repo: Path, repo_gone: bool,
-                          seen: set[str]) -> None:
-    """The worktrees of an ended run, all due on the run's clock. gc has no pull request state, so a done run's own
-    worktree is due with its archive; cleanup_after_merge removes it earlier when the merge hook runs."""
+                          seen: set[str], prs: PullRequests | None) -> None:
+    """The worktrees of an ended run, all due on the run's clock. The run's own worktree also waits while its pull
+    request is open or unreadable; cleanup_after_merge removes it earlier when the merge hook runs."""
     run = snap.run
     worktree_due, _ = _due(snap, cfg, repo_gone)
-    for path in _worktrees(snap):
+    for path, is_run in _worktrees(snap):
         _plan_worktree(p, path, cfg, repo if not repo_gone else None, run["run_id"],
-                       due=p.now >= worktree_due, seen=seen)
+                       due=p.now >= worktree_due, seen=seen, run_doc=run if is_run else None, prs=prs)
 
 
 def _plan_active_run(p: GcPlan, snap: _Snap, seen: set[str]) -> None:
@@ -340,7 +405,7 @@ def _plan_active_run(p: GcPlan, snap: _Snap, seen: set[str]) -> None:
 
 
 def _plan_folder_run(p: GcPlan, run_dir: Path, snap: _Snap, repos: _RepoConfigs, seen: set[str],
-                     archived: set[str]) -> None:
+                     archived: set[str], prs: PullRequests | None) -> None:
     run = snap.run
     run_id, status = run["run_id"], run["status"]
     repo = Path(run["repo_path"])
@@ -362,7 +427,7 @@ def _plan_folder_run(p: GcPlan, run_dir: Path, snap: _Snap, repos: _RepoConfigs,
     except FactoryError as e:
         p.skipped.append(Skipped(run_dir, run_id, f"{e.message}; the run is kept", e.hint))
         return
-    _plan_ended_worktrees(p, snap, cfg, repo=repo, repo_gone=repo_gone, seen=seen)
+    _plan_ended_worktrees(p, snap, cfg, repo=repo, repo_gone=repo_gone, seen=seen, prs=prs)
     _, archive_due = _due(snap, cfg, repo_gone)
     if p.now >= archive_due:
         archived.add(run_id)
@@ -376,7 +441,8 @@ def _plan_folder_run(p: GcPlan, run_dir: Path, snap: _Snap, repos: _RepoConfigs,
             p.items.append(GcItem("worker_log", log, run_id=run_id, keep_bytes=cap))
 
 
-def _plan_archived_run(p: GcPlan, zp: Path, snap: _Snap, repos: _RepoConfigs, seen: set[str]) -> None:
+def _plan_archived_run(p: GcPlan, zp: Path, snap: _Snap, repos: _RepoConfigs, seen: set[str],
+                       prs: PullRequests | None) -> None:
     """A run already archived keeps reporting its worktrees that are not removed (module 17, reported every gc)."""
     run = snap.run
     repo = Path(run["repo_path"])
@@ -385,11 +451,12 @@ def _plan_archived_run(p: GcPlan, zp: Path, snap: _Snap, repos: _RepoConfigs, se
     if cfg is None:
         p.skipped.append(Skipped(zp, run["run_id"], "its repo config is invalid; the worktrees are kept"))
         return
-    _plan_ended_worktrees(p, snap, cfg, repo=repo, repo_gone=repo_gone, seen=seen)
+    _plan_ended_worktrees(p, snap, cfg, repo=repo, repo_gone=repo_gone, seen=seen, prs=prs)
 
 
-def plan(home: Path, cfg: Config, *, now: datetime) -> GcPlan:
-    """What gc would do. Nothing is changed here, except that git is asked whether worktrees are clean."""
+def plan(home: Path, cfg: Config, *, now: datetime, prs: PullRequests | None = None) -> GcPlan:
+    """What gc would do. Nothing is changed here, except that git is asked whether worktrees are clean and `prs` is
+    asked for the state of each due run's pull request (module 7, `PullRequests.state`)."""
     p = GcPlan(home=home, cfg=cfg, now=now)
     repos = _RepoConfigs(home, cfg)
     seen: set[str] = set()
@@ -403,7 +470,7 @@ def plan(home: Path, cfg: Config, *, now: datetime) -> GcPlan:
             p.skipped.append(Skipped(ref.run_dir, ref.run_id, "run.json cannot be read; the run is kept"))
             continue
         folder_snaps.append(snap)
-        _plan_folder_run(p, ref.run_dir, snap, repos, seen, archived)
+        _plan_folder_run(p, ref.run_dir, snap, repos, seen, archived, prs)
 
     zip_run_ids: set[str] = set()
     for zp in _archive_zips(home):
@@ -412,7 +479,7 @@ def plan(home: Path, cfg: Config, *, now: datetime) -> GcPlan:
             p.skipped.append(Skipped(zp, None, "archive cannot be read; it is kept"))
             continue
         zip_run_ids.add(snap.run["run_id"])
-        _plan_archived_run(p, zp, snap, repos, seen)
+        _plan_archived_run(p, zp, snap, repos, seen, prs)
         written = datetime.fromtimestamp(zp.stat().st_mtime, tz=timezone.utc)
         delete_after = int(_retention(repos.get_or_none(Path(snap.run["repo_path"]))
                                       or cfg)["delete_archive_after_days"])
@@ -472,6 +539,43 @@ def _record_history(home: Path, doc: dict, ended: str | None) -> None:
                                                    status=doc["status"], ended=ended or ""))
 
 
+def _verified_archive(home: Path, doc: dict, planned: Path | None) -> Path | None:
+    """A zip of this run that passes testzip() and holds its run.json, at the planned path or in any month's folder."""
+    found = sorted((home / "archive" / doc["repo_key"]).glob(f"*/{doc['run_id']}.zip"))
+    for zp in ([planned] if planned is not None else []) + found:
+        try:
+            with zipfile.ZipFile(zp) as z:
+                if z.testzip() is None and json.loads(z.read("run.json")).get("run_id") == doc["run_id"]:
+                    return zp
+        except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+            continue
+    return None
+
+
+def _differs_from_zip(run_dir: Path, zp: Path) -> str | None:
+    """What a file of the folder does not match in the zip, or None when every file (except lock) is in it as it is."""
+    with zipfile.ZipFile(zp) as z:
+        names = set(z.namelist())
+        for path in sorted(run_dir.rglob("*")):
+            name = path.relative_to(run_dir).as_posix()
+            if not path.is_file() or name == "lock":
+                continue
+            if name not in names:
+                return f"it has no {name}"
+            if z.read(name) != path.read_bytes():
+                return f"it differs on {name}"
+    return None
+
+
+def _remove_folder(run_dir: Path) -> None:
+    for child in sorted(run_dir.rglob("*"), reverse=True):
+        if child.is_dir():
+            child.rmdir()
+        else:
+            child.unlink()
+    run_dir.rmdir()
+
+
 def _archive(home: Path, item: GcItem, report: GcReport) -> None:
     run_dir = item.path
     if not run_dir.is_dir():
@@ -486,16 +590,22 @@ def _archive(home: Path, item: GcItem, report: GcReport) -> None:
         if doc["status"] not in ENDED:
             report.skipped.append(Skipped(run_dir, item.run_id, "the run is no longer ended; not archived"))
             return
+        existing = _verified_archive(home, doc, item.zip_path)
+        if existing is not None:  # a crash during an earlier deletion: never write over a verified zip
+            problem = _differs_from_zip(run_dir, existing)
+            if problem:
+                report.failed.append(Failed(run_dir, f"a verified archive exists at {existing} but {problem}; "
+                                                     "the folder and the archive are kept"))
+                return
+            _record_history(home, doc, item.ended)
+            _remove_folder(run_dir)
+            report.deleted.append(str(run_dir))
+            return
         if not any(e.get("type") == "archived" for e in read_jsonl(run_dir / "events.jsonl")):
             state.append_event(run_dir, "archived", archive=str(item.zip_path))
         _write_archive(run_dir, item.zip_path)
         _record_history(home, doc, item.ended)
-        for child in sorted(run_dir.rglob("*"), reverse=True):
-            if child.is_dir():
-                child.rmdir()
-            else:
-                child.unlink()
-        run_dir.rmdir()
+        _remove_folder(run_dir)
         report.archived.append(item.run_id or run_dir.name)
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as e:
         report.failed.append(Failed(run_dir, f"not archived; the run folder is kept: {e}"))
@@ -504,7 +614,7 @@ def _archive(home: Path, item: GcItem, report: GcReport) -> None:
 
 
 def _apply_worktree(item: GcItem, report: GcReport) -> None:
-    out = _remove_worktree_safely(item.cfg, item.path, item.repo, dirty=item.dirty)
+    out = _remove_worktree_safely(item.cfg, item.path, item.repo, dirty=item.dirty, check_unpushed=item.check_unpushed)
     if out.status == "removed":
         report.removed.append(str(item.path))
     elif out.status == "kept":
@@ -575,10 +685,11 @@ def cleanup_after_join(repo: Path, cfg: Config, run: Run, task_ids: list[str]) -
     A worktree that stays is listed by every later gc until it is removed."""
     for task_id in task_ids:
         for path in gitops._worktrees_on(repo, f"{run.run_id}--{task_id}"):
-            _remove_worktree_safely(cfg, path, repo)
+            _remove_worktree_safely(cfg, path, repo, check_unpushed=False)
 
 
 def cleanup_after_merge(repo: Path, cfg: Config, run: Run) -> None:
-    """Called by 6B or tick once the pull request is merged: the run worktree and its local branch go."""
+    """Called by 6B or tick once the pull request is merged: the run worktree and its local branch go. The merge
+    delivered the commits, so the branch is not checked for unpushed commits (a squash merge leaves them on no remote)."""
     if run.worktree.exists():
-        _remove_worktree_safely(cfg, run.worktree, repo)
+        _remove_worktree_safely(cfg, run.worktree, repo, check_unpushed=False)
