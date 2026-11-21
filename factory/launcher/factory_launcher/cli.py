@@ -25,10 +25,10 @@ from factory_engine.loadcfg import load_config
 from . import schedule as schedule_mod
 from . import tick as tick_mod
 
-MACHINE = {"tick", "watch", "schedule", "dashboard", "inbox", "doctor", "config"}
+MACHINE = {"tick", "watch", "schedule", "dashboard", "inbox", "doctor", "config", "triage"}
 RUN_COMMANDS = {"resume", "recover", "status", "where", "events", "logs", "open", "decide", "check", "reopen",
                 "note", "retry", "goto", "skip", "abort", "usage", "run", "add", "sync", "gc", "init", "upgrade",
-                "intake", "triage", "sink", "plugins"}
+                "intake", "sink", "plugins"}
 
 
 def _emit(ok: bool, code: str, message: str, hint: str, data: dict, as_json: bool) -> None:
@@ -175,6 +175,19 @@ def _inbox(args, home: Path) -> int:
     return 0
 
 
+def _triage(args, home: Path) -> int:
+    """`factory triage`: the `rules` task of the triage stage. It runs in the task folder, which is not a repo, so it
+    takes no repo and goes to the engine's triage code directly (module 4; the engine copies the request in)."""
+    from factory_engine.triage_cli import run_triage
+    try:
+        run_triage()
+    except FactoryError as e:
+        _emit(False, e.code, e.message, e.hint, {}, getattr(args, "json", False))
+        return e.exit_code
+    _emit(True, "ok", "triage.json written", "", {"triage": "written"}, getattr(args, "json", False))
+    return 0
+
+
 def _config_init(args, home: Path) -> int:
     from factory_engine.loadcfg import factory_home
     target = home / "config.yaml"
@@ -235,6 +248,8 @@ def _parser() -> argparse.ArgumentParser:
     dr.add_argument("--no-repo", action="store_true")
     dr.add_argument("--json", action="store_true")
 
+    tr = sub.add_parser("triage", help="the rules task of the triage stage: write triage.json from the task's request")
+    tr.add_argument("--json", action="store_true")
     c = sub.add_parser("config", help="machine config")
     c.add_argument("action", choices=["init"])
     c.add_argument("--json", action="store_true")
@@ -266,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
             return _doctor(args, home)
         if args.command == "config":
             return _config_init(args, home)
+        if args.command == "triage":
+            return _triage(args, home)
     except FactoryError as e:
         _emit(False, e.code, e.message, e.hint, {}, getattr(args, "json", False))
         return e.exit_code
