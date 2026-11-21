@@ -41,6 +41,9 @@ Both files are `accepted`. They were scored as if proposed, for calibration only
 | --- | --- | --- | --- | --- | --- |
 | `docs/adr/2026-11-17-wire-commands-next.md` | 1 | 4 | 4 | 3 | needs-changes |
 | | 2 | 4 | 4 | 4 | ready |
+| | 3 | 4 | 3 | 3 | needs-changes |
+| | 4 | 4 | 3 | 3 | needs-changes |
+| | 5 | 4 | 4 | 3 | needs-changes |
 | `docs/adr/2026-11-14-cmd-task-non-zero-exit-is-a-check-failure.md` | 1 | 1 | 2 | 2 | rework |
 | | 2 | 1 | 1 | 1 | rework |
 
@@ -52,6 +55,6 @@ Both files are `accepted`. They were scored as if proposed, for calibration only
 
 ## Open
 
-- Run the strong ADR at least twice more on the same rules to measure the spread. Until then, treat a Consequences score of 3 or 4 on an ADR as one point of noise.
+- Run the strong ADR at least twice more on the same rules to measure the spread. **Done 2026-11-21: runs 3 to 5 (table above). Consequences moved between 3 and 4 in five runs, Options stayed at 4, and the recommendation was `ready` in 1 run of 5. One point of noise on Consequences is confirmed; a `ready` from a single run is not evidence.**
 - Module 14 and the strong ADR have no "expected" label. They are baselines, not examples of a 5.
 - The gaps in modules 5, 14 and 17 are tasks for the owner. This work does not edit those files.
