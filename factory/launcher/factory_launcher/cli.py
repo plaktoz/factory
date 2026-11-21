@@ -148,17 +148,54 @@ def _schedule(args, home: Path) -> int:
 
 
 def _dashboard(args, home: Path) -> int:
+    if args.detach:
+        return _dashboard_detached(args, home)
     from factory_launcher.server.serve import start
     from factory_launcher.server.settings import settings_from_home
     running = start(settings_from_home(home, port=args.port))
     _emit(True, "ok", running.url, "", {"url": running.url, "port": args.port}, args.json)
-    if args.detach:
-        return 0
     try:
         running.server.serve_forever()
     except KeyboardInterrupt:
         pass
     return 0
+
+
+def _spawn_dashboard_child(argv: list[str], home: Path) -> subprocess.Popen:
+    """Start `factory_launcher.server` in its own session, its output going to dashboard-start.log."""
+    with (home / "dashboard-start.log").open("w") as out:
+        return subprocess.Popen([sys.executable, "-m", "factory_launcher.server", *argv],
+                                env=dict(os.environ, FACTORY_HOME=str(home)), stdin=subprocess.DEVNULL,
+                                stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+
+
+def _dashboard_detached(args, home: Path) -> int:
+    """Start the server as its own process, so it outlives this command (item 30). The child writes dashboard.json
+    with its own pid and token; this command waits for that file, then prints the address the child is serving."""
+    log = home / "dashboard-start.log"
+    child = _spawn_dashboard_child(["--port", str(args.port)], home)
+    info_path = home / "dashboard.json"
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline:
+        if child.poll() is not None:
+            lines = [ln for ln in log.read_text().splitlines() if ln.strip() and not ln.startswith("hint:")]
+            message = lines[-1].split(": ", 1)[1] if lines and lines[-1].startswith("dashboard.") else (
+                lines[-1] if lines else f"the dashboard exited at start (code {child.returncode})")
+            raise FactoryError("dashboard.port_in_use", message,
+                               hint=f"run `factory dashboard --port {args.port}` in the foreground to see why")
+        try:
+            info = json.loads(info_path.read_text())
+        except (OSError, ValueError):
+            info = None
+        if info and info.get("pid") == child.pid:
+            log.unlink(missing_ok=True)
+            url = f"http://127.0.0.1:{info['port']}/?token={info['token']}"
+            _emit(True, "ok", url, "", {"url": url, "port": info["port"], "pid": child.pid}, args.json)
+            return 0
+        time.sleep(0.05)
+    child.kill()
+    raise FactoryError("dashboard.port_in_use", "the detached dashboard did not start within 10 seconds",
+                       hint=f"run `factory dashboard --port {args.port}` in the foreground to see why")
 
 
 def _inbox(args, home: Path) -> int:
