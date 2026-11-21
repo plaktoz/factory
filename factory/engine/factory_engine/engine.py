@@ -425,7 +425,7 @@ class Engine:
 
     def _specs(self, stage: Stage, run_dir: Path | None = None) -> list[TaskSpec]:
         if stage.tasks_from and run_dir is not None:
-            return wf_mod.expand_tasks_from(stage, run_dir / "tasks" / stage.tasks_from)
+            return wf_mod.expand_tasks_from(stage, self._tasks_from_artifact(run_dir, stage))
         first = next(iter(self.workers.values()), None)  # the blocked-run actions build an engine with no worker
         native = first.capabilities.subagents if first is not None else False
         out: list[TaskSpec] = []
@@ -587,7 +587,17 @@ class Engine:
         """The question a task built from a templated `tasks_from` artifact answers (owner decision D2)."""
         if stage.task_template is None or not stage.tasks_from:
             return None
-        return wf_mod.questions_of(run_dir / "tasks" / stage.tasks_from).get(spec.id)
+        return wf_mod.questions_of(Engine._tasks_from_artifact(run_dir, stage)).get(spec.id)
+
+    @staticmethod
+    def _tasks_from_artifact(run_dir: Path, stage: Stage) -> Path:
+        """The file `tasks_from` names: the artifact (`out`) an earlier task wrote, in that task's work folder."""
+        found = sorted((run_dir / "tasks").glob(f"*/work/{stage.tasks_from}"))
+        if len(found) != 1:
+            raise FactoryError("config.invalid", f"stage {stage.id}: tasks_from {stage.tasks_from!r} matches "
+                               f"{len(found)} task artifacts, and it needs exactly one",
+                               hint="name the artifact an earlier task writes with `out`, and give it a unique name")
+        return found[0]
 
     def _supervise(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, batch: list[TaskSpec],
                    result: TickResult) -> None:
