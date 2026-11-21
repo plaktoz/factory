@@ -147,6 +147,7 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
 
+- 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-nine-module-5-choices.md`): the owner chose to keep the nine choices written into module 5 where it was silent; none is built yet (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-usage-unreadable-event.md`): the owner chose to keep the `usage_unreadable` event: `start_attempt` writes one per unreadable line, once, with the task id and line number (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-multi-model-double-count-and-label-it.md`): the owner chose to keep the multi-model double count and label it: `factory usage` prints a total that counts each attempt once, and `--json` has a `total` group (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-plugin-exit-codes-match-the-spec.md`): the owner chose to make the plugin exit codes match module 5: `passed: false` with no status is exit 1, and `sys.exit` or a result that is not JSON is exit 2 (commit `6a69067`). Running a plugin task through the engine is still untested.
