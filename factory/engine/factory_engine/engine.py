@@ -579,7 +579,15 @@ class Engine:
             feedback=sorted((run_dir / "tasks" / spec.id / "feedback").glob("*.json")),
             notes=notes.delivered_notes(run_dir, spec.id), progress=None, output_schema=None, model=spec.model,
             mcp=[], practices=[], artifact_name=spec.out or "artifact.json", bash=[],
-            cmd=list(spec.cmd) if spec.cmd else None, run=spec.run, plugin_dir=None)
+            cmd=list(spec.cmd) if spec.cmd else None, run=spec.run, plugin_dir=None,
+            question=self._question_of(run_dir, stage, spec))
+
+    @staticmethod
+    def _question_of(run_dir: Path, stage: Stage, spec: TaskSpec) -> str | None:
+        """The question a task built from a templated `tasks_from` artifact answers (owner decision D2)."""
+        if stage.task_template is None or not stage.tasks_from:
+            return None
+        return wf_mod.questions_of(run_dir / "tasks" / stage.tasks_from).get(spec.id)
 
     def _supervise(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, batch: list[TaskSpec],
                    result: TickResult) -> None:

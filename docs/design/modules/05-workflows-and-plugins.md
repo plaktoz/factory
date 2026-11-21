@@ -43,6 +43,7 @@ stages:
 - Gates run in order and stop at the first failure. Prefer a command or schema check; use an LLM rubric only inside a task whose output a schema gate then reads.
 - A gate may carry `skippable: true` (default `false`, and no shipped gate sets it). Only such a gate can be passed by `factory skip` on a blocked run ([module 8](08-gates-error-handling-and-rework.md)). The one exception is `no-test-results`, the T1 block, which module 8 describes. A gate's id is the name its results carry: `cmd: [make, lint]` for a command, `schema: stage-report` for a schema, and the check name (`scope-diff`) for a check.
 - `tasks_from` builds a stage's task list from an earlier artifact at run time. The engine validates the generated tasks against the workflow schema before starting them.
+- With `task_template`, the artifact is a list of plain questions, `[{"id": "q1", "question": "..."}]`, and each task is the template plus the item's own fields; an item may override a template field, such as `timeout_minutes`. The question goes into that task's prompt under "Your question". The template is checked as a task when the workflow loads, so a bad template fails before any run starts. A question list on a stage with no `task_template` is refused, and so is `task_template` on a stage with no `tasks_from` (owner decision, 2026-11-21, [ADR](../../adr/2026-11-21-research-questions-use-a-task-template.md)).
 - Lookup order: `.factory/config/workflows/`, then `factory/workflows/`. Built-in workflows: bug-fix, feature, new-app, chore, research.
 - A workflow file is checked against `factory/schemas/workflow.schema.json`. Only `stages` is required. A file that omits keys gets these values: `name` from the file name, `type` from the name, `policy.write: false`, `sink: pull_request` when it writes and `comment` when it does not, and the `defaults` values in the example above. A task with `cmd` and no `skill` gets `retries: 0` unless it sets its own.
 - A stage with `verify` as its id has `sync_base: true` unless the file says otherwise.
@@ -128,11 +129,12 @@ policy: {write: false}
 stages:
   - id: scope
     tasks: [{id: questions, skill: scope, out: questions.json}]
-    approval: human                     # confirm the sub-questions
+    approval: human                     # you confirm the sub-questions, a plain list such as:
+                                        #   [{"id": "q1", "question": "What does the vendor charge per seat?"}]
   - id: gather
     needs: [scope]
     tasks_from: questions.json          # one task per sub-question, in parallel
-    task_template: {skill: gather, helpers: {mode: off}, timeout_minutes: 20}
+    task_template: {skill: gather, helpers: {mode: off}, timeout_minutes: 20}   # each question's task starts from this
     join: all
     gate: [{schema: source-notes}]
   - id: synthesize
@@ -183,7 +185,7 @@ The spec gave no fields to four report schemas, so a gate that names one could n
 | `review-findings` | review-standards, review-spec, critique, plugin reviewers | `findings[]` of `file`, `line`, `severity` (low, medium, high), `rule`, optional `message` | `no-blocking-findings`: a finding of **medium or high** blocks (the owner accepted this; it matches `review_findings_at_or_above: medium` in module 13) |
 | `source-notes` | gather | `sources[]` of `address`, `says`, `trust` (free text; no scale is specified) | `{schema: source-notes}`. The check `every-claim-has-source` is still unbuilt, because the spec does not say how a claim is matched to a source |
 
-Open: the `scope` skill's text says `questions.json` has the `source-notes` schema, but `tasks_from` reads that file as a list of task objects. The two cannot both hold, so `questions.json` has no schema. This is open and belongs to the research workflow (phase 1b).
+`questions.json` is a list of plain questions, `{id, question}`, not `source-notes` (owner decision, 2026-11-21, [ADR](../../adr/2026-11-21-research-questions-use-a-task-template.md)). `source-notes` is what each `gather` task writes. The research workflow is phase 1b.
 
 **Deterministic plugin tasks, checks and hooks**
 
@@ -256,7 +258,8 @@ def validate_workflow(wf: Workflow, cfg: Config) -> list[Problem]
     unknown goto target, shared_files owners exist."""
 def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]   # validated like static tasks
     """artifact is a JSON array with one task object per item. Each item must match the workflow schema's task form,
-    and the list must pass the checks of a static stage (needs, cycles, overlapping scopes). `task_template` is phase 1b."""
+    and the list must pass the checks of a static stage (needs, cycles, overlapping scopes). With the stage's
+    task_template, each item is {id, question} plus any task field it overrides."""
 def expand_helpers(task: TaskSpec, subagents: Literal["native", "none"]) -> list[TaskSpec]
     """native: [task]; none or mode off: one sibling task per split hint."""
 # plugins.py
@@ -270,7 +273,7 @@ class Workflow: name: str; type: str; sink: str; policy: Policy; defaults: Defau
 @dataclass
 class Stage:    id: str; needs: list[str]; tasks: list[TaskSpec]; tasks_from: str | None; join: str
                 gate: list[GateSpec]; on_fail: OnFail | None; on_conflict: OnFail | None
-                approval: str; on_reject: str | None; sync_base: bool; source: str   # workflow or plugin:<name>
+                approval: str; on_reject: str | None; sync_base: bool; source: str; task_template: dict | None   # workflow or plugin:<name>; with tasks_from, the fields each question's task starts from
 @dataclass
 class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec | None; scope: list[str]; deny: list[str]
                 needs: list[str]; helpers: HelperPolicy; out: str | None; timeout_minutes: int
@@ -288,6 +291,7 @@ Acceptance criteria:
 - [ ] A plugin inserts its stage at the right place, records `plugin:<name>` as source, and never edits a workflow file. (not ticked: plugins are phase 1b; no plugin loader exists and tests/workflow has no plugin test)
 - [x] `expand_helpers` returns sibling tasks for `none` and the task itself for `native`. (test: factory/engine/tests/workflow/test_workflow.py::test_expand_helpers_native_returns_the_task_itself, ::test_expand_helpers_none_returns_one_sibling_per_hint)
 - [x] Tasks from `tasks_from` failing the schema stop the stage before any worker starts. (test: factory/engine/tests/workflow/test_workflow.py::test_generated_tasks_that_fail_the_workflow_schema_are_refused; the check is expand_tasks_from, which raises config.invalid before returning any task, so no worker can start from a bad list; the stage loop that calls it is module 6B and is not merged)
+- [x] With `task_template`, each plain question becomes one task built from the template, an item can override a template field, the question reaches that task's prompt, and a bad template fails when the workflow loads. (test: factory/engine/tests/workflow/test_workflow.py::test_each_plain_question_becomes_a_task_built_from_the_template, ::test_a_question_can_override_a_template_setting, ::test_a_question_list_with_no_template_is_refused_with_the_fix_named, ::test_a_templated_question_with_no_question_text_is_refused, ::test_the_spec_research_stage_with_a_task_template_loads, ::test_a_template_that_is_not_a_valid_task_is_refused_when_the_workflow_loads, ::test_a_template_on_a_stage_without_tasks_from_is_refused; factory/engine/tests/workers/test_prompt_and_ledger.py::test_a_task_built_from_a_question_list_shows_its_question_in_the_prompt. No engine-level test runs a templated stage: the engine reads the artifact at `tasks/<tasks_from>`, not where the scope task writes it, see tasks.md item 19)
 - [ ] A plugin task with `cmd`, `script` or `python` runs without an LLM, writes its artifact and log, and follows the exit code rules. (not ticked: plugin tasks are phase 1b; no test runs a plugin cmd, script or python task)
 - [ ] A plugin whose files changed after `enable` is switched off with a message naming the changed file. (not ticked: plugin enable and file hashing are phase 1b; no test)
 - [ ] A `.sh` script on a system not listed in `os:` fails the workflow at load, not mid-run. (not ticked: plugin scripts and the os: key are phase 1b; no test or loader check for .sh scripts)

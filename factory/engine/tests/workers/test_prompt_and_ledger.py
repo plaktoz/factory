@@ -41,6 +41,17 @@ def test_a_prompt_without_a_skill_still_gives_the_request_and_scope(worktree, ta
     assert "factory-" not in text.split("## Scope")[0].split("## Request")[0]
 
 
+def test_a_task_built_from_a_question_list_shows_its_question_in_the_prompt(worktree, task_dir):
+    ctx = ctx_for(worktree, task_dir)
+    ctx.question = "Which regions is it available in?"
+    text = build_prompt(ctx)
+    assert "## Your question" in text and "Which regions is it available in?" in text
+
+
+def test_a_task_with_no_question_has_no_question_section(worktree, task_dir):
+    assert "Your question" not in build_prompt(ctx_for(worktree, task_dir))
+
+
 # ---- the helpers-ledger gate ---------------------------------------------------------------------------------
 
 def git(cwd, *args):
