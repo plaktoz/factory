@@ -104,9 +104,20 @@ def test_render_page_raises_a_factory_error_when_the_write_fails(run, monkeypatc
     assert e.value.code == "decision.render_failed"
 
 
-def _chrome_dom(page_path: Path) -> str:
-    """Load the page from disk in headless Chrome, with scripts on, and return the DOM after they ran."""
+def _chrome_dom(page_path: Path, profile: Path) -> str:
+    """Load the page from disk in headless Chrome, with scripts on, and return the DOM after they ran.
+
+    Chrome gets its own empty profile folder (`--user-data-dir`). Without one, headless Chrome uses the default
+    profile, which a running browser on the same machine holds, and the call can wait on that browser until the
+    timeout (task item 24). A separate profile never touches the person's own Chrome.
+
+    `--use-mock-keychain` and `--password-store=basic` keep Chrome out of the macOS keychain. A fresh profile still
+    asks the login keychain for its "Chrome Safe Storage" key at startup; where that keychain cannot be reached it
+    reports "keychain not found" and can stall. The profile is thrown away and holds no secret, so nothing is lost.
+    """
+    profile.mkdir(parents=True, exist_ok=True)
     out = subprocess.run([str(CHROME), "--headless=new", "--disable-gpu", "--no-sandbox", "--allow-file-access-from-files",
+                          "--use-mock-keychain", "--password-store=basic", f"--user-data-dir={profile}",
                           "--virtual-time-budget=2000", "--dump-dom", page_path.as_uri()],
                          capture_output=True, text=True, timeout=60)
     return out.stdout
@@ -125,7 +136,7 @@ def test_the_page_opens_from_disk_and_its_command_matches_the_picks(run, tmp_pat
     text = text.replace('id="notes" rows="3">', 'id="notes" rows="3">Keep it simple, the team\'s call', 1)
     copy = tmp_path / "architecture.1.html"
     copy.write_text(text)
-    dom = _chrome_dom(copy)
+    dom = _chrome_dom(copy, tmp_path / "chrome-profile")
     cmd = htmllib.unescape(re.search(r'<pre id="cmd">(.*?)</pre>', dom, re.S).group(1))
     assert cmd == (f"factory decide new-color-q1w2e --packet {sha} D1=opt-b D2=opt-a "
                    f"--notes 'Keep it simple, the team'\\''s call'")

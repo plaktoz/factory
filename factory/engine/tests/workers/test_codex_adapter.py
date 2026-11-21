@@ -6,7 +6,6 @@ settings file, and make no model call.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -22,6 +21,8 @@ from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy
 
 from workers_helpers import HERE, RECORDED, harness, log_seen_while_running
+
+from process_gone import gone_within
 
 SRT = shutil.which("srt")
 needs_srt = pytest.mark.skipif(SRT is None or sandbox.node_version() is None or sandbox.node_version()[:2] < (22, 12),
@@ -328,8 +329,7 @@ def test_stop_ends_the_worker_and_its_helper_sessions(stub, machine, make_ctx, t
     result = adapter.wait(handle, 5)
     assert result.exit == "killed"
     for pid in helpers:
-        with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)
+        assert gone_within(pid), f"helper {pid} is still running after stop"
 
 
 # ---- the settings file and sandbox refusals ----------------------------------------------------------------------

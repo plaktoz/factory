@@ -4,7 +4,6 @@ These need the real `srt` (0.0.83) and Node 22.12 or later. They skip when srt i
 fails in that case, so a missing srt is never a silent pass in a real run.
 """
 
-import json
 import os
 import shutil
 from pathlib import Path
@@ -15,6 +14,8 @@ from factory_engine.adapters.worker import sandbox
 from factory_engine.adapters.worker.command import CommandAdapter, classify_exit
 from factory_engine.errors import FactoryError
 from factory_engine.types import RunSpec
+
+from process_gone import gone_within
 
 from workers_helpers import harness, log_seen_while_running
 
@@ -149,8 +150,7 @@ def test_a_plugin_function_is_killed_at_its_timeout(cmd_ctx, tmp_path, factory_h
 def assert_pid_gone(pid_file):
     """The child wrote its PID before it slept. After the timeout no process with that PID may still run."""
     pid = int(pid_file.read_text())
-    with pytest.raises(ProcessLookupError):
-        os.kill(pid, 0)
+    assert gone_within(pid), f"process {pid} is still running after the timeout"
 
 
 @needs_srt

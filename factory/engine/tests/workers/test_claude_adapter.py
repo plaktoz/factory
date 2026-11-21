@@ -1,7 +1,6 @@
 """Module 9 acceptance criteria for the Claude adapter, run against the stub `claude` that replays recorded JSON."""
 
 import json
-import os
 import time
 from pathlib import Path
 
@@ -11,6 +10,8 @@ from factory_engine.adapters.worker import claude as C
 from factory_engine.adapters.worker.claude import ClaudeAdapter
 from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy, McpServer
+
+from process_gone import gone_within
 
 from workers_helpers import ENV_GW, RECORDED, harness, log_seen_while_running
 
@@ -498,8 +499,7 @@ def test_stop_ends_the_worker_and_its_helper_sessions(stub, machine, make_ctx, t
     adapter.stop(handle)
     adapter.wait(handle, 5)
     for pid in helpers:
-        with pytest.raises(ProcessLookupError):
-            os.kill(pid, 0)
+        assert gone_within(pid), f"helper {pid} is still running after stop"
 
 
 # ---- the same request gives the same evidence shape with helpers on and off -----------------------------------------
