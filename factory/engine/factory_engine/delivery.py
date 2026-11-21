@@ -300,10 +300,28 @@ def evaluate_merge(run_dir: Path, cfg: Config, *, changed: list[str], ci: str) -
 
     allowed = all(r.passed for r in rules)
     reason = "every rule passed" if allowed else "; ".join(r.detail for r in rules if not r.passed)
-    write_json_atomic(run_dir / "merge.json", {"auto": allowed, "reason": reason,
+    write_json_atomic(run_dir / "merge.json", {"auto": allowed, "reason": reason, "ci": ci,
                                                "rules": [asdict(r) for r in rules]})
-    append_event(run_dir, "merge_evaluated", auto=allowed, reason=reason)
+    append_event(run_dir, "merge_evaluated", auto=allowed, reason=reason, ci=ci)
     return MergeDecision(auto=allowed, rules=rules, reason=reason)
+
+
+def changed_since_base(run: Run, cfg: Config) -> list[str]:
+    """The files the run branch changes against its base, for the merge rules. Empty when git cannot say, so a size
+    rule that reads it still has a list; the line count in evaluate_merge then fails closed on its own."""
+    return [path for path, _, _ in (diff_stats(run.worktree, _base(cfg)) or [])]
+
+
+def reviewers_for(run: Run) -> list[str]:
+    """The person working on the request: the issue author of a GitHub request (owner decision D1, 2026-11-21).
+    A CLI or markdown request has no GitHub login, so nobody is asked and the merge-review item is the only signal."""
+    src = run.request.source
+    return [src.author] if src.type == "github" and src.author else []
+
+
+def green_check_done(run_dir: Path) -> bool:
+    """True once the merge rules have been checked with green CI, so a pull request gets that verdict only once."""
+    return any(e.type == "merge_evaluated" and e.data.get("ci") == "green" for e in read_events(run_dir))
 
 
 def merge_or_request_review(pr: PrRef, decision: MergeDecision, prs: PullRequests,
@@ -343,7 +361,7 @@ def watch_pr(run_dir: Path, prs: PullRequests) -> PrState:
 
 # --- sinks ----------------------------------------------------------------------------------------------------------
 
-def _sink_of(run: Run) -> str:
+def sink_of(run: Run) -> str:
     """The workflow's sink, read from its file in the run's kit snapshot (module 5 defaults: pull_request when the
     workflow writes, comment when it does not)."""
     if not run.workflow:
@@ -393,7 +411,7 @@ def _comment(run: Run, tracker: TrackerAdapter, body: str) -> str:
 def write_sink(run_dir: Path, cfg: Config, *, tracker: TrackerAdapter, prs: PullRequests) -> SinkResult:
     """Deliver through the run's sink: pull_request, doc or comment (module 13 sinks table). Writes sink_written."""
     run = read_run(run_dir)
-    sink = _sink_of(run)
+    sink = sink_of(run)
     body = _summary_file(run_dir)
     if sink == "pull_request":
         pr = open_pr(run_dir, cfg, prs)
