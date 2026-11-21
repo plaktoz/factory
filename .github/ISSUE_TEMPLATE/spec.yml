@@ -1,0 +1,40 @@
+name: Spec
+description: A ticket larger than a chore. Write the spec here and get it approved before any code.
+title: "[Spec] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Fill in all four fields. Approve the spec before anyone writes code.
+        See "Specs and checks" in AGENTS.md.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One or two sentences on the outcome for a user or for the system.
+    validations:
+      required: true
+  - type: textarea
+    id: not-included
+    attributes:
+      label: Not included
+      description: What this ticket must not touch. Name files, modules or behaviors that are out of scope.
+    validations:
+      required: true
+  - type: textarea
+    id: contracts
+    attributes:
+      label: Contracts
+      description: Inputs and outputs, and any side effects such as a stored value or an emitted event. Write "none" if there is no contract.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance
+      description: One line for each criterion, with at least one edge case for a failure or an invalid input.
+      placeholder: |
+        - [ ] **Given** a precondition, **When** an action, **Then** a result you can check.
+        - [ ] **Edge case:** what happens on a failure or an invalid input.
+    validations:
+      required: true
