@@ -15,7 +15,12 @@ def fake_kit(tmp_path, monkeypatch):
     (src / "workflows").mkdir(parents=True)
     (src / "workflows" / "bug-fix.yaml").write_text("name: bug-fix\n")
     (src / "engine").mkdir()
-    (src / "engine" / "x.py").write_text("# never copied\n")
+    (src / "engine" / "factory_engine").mkdir()
+    (src / "engine" / "factory_engine" / "__main__.py").write_text("# copied\n")
+    (src / "engine" / "tests").mkdir()
+    (src / "engine" / "tests" / "test_x.py").write_text("# not copied\n")
+    (src / "launcher" / "tests").mkdir(parents=True)
+    (src / "launcher" / "tests" / "test_y.py").write_text("# copied\n")
     (src / "__pycache__").mkdir()
     (src / "__pycache__" / "z.pyc").write_text("x")
     (src / "AGENTS.md").write_text("rules\n")
@@ -46,9 +51,11 @@ def test_init_creates_the_layout(repo, fake_kit):
     assert repo / "factory" in report.created
 
 
-def test_init_does_not_copy_the_engine_or_caches(repo, fake_kit):
+def test_init_copies_the_engine_without_its_tests_and_without_caches(repo, fake_kit):
     kit.init_repo(repo)
-    assert not (repo / "factory" / "engine").exists()
+    assert (repo / "factory" / "engine" / "factory_engine" / "__main__.py").is_file()
+    assert not (repo / "factory" / "engine" / "tests").exists()
+    assert (repo / "factory" / "launcher" / "tests" / "test_y.py").is_file()
     assert not (repo / "factory" / "__pycache__").exists()
 
 

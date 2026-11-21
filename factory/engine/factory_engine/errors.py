@@ -80,6 +80,10 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     ),
     "gate.command_missing": CatalogueEntry("human", "A gate command's binary was not found, so the gate did not run; install it or fix the command"),
     "gate.no_test_results": CatalogueEntry("human", "A verify stage's tasks reported 0 test cases, so no pull request opens; name the missing JUnit files, or skip the gate for a repo with no tests (module 8, T1)"),
+    "kit.no_engine": CatalogueEntry(
+        "fail_fast", "The run's saved kit (or the repo's kit, for a command that creates a run) has no engine folder; "
+                     "add --installed-engine to run that one command on the installed engine"
+    ),
     "sandbox.canary_open": CatalogueEntry(
         "human", "doctor found a read or write route that is not blocked; name the route"
     ),

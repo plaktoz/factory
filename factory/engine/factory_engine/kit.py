@@ -28,7 +28,7 @@ def use_kit_source(path: Path) -> None:
     global KIT_SOURCE
     KIT_SOURCE = path
 INNER_GITIGNORE = "*\n!config/\n!config/**\n!.gitignore\n"  # !config/** is needed; see module 3
-KIT_KEEP = {"engine"}  # never copied: the engine is installed by the launcher, not by init (module 3)
+ENGINE_TESTS = Path("engine") / "tests"  # the one path init and upgrade leave out of the repo's engine copy (ADR which-engine-serves-each-repo, D1)
 
 STARTER_FACTORY_YAML = """base_branch: main
 tracker: github
@@ -82,7 +82,34 @@ def _copy_kit(src: Path, dst: Path) -> None:
         raise FactoryError("config.invalid", f"kit source {src} is not a folder", hint="pass the folder that holds the kit")
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst, ignore=shutil.ignore_patterns(".venv", "__pycache__", "*.pyc", ".pytest_cache", ".gitkeep", *KIT_KEEP))
+    caches = shutil.ignore_patterns(".venv", "__pycache__", "*.pyc", ".pytest_cache", ".gitkeep")
+
+    def ignore(folder: str, names: list[str]) -> set[str]:
+        skip = set(caches(folder, names))
+        if Path(folder) == src / ENGINE_TESTS.parent and ENGINE_TESTS.name in names:
+            skip.add(ENGINE_TESTS.name)
+        return skip
+
+    shutil.copytree(src, dst, ignore=ignore)
+
+
+def snapshot_engine_dir(home: Path, kit_hash: str) -> Path:
+    """Where a run's own engine is: the engine folder of its saved kit."""
+    return home / "kits" / kit_hash / "factory" / "engine"
+
+
+def engine_env(engine_dir: Path, *, subject: str, env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """`env` with PYTHONPATH set so `python -m factory_engine` runs the copy in `engine_dir` (module 16, which engine runs).
+
+    An engine folder with no `factory_engine` package starts nothing: kit.no_engine, never a silent installed engine.
+    A PYTHONPATH already set stays, after the engine path."""
+    if not (engine_dir / "factory_engine").is_dir():
+        raise FactoryError("kit.no_engine", f"{subject} has no engine at {engine_dir}",
+                           hint="add --installed-engine to run this one command on the installed engine, "
+                                "or run factory upgrade and commit the kit")
+    out = dict(os.environ if env is None else env)
+    out["PYTHONPATH"] = os.pathsep.join(p for p in (str(engine_dir), out.get("PYTHONPATH", "")) if p)
+    return out
 
 
 def init_repo(repo: Path) -> InitReport:

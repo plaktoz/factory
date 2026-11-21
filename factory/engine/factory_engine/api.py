@@ -8,12 +8,13 @@ adapter from the `default_*` functions here, or one the caller passes to `engine
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from . import decisions, housekeeping, intake, state
+from . import decisions, housekeeping, intake, kit, state
 from . import notes as notes_store
 from . import usage as usage_mod
 from .adapters.tracker.base import TrackerAdapter
@@ -193,6 +194,14 @@ def gc(repo, *, apply=False) -> GcPlan:
     return plan
 
 
+def run_engine_env(repo, run_id) -> dict[str, str]:
+    """The environment that runs a command about `run_id` on the engine in the run's own kit snapshot (kit.no_engine if none)."""
+    ref = _ref(Path(repo), run_id)
+    kit_hash = json.loads((ref.run_dir / "run.json").read_text())["kit_hash"]
+    return kit.engine_env(kit.snapshot_engine_dir(state.factory_home(), kit_hash),
+                          subject=f"run {run_id} (kit {kit_hash})")
+
+
 def spawn_engine(repo, run_id) -> int | None:
     """Start `python -m factory_engine run <run>` in its own session, unless a live lock exists. Returns its pid.
 
@@ -202,10 +211,11 @@ def spawn_engine(repo, run_id) -> int | None:
     run_dir = _ref(repo, run_id).run_dir
     if state.lock_status(run_dir) == "live":
         return None
+    env = run_engine_env(repo, run_id)
     logs = state.factory_home() / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     with open(logs / f"engine-{run_id}.log", "ab") as log:
         proc = subprocess.Popen([sys.executable, "-m", "factory_engine", "run", run_id, "--repo", str(repo)],
-                                cwd=str(repo), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                cwd=str(repo), env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                 start_new_session=True)
     return proc.pid

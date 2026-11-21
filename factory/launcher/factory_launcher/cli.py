@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from factory_engine import state
+from factory_engine import api, kit, state
 from factory_engine.errors import FactoryError
 from factory_engine.loadcfg import load_config
 
@@ -28,6 +29,7 @@ MACHINE = {"tick", "watch", "schedule", "dashboard", "inbox", "doctor", "config"
 RUN_COMMANDS = {"resume", "recover", "status", "where", "events", "logs", "open", "decide", "check", "reopen",
                 "note", "retry", "goto", "skip", "abort", "usage", "run", "add", "sync", "gc", "init", "upgrade",
                 "intake", "triage", "sink", "plugins"}
+CREATES_RUNS = {"add", "sync"}
 
 
 def _emit(ok: bool, code: str, message: str, hint: str, data: dict, as_json: bool) -> None:
@@ -62,9 +64,23 @@ def _engine_argv(argv: list[str], repo: Path) -> list[str]:
     return [sys.executable, "-m", "factory_engine", *argv, "--repo", str(repo)]
 
 
-def _dispatch(argv: list[str], repo: Path, home: Path) -> int:
-    """Hand the command to the repo's engine and pass its output and exit code straight through."""
-    env = {**__import__("os").environ, "FACTORY_HOME": str(home)}
+def _engine_env(argv: list[str], repo: Path, run_id: str | None, home: Path) -> dict[str, str]:
+    """The environment of the engine that serves this command (module 16, which engine runs a command).
+
+    A command about a run uses the engine in the run's saved kit; `add` and `sync` create runs, so they use the repo's
+    committed `factory/engine`. Any other command (init, upgrade, doctor, ...) runs on the installed engine.
+    """
+    env = {**os.environ, "FACTORY_HOME": str(home)}
+    if run_id is not None:
+        return {**api.run_engine_env(repo, run_id), "FACTORY_HOME": str(home)}
+    if argv and argv[0] in CREATES_RUNS:
+        return kit.engine_env(repo / "factory" / "engine", subject=f"repo {repo}", env=env)
+    return env
+
+
+def _dispatch(argv: list[str], repo: Path, home: Path, run_id: str | None = None, *, installed_engine: bool = False) -> int:
+    """Hand the command to the engine that serves it and pass its output and exit code straight through."""
+    env = {**os.environ, "FACTORY_HOME": str(home)} if installed_engine else _engine_env(argv, repo, run_id, home)
     proc = subprocess.run(_engine_argv(argv, repo), cwd=str(repo), env=env, check=False)
     return proc.returncode
 
@@ -261,6 +277,8 @@ def _engine_passthrough(argv: list[str]) -> int:
     """Send a run command to its engine. The repo comes from --repo, the run's run.json, or the current folder."""
     home = state.factory_home()
     args_list = list(argv)
+    installed_engine = "--installed-engine" in args_list
+    args_list = [a for a in args_list if a != "--installed-engine"]
     repo_arg = None
     if "--repo" in args_list:
         i = args_list.index("--repo")
@@ -275,7 +293,11 @@ def _engine_passthrough(argv: list[str]) -> int:
     if repo is None:
         _emit(False, "config.invalid", "the current folder is not in a git repo", "pass --repo <path>", {}, "--json" in argv)
         return 2
-    return _dispatch(args_list, repo, home)
+    try:
+        return _dispatch(args_list, repo, home, run_id, installed_engine=installed_engine)
+    except FactoryError as e:
+        _emit(False, e.code, e.message, e.hint, {}, "--json" in argv)
+        return e.exit_code
 
 
 def _is_run(value: str, home: Path) -> bool:
