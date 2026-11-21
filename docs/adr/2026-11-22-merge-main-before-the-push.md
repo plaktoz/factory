@@ -53,9 +53,9 @@ The owner chose it, it matches the earlier pull requests, and the one conflict c
 ## Consequences
 
 - **Done:** the merge is committed; the branch holds `origin/main` at `13ab255`.
-- **Not done:** the push and the pull request (D7, waiting on task 37).
-- **New task:** `docs/tasks.md` item 39: a stage with a skipped task never finishes. Found through this warning; not fixed here.
-- **Task:** `docs/tasks.md` item 38 (the push) and the Log.
+- **Not done:** the push and the pull request (D7, waiting on task 42).
+- **New task:** `docs/tasks.md` item 44: a stage with a skipped task never finishes. Found through this warning; not fixed here.
+- **Task:** `docs/tasks.md` item 43 (the push) and the Log.
 
 ## Source
 

@@ -46,7 +46,7 @@ The owner chose to have the session propose the tickets. That is recorded. The p
 
 - **Not done:** the pilot table, the two pilot tickets, the two baseline tickets, and the start day. The task waits on the owner.
 - **Measure gap:** the review-time measure has no baseline in this repo, because merged PRs have no approvals. The owner should decide how the baseline review time is measured, or accept an empty baseline and say so.
-- **Task:** `docs/tasks.md` item 37.
+- **Task:** `docs/tasks.md` item 42.
 
 ## Source
 

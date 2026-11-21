@@ -40,7 +40,7 @@ One pull request is easier to review than two for a tasks file, and the page's a
 
 - **Not done:** the push and the pull request. Both wait until D4 is closed and the page is removed.
 - **Before pushing:** check that the branch merges cleanly with `origin/main` (it has moved since `7d6d051`). Do not fetch or merge `main` without asking, per `AGENTS.md`.
-- **Task:** `docs/tasks.md` item 38.
+- **Task:** `docs/tasks.md` item 43.
 
 ## Source
 

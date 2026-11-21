@@ -39,7 +39,7 @@ A short comment saves the next reader a search, and the repo is the owner's.
 
 - **Done:** the comment is posted. Nothing else changes in the repo.
 - **If the wording is wrong:** edit or delete the comment on GitHub. The comment says "tasks 25 to 34"; `docs/tasks.md` now also has items 35 and later, which are not part of issue 55.
-- **Task:** `docs/tasks.md` item 36.
+- **Task:** `docs/tasks.md` item 41.
 
 ## Source
 

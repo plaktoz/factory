@@ -48,7 +48,7 @@ The pilot tests the spec steps on work the project needs anyway, and both issues
 
 - **Done:** #88 and #89 are open, with the Spec form's four fields filled in.
 - **Not done:** the work in either issue. The pilot's rule is that the owner approves each spec in a comment before code is written, so nothing is built yet.
-- **Task:** `docs/tasks.md` item 37 is updated to name these issues; the baseline and start day stay open for D2 and the owner.
+- **Task:** `docs/tasks.md` item 42 is updated to name these issues; the baseline and start day stay open for D2 and the owner.
 
 ## Source
 

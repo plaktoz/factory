@@ -45,7 +45,7 @@ It is the only time measure that has a value for both baselines, so the day 14 c
 - **The defect measure stays** as the pilot doc defines it: a bug issue or a revert traced to the ticket within 14 days of the merge.
 - **Not built:** nothing in the factory. This is a measure for a by-hand pilot.
 - **Limit:** the measure cannot separate review from fixing time, and the owner merges their own work. The day 14 note must say so next to the numbers.
-- **Task:** `docs/tasks.md` item 37 (the pilot setup) and the Log.
+- **Task:** `docs/tasks.md` item 42 (the pilot setup) and the Log.
 
 ## Source
 
