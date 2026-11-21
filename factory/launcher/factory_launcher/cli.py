@@ -63,13 +63,18 @@ def _engine_argv(argv: list[str], repo: Path) -> list[str]:
     return [sys.executable, "-m", "factory_engine", *argv, "--repo", str(repo)]
 
 
+# Commands that set up or repair the kit itself. They run before a repo has an engine of its own, so they use the
+# installed engine (otherwise `init` could never create one). Only `add` and `sync` create runs on the repo's engine.
+KIT_COMMANDS = {"init", "upgrade", "doctor"}
+
+
 def _dispatch(argv: list[str], repo: Path, home: Path, *, run_id: str | None = None, installed: bool = False) -> int:
     """Hand the command to an engine and pass its output and exit code straight through.
 
     A command about a run runs on that run's own kit snapshot (api.run_engine_env). A command that creates a run
-    runs on the repo's own factory/engine. --installed-engine runs either on the launcher's installed engine."""
+    runs on the repo's own factory/engine. The kit commands and --installed-engine run on the installed engine."""
     env = {**os.environ, "FACTORY_HOME": str(home)}
-    if not installed:
+    if not installed and argv and argv[0] not in KIT_COMMANDS:
         env = api.run_engine_env(run_id, home=home, env=env) if run_id else _repo_engine_env(repo, env)
     proc = subprocess.run(_engine_argv(argv, repo), cwd=str(repo), env=env, check=False)
     return proc.returncode
