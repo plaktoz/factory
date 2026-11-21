@@ -147,6 +147,7 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
 
+- 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-usage-reads-the-last-whole-line-for-each-attempt.md`): the owner chose to fix the usage reading bugs in code: unreadable lines are skipped, the last whole line wins, and attempt numbers are never reused (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-gc-never-writes-over-a-verified-archive.md`): the owner chose to fix the archive-overwrite bug in code: `gc` never writes over a zip that verifies (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-gc-keeps-a-branch-that-has-unpushed-commits.md`): the owner chose to fix `gc`'s branch deletion in code: a branch with unpushed commits is kept, and a joined task branch or a merged run branch is exempt (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-reply-on-issue-55-after-the-pull-request.md`): the owner chose `reply-after-pr` for decision D5. The comment is not posted: issue 55 closed when PR #73 merged and has no comments.
