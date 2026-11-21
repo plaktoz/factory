@@ -187,7 +187,8 @@ def usage(repo, run_id=None, since=None) -> UsageReport:
 def gc(repo, *, apply=False) -> GcPlan:
     """The housekeeping plan. With apply, carry it out; the plan is returned either way."""
     repo = Path(repo)
-    plan = housekeeping.plan(state.factory_home(), load_config(repo), now=SystemClock().now())
+    cfg = load_config(repo)
+    plan = housekeeping.plan(state.factory_home(), cfg, now=SystemClock().now(), prs=default_prs(repo, cfg))
     if apply:
         housekeeping.apply(plan)
     return plan

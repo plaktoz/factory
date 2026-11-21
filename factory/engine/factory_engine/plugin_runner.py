@@ -4,7 +4,12 @@
 (FACTORY_RUN_ID, FACTORY_STAGE, FACTORY_TASK_ID, FACTORY_WORKTREE, FACTORY_TASK_DIR). The function's return value is
 printed as JSON on stdout. Exit codes: 0 passed, 1 the check found a problem, 2 the task itself failed.
 
-A function that raises is a task error (exit 2), and so is a module or function that does not exist.
+A function that raises or calls `sys.exit` is a task error (exit 2), and so is a result that cannot be written as
+JSON. So is anything that stops the plugin from loading: a module or function that does not exist, a syntax error,
+any other error raised while the module is imported, and a `sys.exit` at import time.
+
+A result dict says pass or fail by `status` (`passed`, `check_failed`, anything else is a task error). When it has no
+`status`, `passed` decides: true is exit 0 and false is exit 1.
 """
 
 from __future__ import annotations
@@ -30,12 +35,12 @@ def main() -> int:
         return 2
     try:
         func = getattr(importlib.import_module(module_name), func_name)
-    except (ImportError, AttributeError) as e:
-        print(json.dumps({"error": f"{target} cannot be imported: {e}"}))
+    except (Exception, SystemExit) as e:  # a plugin that cannot be loaded is a task error, whatever stopped it
+        print(json.dumps({"error": f"{target} cannot be imported: {type(e).__name__}: {e}"}))
         return 2
     try:
         result = func(context)
-    except Exception as e:  # a plugin function that raises is a task error
+    except (Exception, SystemExit) as e:  # a plugin function that raises or exits is a task error
         print(json.dumps({"error": f"{type(e).__name__}: {e}"}))
         return 2
     if isinstance(result, bool):
@@ -45,8 +50,15 @@ def main() -> int:
     if not isinstance(result, dict):
         print(json.dumps({"error": "a plugin function returns a dict"}))
         return 2
-    print(json.dumps(result))
-    status = result.get("status", "passed")
+    try:
+        line = json.dumps(result)
+    except (TypeError, ValueError) as e:
+        print(json.dumps({"error": f"result cannot be written as JSON: {e}"}))
+        return 2
+    print(line)
+    status = result.get("status")
+    if status is None:
+        status = "passed" if result.get("passed", True) is True else "check_failed"
     if status == "passed":
         return 0
     if status == "check_failed":
