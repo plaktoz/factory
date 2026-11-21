@@ -12,12 +12,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from factory_engine import state
+from factory_engine import api, state
 from factory_engine.errors import FactoryError
 from factory_engine.loadcfg import load_config
 
@@ -62,11 +63,25 @@ def _engine_argv(argv: list[str], repo: Path) -> list[str]:
     return [sys.executable, "-m", "factory_engine", *argv, "--repo", str(repo)]
 
 
-def _dispatch(argv: list[str], repo: Path, home: Path) -> int:
-    """Hand the command to the repo's engine and pass its output and exit code straight through."""
-    env = {**__import__("os").environ, "FACTORY_HOME": str(home)}
+def _dispatch(argv: list[str], repo: Path, home: Path, *, run_id: str | None = None, installed: bool = False) -> int:
+    """Hand the command to an engine and pass its output and exit code straight through.
+
+    A command about a run runs on that run's own kit snapshot (api.run_engine_env). A command that creates a run
+    runs on the repo's own factory/engine. --installed-engine runs either on the launcher's installed engine."""
+    env = {**os.environ, "FACTORY_HOME": str(home)}
+    if not installed:
+        env = api.run_engine_env(run_id, home=home, env=env) if run_id else _repo_engine_env(repo, env)
     proc = subprocess.run(_engine_argv(argv, repo), cwd=str(repo), env=env, check=False)
     return proc.returncode
+
+
+def _repo_engine_env(repo: Path, env: dict[str, str]) -> dict[str, str]:
+    """PYTHONPATH for a command that creates a run: the repo's own factory/engine, which must exist."""
+    engine = repo / "factory" / "engine"
+    if not engine.is_dir():
+        raise FactoryError("kit.no_engine", f"the repo's kit at {engine} has no engine folder",
+                           hint="run factory init or factory upgrade, or add --installed-engine")
+    return {**env, "PYTHONPATH": os.pathsep.join(p for p in (str(engine), env.get("PYTHONPATH", "")) if p)}
 
 
 def _tick_repos(args, home: Path) -> list[Path]:
@@ -258,9 +273,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _engine_passthrough(argv: list[str]) -> int:
-    """Send a run command to its engine. The repo comes from --repo, the run's run.json, or the current folder."""
+    """Send a run command to its engine. The repo comes from --repo, the run's run.json, or the current folder.
+
+    --installed-engine is taken out here, so the engine never sees it, and the command runs on the installed engine."""
     home = state.factory_home()
     args_list = list(argv)
+    installed = "--installed-engine" in args_list
+    args_list = [a for a in args_list if a != "--installed-engine"]
     repo_arg = None
     if "--repo" in args_list:
         i = args_list.index("--repo")
@@ -275,7 +294,11 @@ def _engine_passthrough(argv: list[str]) -> int:
     if repo is None:
         _emit(False, "config.invalid", "the current folder is not in a git repo", "pass --repo <path>", {}, "--json" in argv)
         return 2
-    return _dispatch(args_list, repo, home)
+    try:
+        return _dispatch(args_list, repo, home, run_id=run_id, installed=installed)
+    except FactoryError as e:
+        _emit(False, e.code, e.message, e.hint, {}, "--json" in argv)
+        return e.exit_code
 
 
 def _is_run(value: str, home: Path) -> bool:
