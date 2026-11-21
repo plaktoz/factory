@@ -14,6 +14,7 @@ A reusable software factory: a deterministic Python engine that turns a request 
 | `factory/dashboard/` | The dashboard page: plain HTML in 1a, prebuilt React bundle in 1b (no React source exists yet) | 15 |
 | `factory/{workflows,schemas,policies,languages,shims}/` | Shipped data the engine loads | 5, 17A |
 | `factory/skills/own/` | The factory's own skills, including `practices/` | 10 |
+| `.github/ISSUE_TEMPLATE/` | The issue form for a ticket's spec. A factory worker cannot write here (`deny_paths`) | - |
 | `docs/` | See `docs/README.md` | - |
 | `scripts/docs-check/` | Checks on the spec: links, Mermaid blocks, module contracts. See its README | - |
 
@@ -46,6 +47,19 @@ A reusable software factory: a deterministic Python engine that turns a request 
 - Every commit ends with an `Agent-Run: <run id>` trailer. Add `Decision: <id>` when the commit writes or changes a decision.
 - A stage is not complete until its decision commits are merged to main and its gate passes.
 - Before you finish a stage, report: each decision id you wrote, each criterion with its evidence or its reason for being unticked, and any conflict with an external update.
+
+## Specs and checks
+
+A pilot, set on 2026-11-21: two medium tickets, followed by hand, with no change to the factory's workflows ([why](docs/adr/2026-11-21-spec-workflow-applies-by-hand-first.md)). When it ends, a new ADR decides whether these rules stay.
+
+- A ticket larger than a chore has its spec in its GitHub issue, written with the issue form in `.github/ISSUE_TEMPLATE/spec.yml` (Goal, Not included, Contracts, Acceptance). Get the spec approved before you write code ([why](docs/adr/2026-11-21-spec-rules-live-in-agents-md-and-issue-form.md)).
+- Before you open a pull request on work you drive, start a fresh session. Give it the diff and the acceptance list, and nothing else. It reports each criterion as met, unmet or untested, with the line or test that shows it ([why](docs/adr/2026-11-21-adversarial-check-is-a-fresh-session-by-hand.md)).
+
+| Tier | Rule |
+| --- | --- |
+| Always | Follow this file. Add a test for new logic. |
+| Ask first | Add a dependency. Change a shared contract in [section 18](docs/design/shared/18-shared-contracts.md). An architecture choice already stops work: see Working rules. |
+| Never | Hard-code a secret. Edit an ADR another author wrote. Edit a file outside the scope your brief names. |
 
 ## Build order
 
