@@ -77,7 +77,7 @@ def test_each_own_skill_resolves_and_its_prompt_names_the_skill_and_artifact(sta
     ctx = ctx_for(worktree, task_dir, skill=ref, artifact_name=artifact)
     text = build_prompt(ctx)
     assert f"factory-{ref.name}" in text
-    assert f"$FACTORY_TASK_DIR/{artifact}" in text
+    assert str(task_dir / artifact) in text
 
 
 @pytest.mark.parametrize("stage", REPO_SKILL_STAGES)

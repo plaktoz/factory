@@ -81,8 +81,12 @@ def build_prompt(ctx: TaskContext) -> str:
     if ctx.progress is not None and ctx.progress.is_file():
         out.append(_section("Progress so far (you are resuming)", ctx.progress.read_text()))
     schema = f"Its schema is {ctx.output_schema}." if ctx.output_schema else "It has no fixed schema."
-    out.append(_section("Output", f"Write exactly one artifact to $FACTORY_TASK_DIR/{ctx.artifact_name}. {schema} "
-                        f"Write nothing else there except {PROGRESS} and {LEDGER}."))
+    # The real folder path, not only $FACTORY_TASK_DIR: a worker with no Bash cannot expand the variable, and would not
+    # know where to write (a real run, 2026-11-21).
+    folder = ctx.task_dir
+    out.append(_section("Output", f"Write exactly one artifact to {folder / ctx.artifact_name} (the folder is "
+                        f"$FACTORY_TASK_DIR). {schema} Write nothing else there except {folder / PROGRESS} and "
+                        f"{folder / LEDGER}."))
     return "\n".join(out)
 
 

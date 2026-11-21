@@ -199,3 +199,26 @@ def test_tick_spawn_refuses_a_run_whose_snapshot_has_no_engine(home, tmp_path):
         api.spawn_engine(alpha, "run-old")
 
     assert info.value.code == "kit.no_engine"
+
+
+@pytest.mark.parametrize("command", [["init"], ["upgrade", "0.2.0"], ["doctor"]])
+def test_a_kit_command_runs_on_the_installed_engine_even_before_the_repo_has_one(home, tmp_path, capfd, command):
+    """init, upgrade and doctor manage the kit, so they run before a repo has an engine; they must not need one."""
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    _git("init", "-q", cwd=bare)
+
+    seen: list[dict] = []
+
+    def fake_run(argv, **kwargs):
+        seen.append(kwargs["env"])
+        return subprocess.CompletedProcess(argv, 0)
+
+    original = cli.subprocess.run
+    cli.subprocess.run = fake_run
+    try:
+        code = cli._dispatch(command, bare, home)
+    finally:
+        cli.subprocess.run = original
+    assert code == 0
+    assert len(seen) == 1 and "PYTHONPATH" not in seen[0]
