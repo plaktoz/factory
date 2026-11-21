@@ -127,9 +127,46 @@ def test_a_red_ci_check_blocks_auto(home, tmp_path, cfg):
     assert d.auto is False and rule(d, "auto.require.ci").passed is False
 
 
-def test_a_review_stage_blocks_auto_because_findings_cannot_be_read_yet(home, tmp_path, cfg):
+def _review(run_dir, findings, *, task="standards"):
+    """A review stage whose one task wrote review-findings.json with these findings (None: write nothing)."""
+    folder = run_dir / "tasks" / task
+    folder.mkdir(parents=True, exist_ok=True)
+    if findings is not None:
+        (folder / "review.json").write_text(json.dumps({"schema_version": 1, "findings": findings}))
+    set_run(run_dir, stages=[StageState("review", 1, "done", [task], "t0", "t1")])
+
+
+def _finding(severity, rule="review-standards"):
+    return {"file": "app/main.py", "line": 1, "severity": severity, "rule": rule}
+
+
+def test_a_review_stage_with_only_low_findings_does_not_block_auto(home, tmp_path, cfg):
     run_dir, wt, _ = chore(home, tmp_path, cfg)
-    set_run(run_dir, stages=[StageState("review", 1, "done", [], "t0", "t1")])
+    _review(run_dir, [_finding("low")])
+    d = evaluate(run_dir, cfg, wt)
+    assert rule(d, "never_auto_if.review_findings_at_or_above").passed is True
+
+
+def test_a_medium_or_high_finding_blocks_auto_and_names_the_rule(home, tmp_path, cfg):
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    _review(run_dir, [_finding("low"), _finding("high", rule="review-spec")])
+    d = evaluate(run_dir, cfg, wt)
+    assert d.auto is False
+    r = rule(d, "never_auto_if.review_findings_at_or_above")
+    assert r.passed is False and "high" in r.detail and "review-spec" in r.detail
+
+
+def test_a_review_stage_with_no_artifact_blocks_auto_because_the_findings_are_unknown(home, tmp_path, cfg):
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    _review(run_dir, None)
+    d = evaluate(run_dir, cfg, wt)
+    assert d.auto is False
+    assert rule(d, "never_auto_if.review_findings_at_or_above").passed is False
+
+
+def test_a_review_artifact_that_fails_the_schema_blocks_auto(home, tmp_path, cfg):
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    _review(run_dir, [{"file": "app/main.py"}])  # no severity, rule or line
     d = evaluate(run_dir, cfg, wt)
     assert d.auto is False
     assert rule(d, "never_auto_if.review_findings_at_or_above").passed is False
@@ -337,3 +374,11 @@ def _body(run_dir: Path) -> Path:
     if not path.exists():
         render_summary(run_dir, usage.summarize([run_dir]))
     return path
+
+
+def test_the_summary_reads_the_review_findings_instead_of_saying_they_cannot_be_read(home, tmp_path, cfg):
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    _review(run_dir, [_finding("high", rule="review-spec")])
+    text = render_summary(run_dir, usage.summarize([run_dir])).read_text()
+    assert "not readable yet" not in text
+    assert "Review findings: 1 read, first: high app/main.py:1 review-spec" in text

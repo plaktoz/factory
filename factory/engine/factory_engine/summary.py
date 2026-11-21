@@ -15,6 +15,7 @@ from .errors import FactoryError
 from .gitops import git
 from .state import read_events, read_run
 from .types import Run
+from .validate import validate
 from .usage import UsageReport
 from .yamlio import load_yaml
 
@@ -144,7 +145,11 @@ def _evidence(run: Run, run_dir: Path) -> str:
         ok = sum(gates.values())
         parts.append(f"Gates {ok} passed, {len(gates) - ok} failed")
     if any(s.id.startswith("review") for s in run.stages):
-        parts.append("Review findings: not readable yet (no review-findings schema)")
+        blocking, unreadable = findings_at_or_above(run, run_dir, "low")
+        if unreadable:
+            parts.append(f"Review findings: not readable ({unreadable})")
+        else:
+            parts.append(f"Review findings: {len(blocking)} read" + (f", first: {blocking[0]}" if blocking else ""))
     return " · ".join(parts) or "None recorded."
 
 
@@ -215,3 +220,32 @@ def render_summary(run_dir: Path, usage: UsageReport) -> Path:
     path = run_dir / "summary.md"
     write_text_atomic(path, text)
     return path
+
+
+# A finding of this severity or higher blocks auto-merge. The gate `no-blocking-findings` uses the same list.
+SEVERITY_ORDER = ("low", "medium", "high")
+
+
+def findings_at_or_above(run: Run, run_dir: Path, threshold: str) -> tuple[list[str], str | None]:
+    """The findings of every review stage at or above `threshold`, as text, and a reason when any review artifact
+    is missing or unreadable (None when every artifact passed the review-findings schema). A review task with no
+    findings file, or one that fails the schema, makes the decision unknowable, so the caller blocks on it."""
+    limit = SEVERITY_ORDER.index(threshold)
+    blocking: list[str] = []
+    for stage in (s for s in run.stages if s.id.startswith("review")):
+        for task_id in stage.tasks:
+            folder = run_dir / "tasks" / task_id
+            artifacts = sorted(p for p in folder.glob("*.json")
+                               if p.name not in ("task.json", "progress.json") and not p.name.startswith("ledger"))
+            if not artifacts:
+                return blocking, f"review task {task_id} wrote no findings file"
+            for path in artifacts:
+                try:
+                    doc = json.loads(path.read_text())
+                    validate(doc, "review-findings", file=str(path))
+                except (OSError, ValueError, FactoryError) as e:
+                    return blocking, f"{path.name} is not readable findings: {getattr(e, 'message', e)}"
+                for f in doc["findings"]:
+                    if SEVERITY_ORDER.index(f["severity"]) >= limit:
+                        blocking.append(f"{f['severity']} {f['file']}:{f['line']} {f['rule']}")
+    return blocking, None
