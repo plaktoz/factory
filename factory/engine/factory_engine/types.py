@@ -324,6 +324,9 @@ class Stage:
     on_reject: str | None
     sync_base: bool
     source: str  # workflow or plugin:<name>
+    # With tasks_from: the fields each generated task starts from; each item is then {id, question} (owner decision
+    # D2, 2026-11-21). Defaulted, so the fields above keep the spec's order.
+    task_template: dict | None = None
 
 
 @dataclass

@@ -77,7 +77,9 @@ PENDING = [s for s in SIGS if not exists(s)]
 
 def test_the_parser_reads_the_whole_spec():
     # 146 at wave 0; 147 since module 4 added triage_candidates (2026-11-15, built with its tests).
-    assert len(SIGS) == 147, f"{len(SIGS)} signatures parsed, expected 147: the parser regressed, or a spec signature was removed or added"
+    # 151 since 2026-11-21: module 7 lists PullRequests.comment, and module 13 lists changed_since_base, reviewers_for and
+    # green_check_done (owner decision D1, ADR 2026-11-21-auto-merge-is-checked-at-open-and-at-green).
+    assert len(SIGS) == 151, f"{len(SIGS)} signatures parsed, expected 151: the parser regressed, or a spec signature was removed or added"
     assert all(s.file for s in SIGS), "a signature has no module file; add a `# file.py` comment to its block"
 
 

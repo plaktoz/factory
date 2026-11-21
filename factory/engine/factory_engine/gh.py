@@ -123,6 +123,9 @@ class GitHubPullRequests:
         if users:
             _ok(self.run(["pr", "edit", str(pr.number), *self._base(), "--add-reviewer", ",".join(users)]), "pr edit")
 
+    def comment(self, pr: PrRef, body: str) -> None:
+        _ok(self.run(["pr", "comment", str(pr.number), *self._base(), "--body", body]), "pr comment")
+
 
 _FAIL = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
 _PASS = {"SUCCESS", "NEUTRAL", "SKIPPED"}

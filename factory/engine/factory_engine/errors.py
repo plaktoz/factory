@@ -51,6 +51,11 @@ CATALOGUE: dict[str, CatalogueEntry] = {
     ),
     "sandbox.srt_missing": CatalogueEntry("fail_fast", "srt is not installed; give the install command"),
     "sandbox.node_old": CatalogueEntry("fail_fast", "Node is older than 22.12, which srt needs"),
+    "kit.no_engine": CatalogueEntry(
+        "fail_fast",
+        "The run's kit snapshot (or the repo's kit, for a command that creates a run) has no engine folder; "
+        "name the run and the kit, and add --installed-engine to run this one command on the installed engine",
+    ),
     "skills.unknown": CatalogueEntry("fail_fast", "No override, locked skill or own skill matches the name; add one"),
     "git.network": CatalogueEntry("transient", "A GitHub or network call failed on a rate limit, a timeout or a lost connection; retry with backoff"),
     "git.index_locked": CatalogueEntry("transient", "index.lock is held by another git process; retry"),

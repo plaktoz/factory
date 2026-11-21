@@ -65,6 +65,8 @@ def build_prompt(ctx: TaskContext) -> str:
         summary.append("Acceptance:\n" + "\n".join(f"- {a}" for a in rq.acceptance))
     summary.append(f"Body:\n{rq.source.body}")
     out.append(_section("Request", "\n".join(summary)))
+    if ctx.question:
+        out.append(_section("Your question", "Answer this question for the request above. Answer only this one.\n\n" + ctx.question))
     out.append(_section("Scope", "You may change only these paths:\n" + ("\n".join(f"- {p}" for p in ctx.scope) or "- (none)")
                         + "\nYou must never change these paths:\n" + ("\n".join(f"- {p}" for p in ctx.deny) or "- (none)")
                         + "\nYour working folder is the task worktree. Never commit, push or touch git history."))
@@ -79,8 +81,12 @@ def build_prompt(ctx: TaskContext) -> str:
     if ctx.progress is not None and ctx.progress.is_file():
         out.append(_section("Progress so far (you are resuming)", ctx.progress.read_text()))
     schema = f"Its schema is {ctx.output_schema}." if ctx.output_schema else "It has no fixed schema."
-    out.append(_section("Output", f"Write exactly one artifact to $FACTORY_TASK_DIR/{ctx.artifact_name}. {schema} "
-                        f"Write nothing else there except {PROGRESS} and {LEDGER}."))
+    # The real folder path, not only $FACTORY_TASK_DIR: a worker with no Bash cannot expand the variable, and would not
+    # know where to write (a real run, 2026-11-21).
+    folder = ctx.task_dir
+    out.append(_section("Output", f"Write exactly one artifact to {folder / ctx.artifact_name} (the folder is "
+                        f"$FACTORY_TASK_DIR). {schema} Write nothing else there except {folder / PROGRESS} and "
+                        f"{folder / LEDGER}."))
     return "\n".join(out)
 
 

@@ -155,7 +155,9 @@ def test_a_bug_fix_run_stops_at_propose_is_answered_by_decide_and_reaches_done(s
     assert ["scripts/repro-fails.sh"] in gate_commands and ["make", "build"] in gate_commands
     assert ["scripts/repro-now-passes.sh"] in gate_commands
     assert spawned == [run_id]  # only `decide` started an engine, and the test ran it by hand instead
-    assert prs.calls == ["create", "state"]  # one read at the merge review, then the merge the test made on the fake
+    # Opening asks the request's author to review (owner decision D1). Then one read at the merge review, and no merge
+    # until the test makes one on the fake. The green check is not reached here: the fake's CI stays pending.
+    assert prs.calls == ["create", "request_reviewers", "state"]
 
 
 CMD_TASKS = {"rules", "check", "be-tests", "fe-tests", "e2e"}  # the cmd tasks of the shipped workflows

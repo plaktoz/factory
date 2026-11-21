@@ -196,13 +196,29 @@ def _tick(home, prs, spawned):
                          spawn=lambda r, rid: spawned.append(rid) or 1, prs_for=lambda repo: prs)
 
 
-def test_a_tick_leaves_a_run_whose_pull_request_is_open_and_not_red(waiting, home):
+def test_a_tick_leaves_a_run_whose_pull_request_is_open_with_ci_pending(waiting, home):
     ref, prs, pr = waiting
     spawned: list[str] = []
-    for ci in ("pending", "green"):
-        prs.set_ci(pr, ci)
-        report = _tick(home, prs, spawned)
-        assert spawned == [] and report.started == []
+    prs.set_ci(pr, "pending")
+    report = _tick(home, prs, spawned)
+    assert spawned == [] and report.started == []
+
+
+def test_the_first_green_ci_starts_an_engine_so_it_can_check_the_merge_rules_again(waiting, home):
+    ref, prs, pr = waiting
+    prs.set_ci(pr, "green")
+    spawned: list[str] = []
+    report = _tick(home, prs, spawned)
+    assert spawned == ["bump-q1w2e"] and report.started == ["bump-q1w2e"]
+
+
+def test_green_ci_already_checked_starts_no_engine(waiting, home):
+    ref, prs, pr = waiting
+    state.append_event(ref.run_dir, "merge_evaluated", auto=False, reason="chore is not in the auto workflows", ci="green")
+    prs.set_ci(pr, "green")
+    spawned: list[str] = []
+    report = _tick(home, prs, spawned)
+    assert spawned == [] and report.started == []
 
 
 @pytest.mark.parametrize("change", ["merge", "close", "red"])
