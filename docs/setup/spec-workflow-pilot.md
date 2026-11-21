@@ -50,9 +50,28 @@ These come from the ADRs. Read them when you judge the numbers.
 
 | Item | Value |
 | --- | --- |
-| Owner of the first draft | not named |
-| Pilot ticket 1 | not named |
-| Pilot ticket 2 | not named |
-| Baseline ticket 1 | not named |
-| Baseline ticket 2 | not named |
-| Start day | not set |
+| Owner of the first draft | The repo owner (`plaktoz`) |
+| Pilot ticket 1 | [#88](https://github.com/plaktoz/factory/issues/88): give `merge.json` a checked format |
+| Pilot ticket 2 | [#89](https://github.com/plaktoz/factory/issues/89): test seven open module 17 cleanup criteria |
+| Baseline ticket 1 | [PR #74](https://github.com/plaktoz/factory/pull/74), see the baseline record below |
+| Baseline ticket 2 | [PR #71](https://github.com/plaktoz/factory/pull/71), see the baseline record below |
+| Start day | 2026-11-22. Day 14 is 2026-12-06 |
+
+## Baseline record
+
+Taken on 2026-11-22 from GitHub. Neither pull request links to an issue, so a defect cannot yet be traced to a ticket by its link. Defects are counted to 2026-12-05, the end of each 14-day window.
+
+| Measure | PR #74 | PR #71 |
+| --- | --- | --- |
+| Title | Give the worker the real task folder path in its prompt | Stream Claude task logs, template research questions, check auto-merge at open and green |
+| Size | +66 / -5, 6 files | +677 / -49, 33 files |
+| Opened | 2026-11-21 11:39 UTC | 2026-11-21 08:06 UTC |
+| First approval | none: no review, no comment | none: no review, no comment |
+| Merged | 2026-11-21 11:44 UTC (4 min 22 s after opening) | 2026-11-21 10:57 UTC (2 h 51 min after opening) |
+| Defects, checked 2026-11-22 00:27 UTC+8 | none found: no revert PR, no bug issue | none found: no revert PR, no bug issue |
+| Defect window ends | 2026-12-05 | 2026-12-05 |
+
+**Not similar in size.** The pilot's own rule asks for baseline tickets of similar size. PR #71 is about ten times PR #74 by changed lines, and it bundles four separate changes. Review time is also undefined for both: neither has an approval, so the measure "hours from opened to first approval" has no value to compare. Both were merged by the author without review.
+
+**Review time, as changed on 2026-11-22** (owner decision D2, ADR `2026-11-22-measure-review-time-as-open-to-merge.md`): the measure is now minutes from opening to merging, which has a value for both: #74 4.4 min, #71 171.4 min. The first-approval measure above is no longer used.
+

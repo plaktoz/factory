@@ -92,20 +92,36 @@ def server(monkeypatch):
     return calls
 
 
+@pytest.fixture
+def detached_child(monkeypatch):
+    """Replaces the detached dashboard child. Records the port it was started on, and writes the dashboard.json the
+    real child would write, so the command finds its address. No process starts."""
+    started = []
+
+    def fake_spawn(argv, home):
+        port = int(argv[argv.index("--port") + 1])
+        started.append(port)
+        (home / "dashboard.json").write_text(json.dumps({"pid": 4242, "port": port, "token": "tok"}))
+        return SimpleNamespace(pid=4242, poll=lambda: None)
+
+    monkeypatch.setattr(cli, "_spawn_dashboard_child", fake_spawn)
+    return started
+
+
 def _dashboard(argv, home):
     return cli._dashboard(cli._parser().parse_args(["dashboard", *argv]), home)
 
 
-def test_dashboard_detach_json_reports_the_url_and_port_and_returns_at_once(home, server, capsys):
+def test_dashboard_detach_json_reports_the_url_and_port_and_returns_at_once(home, detached_child, capsys):
     assert _dashboard(["--port", "8799", "--detach", "--json"], home) == 0
     out = json.loads(capsys.readouterr().out)
 
     assert out["ok"] is True
-    assert out["data"] == {"url": "http://127.0.0.1:8799/", "port": 8799}
-    assert [s.port for s in server] == [8799]
+    assert out["data"] == {"url": "http://127.0.0.1:8799/?token=tok", "port": 8799, "pid": 4242}
+    assert detached_child == [8799]
 
 
-def test_dashboard_default_port_is_8765(home, server):
+def test_dashboard_default_port_is_8765(home, detached_child):
     _dashboard(["--detach"], home)
 
-    assert [s.port for s in server] == [8765]
+    assert detached_child == [8765]
