@@ -50,3 +50,18 @@ def test_a_tasks_from_name_that_no_task_wrote_stops_the_stage_with_a_message(new
     stage = type(stage)(**{**stage.__dict__, "tasks_from": "questions.json"})
     with pytest.raises(FactoryError, match="matches 0 task artifacts"):
         eng._tasks_from_artifact(run_dir, stage)
+
+
+def test_a_tasks_from_name_written_by_two_tasks_stops_the_stage_with_a_message(new_run, engine):
+    import pytest
+
+    from factory_engine.errors import FactoryError
+    run_dir = new_run()
+    for t in ("one", "two"):
+        (run_dir / "tasks" / t / "work").mkdir(parents=True)
+        (run_dir / "tasks" / t / "work" / "questions.json").write_text("[]")
+    eng, _ = engine({})
+    stage = next(s for s in eng._load("chore").stages if s.id == "implement")
+    stage = type(stage)(**{**stage.__dict__, "tasks_from": "questions.json"})
+    with pytest.raises(FactoryError, match="matches 2 task artifacts"):
+        eng._tasks_from_artifact(run_dir, stage)

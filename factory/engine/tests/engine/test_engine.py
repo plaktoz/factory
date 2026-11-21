@@ -260,6 +260,18 @@ def test_a_task_starts_when_its_needs_are_done_while_a_slower_task_is_still_runn
     assert not t.is_alive()
 
 
+def test_a_task_whose_when_does_not_hold_is_skipped_and_the_stage_still_finishes(new_run, repo, cfg, tracker, prs, clock):
+    tasks = ("      - {id: a, cmd: [/usr/bin/true], when: {confidence_below: 0.5}, out: a.json}\n"
+             "      - {id: b, cmd: [/usr/bin/true], out: b.json}")
+    run_dir, worker, t = _run_blocking(new_run, repo, cfg, tracker, prs, clock, tasks, ["b"], 2)
+    assert _wait_until(lambda: "b" in worker.running)        # triage says confidence 1.0, so `a` is skipped
+    worker.release("b")
+    t.join(60)
+    assert not t.is_alive()
+    assert [c.task_id for c in worker.inner.started if c.task_id in ("a", "b")] == ["b"]
+    assert state.read_task(run_dir, "a").status == "done"
+
+
 def test_a_task_with_a_helper_maximum_of_two_reserves_three_slots(new_run, repo, cfg, tracker, prs, clock):
     tasks = ("      - {id: big, skill: fix, helpers: {mode: auto, max: 2}, out: big.json}\n"
              "      - {id: small, cmd: [/usr/bin/true], out: small.json}")
