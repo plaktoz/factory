@@ -55,6 +55,7 @@ class TaskContext:
     cmd: list[str] | None = None                  # deterministic tasks: the argument list
     run: RunSpec | None = None                    # deterministic tasks: script or python
     plugin_dir: Path | None = None                # the plugin folder a script or python task runs from
+    question: str | None = None                   # a task built from a question list (task_template): the question it answers
 
 
 @dataclass

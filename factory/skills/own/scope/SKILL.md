@@ -5,7 +5,7 @@ description: Turn a research request into focused questions.
 
 Read the request and list the questions that, answered, would satisfy it. Group them, drop duplicates, and mark any that need a source the factory cannot reach.
 
-The artifact is `questions.json`; its schema is `source-notes`, defined by module 5.
+The artifact is `questions.json`: a JSON array with one item per question, each `{"id": "q1", "question": "..."}`. Ids start with a lower-case letter or digit, then use lower-case letters, digits, hyphens or underscores, and each is unique. Write the question in plain words; the person confirming the list reads it as it is. Do not add task settings such as a skill or a timeout: the workflow's `task_template` sets those.
 
 ## Rules for every factory skill
 

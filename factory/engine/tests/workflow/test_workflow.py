@@ -440,6 +440,73 @@ def test_tasks_from_with_an_empty_list_gives_no_tasks(tmp_path):
     assert expand_tasks_from(gather_stage(), artifact(tmp_path, [])) == []
 
 
+# ---- owner decision D2 (ADR 2026-11-21-research-questions-use-a-task-template): plain questions plus a template ----
+
+def templated_gather_stage() -> Stage:
+    return Stage(id="gather", needs=["scope"], tasks=[], tasks_from="questions.json", join="all", gate=[], on_fail=None,
+                 on_conflict=None, approval="none", on_reject=None, sync_base=False, source="workflow",
+                 task_template={"skill": "gather", "helpers": {"mode": "off"}, "timeout_minutes": 20})
+
+
+def test_each_plain_question_becomes_a_task_built_from_the_template(tmp_path):
+    p = artifact(tmp_path, [{"id": "q1", "question": "What does the vendor charge per seat?"},
+                            {"id": "q2", "question": "Which regions is it available in?"}])
+    tasks = expand_tasks_from(templated_gather_stage(), p)
+    assert [t.id for t in tasks] == ["q1", "q2"]
+    assert all(t.skill == "gather" and t.timeout_minutes == 20 and t.helpers.mode == "off" for t in tasks)
+
+
+def test_a_question_can_override_a_template_setting(tmp_path):
+    p = artifact(tmp_path, [{"id": "q1", "question": "Q?", "timeout_minutes": 45}])
+    (task,) = expand_tasks_from(templated_gather_stage(), p)
+    assert task.timeout_minutes == 45 and task.skill == "gather"
+
+
+def test_a_question_list_with_no_template_is_refused_with_the_fix_named(tmp_path):
+    with pytest.raises(FactoryError) as e:
+        expand_tasks_from(gather_stage(), artifact(tmp_path, [{"id": "q1", "question": "Q?"}]))
+    assert e.value.code == "config.invalid"
+    assert "task_template" in e.value.message or "task_template" in (e.value.hint or "")
+
+
+def test_a_templated_question_with_no_question_text_is_refused(tmp_path):
+    with pytest.raises(FactoryError) as e:
+        expand_tasks_from(templated_gather_stage(), artifact(tmp_path, [{"id": "q1"}]))
+    assert e.value.code == "config.invalid" and "question" in e.value.message
+
+
+RESEARCH = """\
+sink: doc
+policy: {write: false}
+stages:
+  - id: scope
+    tasks: [{id: questions, skill: scope, out: questions.json}]
+    approval: human
+  - id: gather
+    needs: [scope]
+    tasks_from: questions.json
+    task_template: %s
+    join: all
+"""
+
+
+def test_the_spec_research_stage_with_a_task_template_loads(repo):
+    wf = load_text(repo, RESEARCH % "{skill: gather, helpers: {mode: off}, timeout_minutes: 20}", "research")
+    gather = next(s for s in wf.stages if s.id == "gather")
+    assert gather.task_template == {"skill": "gather", "helpers": {"mode": "off"}, "timeout_minutes": 20}
+
+
+def test_a_template_that_is_not_a_valid_task_is_refused_when_the_workflow_loads(repo):
+    err = fails(repo, RESEARCH % "{skill: gather, colour: red}", "research")
+    assert "task_template" in err.message
+
+
+def test_a_template_on_a_stage_without_tasks_from_is_refused(repo):
+    text = "stages:\n  - id: only\n    tasks: [{id: a, skill: gather}]\n    task_template: {skill: gather}\n"
+    err = fails(repo, text, "lonely")
+    assert "task_template" in err.message and "tasks_from" in err.message
+
+
 @pytest.mark.parametrize("bad,needle", [
     ([{"id": "q1", "skill": "gather", "colour": "red"}], "item 0"),
     ([{"skill": "gather"}], "item 0"),

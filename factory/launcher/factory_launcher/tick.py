@@ -5,7 +5,8 @@ its status and lock, starts a detached engine for each run that can move, and wr
 worker, so it returns within seconds.
 
 A run whose pull request is open waits at its merge review. The tick reads that pull request (module 13, watch_pr) and
-starts an engine only when GitHub has merged it, closed it or turned its CI red; the engine then ends or routes the run.
+starts an engine only when GitHub has merged it, closed it, turned its CI red, or turned it green for the first time;
+the engine then ends the run, routes it, or checks the merge rules again.
 The tick itself writes no run state.
 """
 
@@ -124,8 +125,9 @@ def _start_or_resume(ref: state.RunRef, action: str, report: TickReport, spawn: 
 
 
 def _pr_changed(ref: state.RunRef, prs_for: Callable[[Path], PullRequests], report: TickReport) -> bool:
-    """True when a run waiting on its pull request has news: merged, closed or red CI. Open with green or pending CI is
-    no news. A failed read is logged in the report and counts as no news, so the next tick reads it again."""
+    """True when a run waiting on its pull request has news: merged, closed, red CI, or green CI that the merge rules
+    have not yet been checked against (owner decision D1, 2026-11-21). Pending CI, and green CI already checked, are no
+    news. A failed read is logged in the report and counts as no news, so the next tick reads it again."""
     try:
         run = state.read_run(ref.run_dir)
         if not delivery.at_merge_review(run):
@@ -134,7 +136,7 @@ def _pr_changed(ref: state.RunRef, prs_for: Callable[[Path], PullRequests], repo
     except FactoryError as e:
         report.errors.append(f"{ref.run_id}: {e.code}: {e.message}")
         return False
-    return pr.state != "open" or pr.ci == "red"
+    return pr.state != "open" or pr.ci == "red" or (pr.ci == "green" and not delivery.green_check_done(ref.run_dir))
 
 
 def _default_prs(repo: Path) -> PullRequests:

@@ -5,14 +5,23 @@ from conftest import chore_script
 
 from factory_engine import delivery, state
 from factory_engine.errors import FactoryError
+from factory_engine.types import Request, Source
 
 RUN = "bump-q1w2e"
 
 
+def github_request():
+    """A request from a GitHub issue that alice opened, so she is the person asked to review. Built here, not imported
+    from conftest: a full test run loads another folder's conftest under that name, and the import fails there."""
+    src = Source("github", "acme/report#1", "Bump the lint config", "Bump it.", ["chore"], "alice", [])
+    return Request("gh-1", src, "sha1", "repo", "Bump the lint config", "chore", "explicit", None, [])
+
+
 @pytest.fixture
 def parked(new_run, engine, prs):
-    """A clean chore run driven until it parks at its merge review. Returns the engine, run folder and pull request."""
-    run_dir = new_run()
+    """A clean chore run from a GitHub issue, driven until it parks at its merge review. Returns the engine, run folder
+    and pull request."""
+    run_dir = new_run(request=github_request())
     script, writes = chore_script(run_dir)
     eng, _ = engine(script, writes)
     eng.run([RUN])
@@ -144,3 +153,83 @@ def test_a_stage_waiting_on_a_person_is_not_a_merge_review(new_run, engine):
     run = state.read_run(run_dir)
     run.stages[-1].status = "awaiting_approval"
     assert not delivery.at_merge_review(run)
+
+
+# ---- owner decision D1 (ADR 2026-11-21-auto-merge-is-checked-at-open-and-at-green) ---------------------------------
+
+def test_the_pull_request_body_carries_the_merge_verdict_from_the_moment_it_opens(parked, prs):
+    eng, run_dir, pr = parked
+    body = prs.prs[pr.number].body
+    assert "## Merge\nHuman review:" in body
+    assert "Not evaluated" not in body
+    assert (run_dir / "merge.json").is_file()
+
+
+def test_the_person_who_raised_the_request_is_asked_to_review_when_it_opens(parked, prs):
+    eng, run_dir, pr = parked
+    assert prs.prs[pr.number].reviewers == ["alice"]
+    assert "merge" not in prs.calls
+
+
+def test_a_request_from_the_cli_asks_nobody_and_still_waits_for_review(new_run, engine, prs):
+    run_dir = new_run()  # a CLI request: its author is not a GitHub login
+    script, writes = chore_script(run_dir)
+    eng, _ = engine(script, writes)
+    assert eng.run([RUN]).runs == {RUN: "awaiting_approval"}
+    pr = state.read_run(run_dir).pr
+    assert prs.prs[pr.number].reviewers == []
+    assert state.read_run(run_dir).attention.kind == "merge_review"
+
+
+def test_green_ci_runs_the_merge_check_again_once_and_records_it(parked, prs):
+    eng, run_dir, pr = parked
+    prs.set_ci(pr, "green")
+    eng.tick(RUN)
+    evaluated = [e for e in state.read_events(run_dir) if e.type == "merge_evaluated"]
+    assert [e.data.get("ci") for e in evaluated] == ["pending", "green"]
+    eng.tick(RUN)  # green again: no third verdict
+    assert len([e for e in state.read_events(run_dir) if e.type == "merge_evaluated"]) == 2
+    assert state.read_run(run_dir).status == "awaiting_approval"
+
+
+def test_green_ci_with_every_rule_passing_asks_github_to_merge(parked, prs, monkeypatch):
+    eng, run_dir, pr = parked
+    real = delivery.evaluate_merge
+
+    def all_pass(run_dir_, cfg, *, changed, ci):
+        d = real(run_dir_, cfg, changed=changed, ci=ci)
+        return delivery.MergeDecision(auto=(ci == "green"), rules=d.rules, reason="every rule passed")
+
+    monkeypatch.setattr(delivery, "evaluate_merge", all_pass)
+    prs.set_ci(pr, "green")
+    eng.tick(RUN)
+    assert prs.prs[pr.number].auto_merge is True and prs.prs[pr.number].merged_with == "squash"
+
+
+def test_a_merge_refused_by_branch_protection_leaves_the_run_waiting_for_a_person(parked, prs, monkeypatch):
+    eng, run_dir, pr = parked
+    monkeypatch.setattr(delivery, "evaluate_merge",
+                        lambda *a, ci, **k: delivery.MergeDecision(auto=True, rules=[], reason="every rule passed"))
+    prs.set_ci(pr, "green")
+    prs.fail_next = None
+    real_merge = prs.merge
+
+    def refuse(*a, **k):
+        raise FactoryError("git.command_failed", "gh pr merge: base branch policy prohibits the merge")
+
+    prs.merge = refuse
+    eng.tick(RUN)
+    run = state.read_run(run_dir)
+    assert run.status == "awaiting_approval" and run.attention.kind == "merge_review"
+    assert any(e.type == "merge_blocked" for e in state.read_events(run_dir))
+    prs.merge = real_merge
+
+
+def test_the_verdict_at_green_is_posted_on_the_pull_request_as_a_comment(parked, prs):
+    eng, run_dir, pr = parked
+    prs.set_ci(pr, "green")
+    eng.tick(RUN)
+    comments = prs.prs[pr.number].comments
+    assert len(comments) == 1 and comments[0].startswith("Merge check with CI green:")
+    assert "Human review:" in comments[0]
+    assert "CI is pending" in prs.prs[pr.number].body  # the body keeps the verdict it opened with
