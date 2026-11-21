@@ -21,7 +21,7 @@ from .errors import FactoryError
 from .gitops import create_delivery_branch, git, push
 from .prs import PullRequests
 from .state import append_event, factory_home, read_events, read_run
-from .summary import answered_decisions, diff_stats
+from .summary import answered_decisions, diff_stats, findings_at_or_above
 from .types import PrRef, PrState, Run
 from .validate import validate
 from .yamlio import load_yaml
@@ -232,6 +232,20 @@ def _gate_rule(run: Run, run_dir: Path) -> RuleResult:
     return RuleResult(name, True, f"all {len(last)} gates passed")
 
 
+
+def _findings_rule(threshold: str, run: Run, run_dir: Path) -> RuleResult:
+    """never_auto_if.review_findings_at_or_above: a finding at or above `threshold` blocks, and so does a review
+    artifact that is missing or unreadable, since the decision cannot be made on findings nobody could read."""
+    name = "never_auto_if.review_findings_at_or_above"
+    if not any(s.id.startswith("review") for s in run.stages):
+        return RuleResult(name, True, "no review stage, so no findings")
+    blocking, unreadable = findings_at_or_above(run, run_dir, threshold)
+    if unreadable:
+        return RuleResult(name, False, unreadable)
+    if blocking:
+        return RuleResult(name, False, f"{len(blocking)} finding(s) at or above {threshold}: " + "; ".join(blocking))
+    return RuleResult(name, True, f"no finding at or above {threshold}")
+
 def _never_rules(never: dict, run: Run, run_dir: Path, changed: list[str]) -> list[RuleResult]:
     """One result per never_auto_if key that is set. A key that is off (false) names no rule and is left out."""
     out: list[RuleResult] = []
@@ -248,11 +262,7 @@ def _never_rules(never: dict, run: Run, run_dir: Path, changed: list[str]) -> li
     elif never.get("architecture_decision"):
         out.append(RuleResult("never_auto_if.architecture_decision", True, "no architecture decision"))
     if never.get("review_findings_at_or_above"):
-        # The review-findings schema is not written yet, so findings cannot be read. A run with a review stage needs a human.
-        review = any(s.id.startswith("review") for s in run.stages)
-        out.append(RuleResult("never_auto_if.review_findings_at_or_above", not review,
-                              "review findings cannot be read yet (no review-findings schema)" if review
-                              else "no review stage, so no findings"))
+        out.append(_findings_rule(never["review_findings_at_or_above"], run, run_dir))
     if never.get("notes_used"):
         steered = _steered(run_dir)
         out.append(RuleResult("never_auto_if.notes_used", not steered,
