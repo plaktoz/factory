@@ -51,8 +51,8 @@ These come from the ADRs. Read them when you judge the numbers.
 | Item | Value |
 | --- | --- |
 | Owner of the first draft | The repo owner (`plaktoz`) |
-| Pilot ticket 1 | Drafted: `factory gc` by real GitHub pull request state (task 34). Issue number: not yet opened |
-| Pilot ticket 2 | Drafted: an engine crash stops a task after `max_interruptions` (module 8). Issue number: not yet opened |
+| Pilot ticket 1 | [#86](https://github.com/plaktoz/factory/issues/86): `factory gc` by real GitHub pull request state (task 34). Scratch repo: `plaktoz/factory-gc-scratch` (private) |
+| Pilot ticket 2 | [#87](https://github.com/plaktoz/factory/issues/87): an engine crash stops a task after `max_interruptions` (module 8) |
 | Baseline ticket 1 | [PR #74](https://github.com/plaktoz/factory/pull/74), see the baseline record below |
 | Baseline ticket 2 | [PR #71](https://github.com/plaktoz/factory/pull/71), see the baseline record below |
 | Start day | 2026-11-22. Day 14 is 2026-12-06 |
