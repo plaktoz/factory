@@ -425,7 +425,7 @@ class Engine:
 
     def _specs(self, stage: Stage, run_dir: Path | None = None) -> list[TaskSpec]:
         if stage.tasks_from and run_dir is not None:
-            return wf_mod.expand_tasks_from(stage, run_dir / "tasks" / stage.tasks_from)
+            return wf_mod.expand_tasks_from(stage, self._tasks_from_artifact(run_dir, stage))
         first = next(iter(self.workers.values()), None)  # the blocked-run actions build an engine with no worker
         native = first.capabilities.subagents if first is not None else False
         out: list[TaskSpec] = []
@@ -457,31 +457,53 @@ class Engine:
         return state.read_task(run_dir, task_id).status if path.is_file() else "none"
 
     def _execute_tasks(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, result: TickResult) -> None:
-        """Start ready tasks together up to the concurrency limit, wait for them, and record each result. Repeats while
-        a finished task makes another ready. A task that failed for good stops the loop."""
+        """Run the stage's tasks, up to the concurrency limit at once. A task starts as soon as its `needs` are done and
+        its slots are free, not when the whole batch before it ends. A task that failed for good starts nothing new;
+        the tasks already running finish. Each worker's `wait` runs in its own thread, because `wait` kills the worker
+        at its timeout and cannot be polled. This thread owns the lock and does every state write: it records results,
+        checkpoints, and restarts a worker when a note is queued (module 12). The threads only call `wait`."""
         specs = self._specs(stage, run_dir)
+        running: dict[str, _Running] = {}
         while True:
             statuses = {s.id: self._status_of(run_dir, s.id) for s in specs}
-            if any(st == "failed" for st in statuses.values()):
+            if not any(st == "failed" for st in statuses.values()):
+                self._start_ready(run, run_dir, lock, wf, stage, specs, statuses, running)
+            if not running:
                 return
+            for task_id in list(running):
+                job = running[task_id]
+                if job.thread.is_alive():
+                    self._maybe_restart(run_dir, lock, job)
+                    continue
+                job.thread.join()
+                del running[task_id]
+                self._record_result(run_dir, lock, job, result)
+                if job.restart_for_note and job.outcome is not None:
+                    running[task_id] = self._launch(run, run_dir, lock, wf, stage, job.spec)
+            if running:
+                self.clock.sleep(POLL_SECONDS) if hasattr(self.clock, "advance") else threading.Event().wait(POLL_SECONDS)
+
+    def _start_ready(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, specs: list[TaskSpec],
+                     statuses: dict[str, str], running: dict[str, "_Running"]) -> None:
+        """Launch every task whose needs are done while slots remain. A task that does not hold (`when`) is skipped,
+        which can make its dependents ready, so this repeats until nothing more can start."""
+        while True:
             done = {t for t, st in statuses.items() if st == "done"}
             ready = [s for s in specs if statuses[s.id] in ("none", "pending", "interrupted")
-                     and all(n in done for n in s.needs)]
+                     and s.id not in running and all(n in done for n in s.needs)]
             skipped = [s for s in ready if not self._when_holds(s, run_dir)]
             for spec in skipped:
                 self._skip_task(run_dir, lock, stage, spec)
-            ready = [s for s in ready if s not in skipped]
-            if skipped and not ready:
+                statuses[spec.id] = "done"
+            if skipped:
                 continue
-            if not ready:
-                return
-            batch, used = [], 0
+            used = sum(self._slots(j.spec) for j in running.values())
             for spec in ready:
-                if batch and used + self._slots(spec) > self._concurrency():
+                if running and used + self._slots(spec) > self._concurrency():
                     break
-                batch.append(spec)
+                running[spec.id] = self._launch(run, run_dir, lock, wf, stage, spec)
                 used += self._slots(spec)
-            self._supervise(run, run_dir, lock, wf, stage, batch, result)
+            return
 
     def _when_holds(self, spec: TaskSpec, run_dir: Path) -> bool:
         """The task's `when` condition (module 5). `confidence_below` reads triage.json; other forms always hold here."""
@@ -587,29 +609,17 @@ class Engine:
         """The question a task built from a templated `tasks_from` artifact answers (owner decision D2)."""
         if stage.task_template is None or not stage.tasks_from:
             return None
-        return wf_mod.questions_of(run_dir / "tasks" / stage.tasks_from).get(spec.id)
+        return wf_mod.questions_of(Engine._tasks_from_artifact(run_dir, stage)).get(spec.id)
 
-    def _supervise(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, batch: list[TaskSpec],
-                   result: TickResult) -> None:
-        """Run a batch of tasks together. Each worker's `wait` runs in its own thread, because `wait` kills the worker at
-        its timeout and cannot be polled. This thread owns the lock and does every state write: it records results,
-        checkpoints, and restarts a worker when a note is queued (module 12). The threads only call `wait`."""
-        running: dict[str, _Running] = {}
-        for spec in batch:
-            running[spec.id] = self._launch(run, run_dir, lock, wf, stage, spec)
-        while running:
-            for task_id in list(running):
-                job = running[task_id]
-                if job.thread.is_alive():
-                    self._maybe_restart(run_dir, lock, job)
-                    continue
-                job.thread.join()
-                del running[task_id]
-                self._record_result(run_dir, lock, job, result)
-                if job.restart_for_note and job.outcome is not None:
-                    running[task_id] = self._launch(run, run_dir, lock, wf, stage, job.spec)
-            if running:
-                self.clock.sleep(POLL_SECONDS) if hasattr(self.clock, "advance") else threading.Event().wait(POLL_SECONDS)
+    @staticmethod
+    def _tasks_from_artifact(run_dir: Path, stage: Stage) -> Path:
+        """The file `tasks_from` names: the artifact (`out`) an earlier task wrote, in that task's work folder."""
+        found = sorted((run_dir / "tasks").glob(f"*/work/{stage.tasks_from}"))
+        if len(found) != 1:
+            raise FactoryError("config.invalid", f"stage {stage.id}: tasks_from {stage.tasks_from!r} matches "
+                               f"{len(found)} task artifacts, and it needs exactly one",
+                               hint="name the artifact an earlier task writes with `out`, and give it a unique name")
+        return found[0]
 
     def _launch(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, spec: TaskSpec) -> "_Running":
         spec_, (harness, handle), ts = self._start_task(run, run_dir, lock, wf, stage, spec)
