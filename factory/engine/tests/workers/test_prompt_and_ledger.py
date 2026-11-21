@@ -30,8 +30,20 @@ def test_the_helper_policy_is_stated_in_plain_words_for_each_mode():
 
 def test_the_prompt_names_the_artifact_file_and_the_schema(worktree, task_dir):
     text = build_prompt(ctx_for(worktree, task_dir, artifact_name="triage.json"))
-    assert "$FACTORY_TASK_DIR/triage.json" in text
+    assert str(task_dir / "triage.json") in text
     assert "stage-report" in text
+
+
+def test_the_prompt_gives_the_real_task_folder_path_not_only_the_variable(worktree, task_dir):
+    """A worker with no Bash cannot expand $FACTORY_TASK_DIR, so the prompt must carry the path itself.
+
+    In a real run (2026-11-21) the worker wrote the correct change three times and never wrote its artifact, because
+    it was told to write to the literal text `$FACTORY_TASK_DIR/change.json` and had no way to read the variable."""
+    text = build_prompt(ctx_for(worktree, task_dir, artifact_name="change.json"))
+    output = text.split("## Output", 1)[1]
+    assert str(task_dir / "change.json") in output
+    assert str(task_dir / "progress.md") in output
+    assert str(task_dir / "helpers.jsonl") in output
 
 
 def test_a_prompt_without_a_skill_still_gives_the_request_and_scope(worktree, task_dir):
