@@ -13,7 +13,7 @@ You need:
 - `git`, `gh` (logged in: `gh auth status`), Node (for `srt`, the sandbox) and `uv`.
 - Python 3.10 or newer.
 - Credentials for Claude: `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`. A login session does not work in phase 1.
-- The factory source. In this page it is the folder `$FACTORY_SRC`.
+- The factory source: a checkout of this repo. Set `FACTORY_SRC` to its path, for example `export FACTORY_SRC=~/src/factory`. Every `$FACTORY_SRC` below uses it.
 
 ## Part 1. A new project
 
@@ -154,7 +154,7 @@ started 1, resumed 0
 `factory status` names the stage. Then:
 
 ```sh
-factory events <run>        # what happened, newest last
+factory events <run> --json  # what happened, newest last (without --json it prints only a count)
 factory where <run>         # the run folder, the worktree and the branch
 ```
 
@@ -231,10 +231,15 @@ if PYTHONDONTWRITEBYTECODE=1 python3 -c 'import sys; sys.path.insert(0, "src"); 
 fi
 SH
 chmod +x scripts/repro-fails.sh
-git add -A && git commit -q -m "add a bug-fix workflow for this repo" && git push -q
+git add .factory/config/workflows scripts/repro-fails.sh
+git commit -q -m "add a bug-fix workflow for this repo"
+git pull -q --rebase origin main   # part 1 merged a pull request, so main has moved
+git push -q origin HEAD:main
 ```
 
 Commit and push, because a run reads `.factory/config/` from the committed base branch. A run you create before the commit keeps the old workflow.
+
+The `git add` names the two paths this step creates, so nothing else in the working tree is committed. `git pull --rebase` is needed because part 1's merge is on `main` now, and a push from before it is rejected with `fetch first`. If you use a base branch other than `main`, put its name in both places.
 
 ### File the issue and run it
 
@@ -246,7 +251,7 @@ gh issue create --title "greet() returns 'hello !' for an empty name" --label fa
 factory sync
 ```
 
-`sync` reads the open issues once and creates a run for each new one. It starts no engine:
+`sync` reads every open issue in the repo that has the `factory` label, not only the one you just filed, and creates a run for each one it has not seen. An old issue with that label gets a run too. It starts no engine:
 
 ```text
 1 new run(s)
