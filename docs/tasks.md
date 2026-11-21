@@ -147,6 +147,7 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
 
+- 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-multi-model-double-count-and-label-it.md`): the owner chose to keep the multi-model double count and label it: `factory usage` prints a total that counts each attempt once, and `--json` has a `total` group (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-plugin-exit-codes-match-the-spec.md`): the owner chose to make the plugin exit codes match module 5: `passed: false` with no status is exit 1, and `sys.exit` or a result that is not JSON is exit 2 (commit `6a69067`). Running a plugin task through the engine is still untested.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-usage-reads-the-last-whole-line-for-each-attempt.md`): the owner chose to fix the usage reading bugs in code: unreadable lines are skipped, the last whole line wins, and attempt numbers are never reused (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-gc-never-writes-over-a-verified-archive.md`): the owner chose to fix the archive-overwrite bug in code: `gc` never writes over a zip that verifies (commit `6a69067`).
