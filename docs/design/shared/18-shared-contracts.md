@@ -183,7 +183,7 @@ The JSON Schemas in `factory/schemas/` are the source of truth for every file; t
 - **Fakes for parallel work:** each module that others call ships a fake, so downstream modules can be tested before it exists. The fakes are `FakeWorkerAdapter` (9), `FakeTracker` and `FakePullRequests` (7), and `FakeClock` (18), which implements `Clock` as `SystemClock` does.
 - **Two install layers:**
   - The machine-level launcher (`factory`) handles the machine commands: `tick`, `dashboard`, `inbox`, `config init`, `doctor`, `schedule`.
-  - It hands every command about a run to that run's own engine, `python -m factory_engine` from the run's kit snapshot, and every command that creates a run to the repo's committed kit, so repos and runs on different kit versions coexist.
+  - It hands every command about a run to that run's own engine, `python -m factory_engine` from the run's kit snapshot, and every command that creates a run to the repo's committed kit, so repos and runs on different kit versions coexist. In phase 1a the launcher selects that engine by setting `PYTHONPATH` to `kits/<kit hash>/factory/engine` (or the repo's `factory/engine` for a command that creates a run) and runs it with its own Python; the per-snapshot virtual environment of [module 3](../modules/03-kit-and-configuration.md) is phase 1b ([ADR](../../adr/2026-11-20-which-engine-serves-each-repo.md)).
   - The dashboard makes its writes by calling the launcher with `--json`, which puts each write through the right engine version.
 
 **CLI exit codes** (all commands)
@@ -226,6 +226,7 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `sandbox.srt_missing` | `fail_fast` | `srt` is not installed; give the install command |
 | `sandbox.node_old` | `fail_fast` | Node is older than 22.12, which `srt` needs |
 | `sandbox.canary_open` | `human` | `doctor` found a read or write route that is not blocked; name the route |
+| `kit.no_engine` | `fail_fast` | A run's kit snapshot (or the repo's kit, for a command that creates a run) has no engine folder; the message names the run and the kit. Add `--installed-engine` to run that one command on the installed engine (module 16) |
 | `config.no_credentials` | `fail_fast` | Set `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`; a login session is not supported in phase 1 |
 
 **Versions.** Python 3.10 is the floor and the tests also run on the newest Python installed (decision G9, below). Node 22.12 is the floor for `srt`, and the factory is tested on Node 26 (decision, 2026-11-14).

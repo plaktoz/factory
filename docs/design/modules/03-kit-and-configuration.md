@@ -19,7 +19,7 @@ factory/                    the kit: replaced whole on update, never edited
                             spec; the owner accepted the wave 3 drafts as the phase 1 schemas, see
                             [module 5](05-workflows-and-plugins.md#report-schemas)). `merge` has no schema yet; module 13 writes `merge.json`)
   policies/                 default scope and protected-path rules
-  engine/                   Python engine and the factory CLI
+  engine/                   Python engine and the factory CLI (copied by init and upgrade without its tests/ folder, so each snapshot carries it)
   adapters/tracker/         file, github
   adapters/worker/          claude, command, fake
   dashboard/                the dashboard page (plain HTML in 1a, prebuilt React bundle in 1b), served by the launcher
@@ -46,7 +46,7 @@ factory/                    the kit: replaced whole on update, never edited
   tick.json                 last tick time and result
   sync/<repo key>.json      last_sync cursor for each repo
   slots/                    one file per running worker, for the machine-wide worker cap
-  venvs/<lock hash>/        Python environment for each distinct requirements.lock
+  venvs/<lock hash>/        Python environment for each distinct requirements.lock (phase 1b; not built in 1a)
   kits/<kit hash>/          snapshot of factory/ and .factory/config/ taken when a run is created
   plugin-hashes.json        reviewed plugin hashes per repo key, never stored in a repo
   logs/                     tick and dashboard logs
@@ -178,7 +178,7 @@ Each command reads `.factory-run.json` to find the run, then reads the run folde
 When a run is created, the factory copies `factory/` and `.factory/config/` from the base branch's committed content (`git archive`) into `$FACTORY_HOME/kits/<kit hash>/`. The hash covers the copied files, so runs created from the same content share one folder. From then on the run uses only its snapshot:
 
 - the engine, workflows, plugins, schemas, languages and `requirements.lock` all come from the snapshot, never from the repo's working tree, so a branch switch, a pull or an edit in the main checkout cannot change a running run;
-- the launcher finds a run's engine from `kit_hash` in `run.json`, and starts it from the snapshot with the virtual environment for that snapshot's `requirements.lock`;
+- the launcher finds a run's engine from `kit_hash` in `run.json`, and starts it from the snapshot with the virtual environment for that snapshot's `requirements.lock`. **Phase 1a (owner decision, 2026-11-21, [ADR](../../adr/2026-11-20-which-engine-serves-each-repo.md)):** the launcher starts the snapshot's engine, `kits/<kit hash>/factory/engine`, by setting `PYTHONPATH` to it, and runs it with the launcher's own Python. The venv for `requirements.lock` is phase 1b, so until then PyYAML and jsonschema come from the launcher's environment and repos on different kits do share packages;
 - plugin hashes are checked against `plugin-hashes.json` when the snapshot is made, so a plugin edited later never changes a run that already started;
 - commands that create runs (`add`, `sync`, and the sync step of `tick`) use the repo's committed kit; every later command uses the run's snapshot;
 - `factory run --kit working-tree` uses the working tree instead, for developing the kit itself, and records that in `run.json`.
@@ -193,7 +193,7 @@ Housekeeping deletes a snapshot when no unarchived run uses it.
 
 Phase 1 supports macOS and Linux. Windows (Task Scheduler install, `.bat` and `.ps1` handling, retrying atomic replaces, Windows path rules) is phase 2. The code already uses `pathlib` and argument lists, so nothing blocks it.
 
-Python 3.10 or later, `pathlib` for paths, `subprocess` with argument lists, and no shell scripts in the kit's engine. Commands that workflows call, such as `scripts/repro-fails.sh`, belong to the repo; a repo on Windows supplies its own. The external tools are `git`, `gh` when the tracker is GitHub, and `srt` (`@anthropic-ai/sandbox-runtime`, which needs Node 22.12 or later) for the sandbox around commands ([module 9](09-worker-adapters-and-governed-helpers.md)). `factory doctor` checks each. Python dependencies (PyYAML, jsonschema) are pinned in `factory/requirements.lock`. The launcher builds one virtual environment per distinct lock hash under `$FACTORY_HOME/venvs/` on first use and runs the repo's engine from it, so repos on different kit versions never share packages.
+Python 3.10 or later, `pathlib` for paths, `subprocess` with argument lists, and no shell scripts in the kit's engine. Commands that workflows call, such as `scripts/repro-fails.sh`, belong to the repo; a repo on Windows supplies its own. The external tools are `git`, `gh` when the tracker is GitHub, and `srt` (`@anthropic-ai/sandbox-runtime`, which needs Node 22.12 or later) for the sandbox around commands ([module 9](09-worker-adapters-and-governed-helpers.md)). `factory doctor` checks each. Python dependencies (PyYAML, jsonschema) are pinned in `factory/requirements.lock`. The launcher builds one virtual environment per distinct lock hash under `$FACTORY_HOME/venvs/` on first use and runs the repo's engine from it, so repos on different kit versions never share packages. *Phase 1b: in phase 1a the launcher builds no venv and the kit has no `requirements.lock`; see the run snapshot rules in the Layout section.*
 
 **Module contract: 3 Kit and configuration**
 

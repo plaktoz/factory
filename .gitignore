@@ -30,6 +30,7 @@ uv.lock
 
 # Node (the mermaid check, the decision-page browser check, the dashboard build)
 node_modules/
+.scratch
 
 # Editors and OS
 .DS_Store
