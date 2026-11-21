@@ -1,7 +1,6 @@
 """Module 9 acceptance criteria for the Claude adapter, run against the stub `claude` that replays recorded JSON."""
 
 import json
-import os
 import time
 from pathlib import Path
 
@@ -14,7 +13,7 @@ from factory_engine.types import HelperPolicy, McpServer
 
 from process_gone import gone_within
 
-from conftest import ENV_GW, RECORDED, harness, log_seen_while_running
+from workers_helpers import ENV_GW, RECORDED, harness, log_seen_while_running
 
 
 def attempt(adapter, ctx, conf, tmp_path, timeout=60):

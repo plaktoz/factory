@@ -14,7 +14,7 @@ from factory_engine.adapters.worker import claude as C
 from factory_engine.adapters.worker.claude import ClaudeAdapter
 from factory_engine.types import HelperPolicy
 
-from conftest import harness
+from workers_helpers import harness
 
 LIVE = os.environ.get("FACTORY_LIVE") == "1" and shutil.which("claude") is not None
 pytestmark = pytest.mark.skipif(not LIVE, reason="set FACTORY_LIVE=1 and put claude on PATH to run the live smoke")

@@ -4,7 +4,6 @@ These need the real `srt` (0.0.83) and Node 22.12 or later. They skip when srt i
 fails in that case, so a missing srt is never a silent pass in a real run.
 """
 
-import json
 import os
 import shutil
 from pathlib import Path
@@ -18,7 +17,7 @@ from factory_engine.types import RunSpec
 
 from process_gone import gone_within
 
-from conftest import harness, log_seen_while_running
+from workers_helpers import harness, log_seen_while_running
 
 SRT = shutil.which("srt")
 needs_srt = pytest.mark.skipif(SRT is None or sandbox.node_version() is None or sandbox.node_version()[:2] < (22, 12),

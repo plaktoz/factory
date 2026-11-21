@@ -316,8 +316,20 @@ def _usage(args, f) -> _Result:
     repo = _repo_of_run(args, args.run) if args.run else _repo_here(args)
     since = date.fromisoformat(args.since) if args.since else None
     report = api.usage(repo, args.run, since=since)
-    return _Result({"by_model": report.by_model, "by_repo": report.by_repo, "by_day": report.by_day},
-                   message="usage totals")
+    data = {"by_model": report.by_model, "by_repo": report.by_repo, "by_day": report.by_day, "total": report.total}
+    if args.json:
+        return _Result(data, message="usage totals")
+
+    def row(name, t):
+        tokens = "tokens unknown" if t.attempts_without_count == t.attempts else f"{t.total_tokens:,} tokens"
+        if 0 < t.attempts_without_count < t.attempts:
+            tokens += f" ({t.attempts_without_count} without a count)"
+        return f"{name}: {t.attempts} attempt{'s' if t.attempts != 1 else ''}, {tokens}, {t.minutes:.0f} min"
+
+    lines = ["per model, an attempt with several models is counted under each:"]
+    lines += [f"  {row(m, t)}" for m, t in sorted(report.by_model.items())]
+    lines.append(row("total, each attempt counted once", report.total))
+    return _Result(data, message="\n".join(lines))
 
 
 def _gc(args, f) -> _Result:

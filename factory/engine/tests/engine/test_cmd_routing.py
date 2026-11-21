@@ -9,7 +9,7 @@ import json
 from factory_engine import state
 from factory_engine.adapters.worker.fake import FakeWorkerAdapter, ok
 
-from conftest import TRIAGE_JSON  # noqa: F401  (documents the triage answer the fixtures write)
+from engine_helpers import TRIAGE_JSON  # noqa: F401  (documents the triage answer the fixtures write)
 
 
 def test_a_cmd_task_is_handed_to_the_command_adapter_and_not_to_the_worker(new_run, repo, cfg, tracker, prs, clock):

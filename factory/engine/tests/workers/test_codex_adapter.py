@@ -6,7 +6,6 @@ settings file, and make no model call.
 """
 
 import json
-import os
 import shutil
 import subprocess
 import sys
@@ -21,7 +20,7 @@ from factory_engine.adapters.worker.codex import CodexAdapter
 from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy
 
-from conftest import HERE, RECORDED, harness, log_seen_while_running
+from workers_helpers import HERE, RECORDED, harness, log_seen_while_running
 
 from process_gone import gone_within
 
