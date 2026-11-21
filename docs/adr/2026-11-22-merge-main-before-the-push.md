@@ -30,7 +30,7 @@ Checks on the merged tree, run on 2026-11-22:
 - `pytest tests` in `factory/launcher`, serially: 126 passed.
 - `pytest tests/engine tests/drivers tests/workflow` in `factory/engine`, `-n 8`: 191 passed, 1 warning.
 
-The warning is a worker thread that raised `git.command_failed`: `git diff --binary: bad revision 'bump-q1w2e...bump-q1w2e--a'`, in `test_a_task_whose_when_does_not_hold_is_skipped_and_the_stage_still_finishes`. The same test on `13ab255`, before this merge, gives the same warning, so the merge did not cause it. The test passes, so the error is swallowed by the engine. It is recorded as a new task, not fixed here.
+The warning is a worker thread that raised `git.command_failed`: `git diff --binary: bad revision 'bump-q1w2e...bump-q1w2e--a'`, in `test_a_task_whose_when_does_not_hold_is_skipped_and_the_stage_still_finishes`. The same test on `13ab255`, before this merge, gives the same warning, so the merge did not cause it. Checked afterwards (the same day, by a probe copy of the test that was deleted): the error is not swallowed by the engine. It comes out of `Engine.run` and kills the test's own thread, so the run stays `running` and its event log stops after the last task's `attempt_ended`. The test passes because it never checks that the run finishes. The evidence is in `docs/tasks.md` item 39, which is a bug report, not a note about a test.
 
 A `-n 8` launcher run failed before running any tests, and the serial run passed. The cause was not investigated.
 
@@ -54,7 +54,7 @@ The owner chose it, it matches the earlier pull requests, and the one conflict c
 
 - **Done:** the merge is committed; the branch holds `origin/main` at `13ab255`.
 - **Not done:** the push and the pull request (D7, waiting on task 37).
-- **New task:** the engine thread warning in `test_a_task_whose_when_does_not_hold_is_skipped_and_the_stage_still_finishes`, which is in `docs/tasks.md` as item 39.
+- **New task:** `docs/tasks.md` item 39: a stage with a skipped task never finishes. Found through this warning; not fixed here.
 - **Task:** `docs/tasks.md` item 38 (the push) and the Log.
 
 ## Source
