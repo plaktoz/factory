@@ -147,6 +147,7 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
 
+- 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-gc-keeps-a-branch-that-has-unpushed-commits.md`): the owner chose to fix `gc`'s branch deletion in code: a branch with unpushed commits is kept, and a joined task branch or a merged run branch is exempt (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-reply-on-issue-55-after-the-pull-request.md`): the owner chose `reply-after-pr` for decision D5. The comment is not posted: issue 55 closed when PR #73 merged and has no comments.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-push-the-branch-and-open-a-pull-request.md`): the owner chose `push-and-open-pr` for decision D4. The branch is PR #73, merged as `0952192` at 11:51 UTC. The full engine suite was not run to the end on the merged tree.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-measure-the-scoring-spread-on-the-strong-adr.md`): the owner chose `measure-three-runs` for decision D3 and the strong ADR was scored three more times. Result: `needs-changes` on 4 of 5 runs, Options and Consequences between 3 and 4. The three new scorecards are not in the calibration reference, so item 28's follow-up stays unticked.
