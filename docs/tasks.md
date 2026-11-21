@@ -57,6 +57,8 @@ Why the design phase was slow, and the fixes: `design-phase-constraint.md` in th
 
 18. **Spec workflow is a by-hand pilot first (owner decision, 2026-11-21, ADR `2026-11-21-spec-workflow-applies-by-hand-first.md`, option `house-rule-first`, decision `D1` of the page "Spec-driven workflow: three calls"; issue #56): not built.** Two medium tickets, followed by hand for two weeks, with no change to the factory. Not built: the pilot itself. Not named yet, so Unspecified: the two tickets, the person who drafts the first rules, and what to measure (PR review time and defect rate). Check when the pilot ends: each ticket's PR review time and defect count against two earlier tickets. A later ADR decides whether to build the steps into a workflow.
 
+19. **Spec rules in `AGENTS.md` and the issue form (owner decision, 2026-11-21, ADR `2026-11-21-spec-rules-live-in-agents-md-and-issue-form.md`, option `extend-existing`, decision `D2`; issue #56): not built, waits on the owner.** Add an Always / Ask first / Never table to `AGENTS.md`, and a short note that each ticket's spec is its GitHub issue. Wording is not final, so it waits for the owner's go-ahead. Not built: the table, and the issue form under `.github/` (a person adds it, because factory workers may not write `.github/`). Check: `python3 -I scripts/docs-check/links.py .` passes after the edit, and the issue form renders on GitHub. No factory code changes.
+
 ## Rules from the owner
 
 - Phase 1 first. Phase 2 (Codex, Windows, comment answers) is not built and not extended.
