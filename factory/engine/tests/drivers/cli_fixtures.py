@@ -3,6 +3,7 @@
 It is what `factory init` leaves behind, so `add`, `run` and the other commands work on it as they would in a repo.
 """
 
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -16,9 +17,7 @@ def seed_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "init", "-q", "-b", "main", str(src)], check=True)
     (src / "services").mkdir()
     (src / "services" / "api.py").write_text("x = 1\n")
-    subprocess.run(["cp", "-R", str(KIT), str(src / "factory")], check=True)
-    for name in ("engine", ".venv", "__pycache__", "tests"):
-        subprocess.run(["rm", "-rf", str(src / "factory" / name)], check=False)
+    shutil.copytree(KIT, src / "factory", ignore=shutil.ignore_patterns("engine", ".venv", "__pycache__", "tests"))
     subprocess.run(["git", "-C", str(src), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(src), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "init"],
                    check=True)
