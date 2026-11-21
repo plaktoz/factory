@@ -50,9 +50,9 @@ These come from the ADRs. Read them when you judge the numbers.
 
 | Item | Value |
 | --- | --- |
-| Owner of the first draft | not named |
-| Pilot ticket 1 | not named |
-| Pilot ticket 2 | not named |
+| Owner of the first draft | The repo owner (`plaktoz`) |
+| Pilot ticket 1 | Drafted: `factory gc` by real GitHub pull request state (task 34). Issue number: not yet opened |
+| Pilot ticket 2 | Drafted: an engine crash stops a task after `max_interruptions` (module 8). Issue number: not yet opened |
 | Baseline ticket 1 | not named |
 | Baseline ticket 2 | not named |
-| Start day | not set |
+| Start day | 2026-11-22. Day 14 is 2026-12-06 |
