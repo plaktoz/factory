@@ -147,6 +147,7 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
 
+- 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-reply-on-issue-55-after-the-pull-request.md`): the owner chose `reply-after-pr` for decision D5. The comment is not posted: issue 55 closed when PR #73 merged and has no comments.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-push-the-branch-and-open-a-pull-request.md`): the owner chose `push-and-open-pr` for decision D4. The branch is PR #73, merged as `0952192` at 11:51 UTC. The full engine suite was not run to the end on the merged tree.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-measure-the-scoring-spread-on-the-strong-adr.md`): the owner chose `measure-three-runs` for decision D3 and the strong ADR was scored three more times. Result: `needs-changes` on 4 of 5 runs, Options and Consequences between 3 and 4. The three new scorecards are not in the calibration reference, so item 28's follow-up stays unticked.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-fix-design-gaps-the-scorecards-found.md`): the owner chose `fix-everything-now` for decision D2: every gap the scorecards found in modules 5, 14 and 17 is fixed in the spec (commit `6a69067`, PR #73). Not re-scored; that is item 33.
