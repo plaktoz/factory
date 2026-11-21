@@ -269,7 +269,7 @@ Merge the pull request and run `factory tick`, as in part 1. The run goes to `do
 
 ### What the issue shows
 
-The factory writes status back to the issue as labels and comments. In the real runs the issue showed `factory:queued` and one comment (`Run <id> is queued.`) for the whole run. It did not get `factory:running`, and it did not get `factory:done` after the merge, because a pull request run only marks an issue `factory:done` through the comment sink. `factory:needs-human` and `factory:blocked` are set when a run needs you. Use `factory status` and the dashboard, not the labels, to see where a run is.
+The factory writes two things to the issue at the start: the `factory:queued` label and one comment, `Run <id> is queued.`. In the real runs that was all the issue got. It did not move to `factory:running`, `factory:blocked` or `factory:done`, even after the pull request merged. This is a known gap (item 36 in `docs/tasks.md`), not something you did wrong. Use `factory status` and the dashboard to follow a run.
 
 ## Clean up
 
