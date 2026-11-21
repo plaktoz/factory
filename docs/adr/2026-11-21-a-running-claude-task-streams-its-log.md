@@ -57,7 +57,7 @@ Most of a run is Claude tasks. The result reading and token counts already worke
 - Tests: four new tests in `factory/engine/tests/workers/test_claude_adapter.py` and the fixture `recorded/stream.jsonl`, recorded from the real CLI with its init event trimmed (no local paths, tool list or session id).
 - Not built: the silence warning for Claude tasks. `stall_minutes` and `task_silent` are not built for `cmd` tasks yet either (ADR `2026-11-18-a-silent-cmd-task-is-reported-not-killed`). Extending them to Claude, with a limit that allows a quiet tool call, is a separate change.
 - Not checked: a live factory run with a real Claude worker. The tests use the stub, which replays the recorded stream.
-- Task: item 18 in `docs/tasks.md`.
+- Task: item 21 in `docs/tasks.md`.
 
 ## Source
 

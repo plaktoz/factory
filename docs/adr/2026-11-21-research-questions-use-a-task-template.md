@@ -53,8 +53,8 @@ The approval stop exists so that a person checks the questions. A plain list is 
 - `factory/skills/own/scope/SKILL.md`: the scope skill writes the question list.
 - Module 5 and the research example; module 5's acceptance criteria gain one line with its tests.
 - Tests: seven in `factory/engine/tests/workflow/test_workflow.py`, one in `test_prompt_and_ledger.py`. All pass with the workflow and prompt tests (99 passed).
-- Not built: the research workflow itself (phase 1b), and an engine-level test that runs a templated stage from start to finish. The engine reads the artifact from `tasks/<tasks_from>` in the run folder, while the scope task writes it into its own task folder. Module 5's `tasks_from` takes a path, so the join between the two is a separate change (see `docs/tasks.md`, item 19).
-- Task: item 19 in `docs/tasks.md`.
+- Not built: the research workflow itself (phase 1b), and an engine-level test that runs a templated stage from start to finish. The engine reads the artifact from `tasks/<tasks_from>` in the run folder, while the scope task writes it into its own task folder. Module 5's `tasks_from` takes a path, so the join between the two is a separate change (see `docs/tasks.md`, item 22).
+- Task: item 22 in `docs/tasks.md`.
 
 ## Source
 

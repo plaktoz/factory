@@ -8,6 +8,8 @@ adapter from the `default_*` functions here, or one the caller passes to `engine
 
 from __future__ import annotations
 
+import json
+import os
 import subprocess
 import sys
 from collections.abc import Callable, Mapping
@@ -193,19 +195,38 @@ def gc(repo, *, apply=False) -> GcPlan:
     return plan
 
 
+def run_engine_env(run_id: str, *, home: Path, env: Mapping[str, str]) -> dict[str, str]:
+    """The environment that makes `python -m factory_engine` run the run's own engine: its kit snapshot's engine
+    folder goes first on PYTHONPATH. Raises kit.no_engine when that folder is missing (ADR 2026-11-20-which-engine-serves-each-repo).
+    """
+    ref = state.find_run(home, run_id)
+    if ref is None:
+        raise FactoryError("config.invalid", f"no run named {run_id!r}", hint="factory status lists the runs in this repo")
+    kit_hash = json.loads((ref.run_dir / "run.json").read_text())["kit_hash"]
+    engine = home / "kits" / kit_hash / "factory" / "engine"
+    if not engine.is_dir():
+        raise FactoryError("kit.no_engine",
+                           f"run {run_id} uses kit {kit_hash}, whose engine folder {engine} is missing",
+                           hint=f"add --installed-engine to run this one command on the installed engine")
+    return {**env, "PYTHONPATH": os.pathsep.join(p for p in (str(engine), env.get("PYTHONPATH", "")) if p)}
+
+
 def spawn_engine(repo, run_id) -> int | None:
     """Start `python -m factory_engine run <run>` in its own session, unless a live lock exists. Returns its pid.
 
     The child writes its output to ~/.factory/logs, so a detached run leaves a trail when nobody is watching.
+    The child runs the engine in the run's own kit snapshot, not the installed one.
     """
     repo = Path(repo)
     run_dir = _ref(repo, run_id).run_dir
     if state.lock_status(run_dir) == "live":
         return None
-    logs = state.factory_home() / "logs"
+    home = state.factory_home()
+    env = run_engine_env(run_id, home=home, env=os.environ)
+    logs = home / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     with open(logs / f"engine-{run_id}.log", "ab") as log:
         proc = subprocess.Popen([sys.executable, "-m", "factory_engine", "run", run_id, "--repo", str(repo)],
-                                cwd=str(repo), stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
+                                cwd=str(repo), env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
                                 start_new_session=True)
     return proc.pid

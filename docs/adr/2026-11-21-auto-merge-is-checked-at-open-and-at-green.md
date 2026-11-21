@@ -67,7 +67,7 @@ Asking for a review at open costs one call and gives a person the reason at once
 - Tests: seven new tests in `factory/engine/tests/engine/test_merge_review.py`, one in `factory/engine/tests/tracker/test_gh.py`, and two in `factory/launcher/tests/test_tick.py`. The old tick test that expected a green pull request to start nothing is split into "pending starts nothing" and "green already checked starts nothing", because D1 changes what a first green read does.
 - To let anything auto-merge, a repo owner still adds a workflow under `auto.workflows` in `merge-policy.yaml` and turns on "Allow auto-merge" in the repo's GitHub settings. Both stay off until then.
 - Not checked: a real GitHub. The pull request reading and merging have run only against `FakePullRequests`. The review request through `gh pr edit --add-reviewer` and the comment through `gh pr comment` have not run against a real pull request.
-- Task: item 20 in `docs/tasks.md`.
+- Task: item 23 in `docs/tasks.md`.
 
 ## Source
 

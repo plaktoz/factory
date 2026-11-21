@@ -28,7 +28,6 @@ def use_kit_source(path: Path) -> None:
     global KIT_SOURCE
     KIT_SOURCE = path
 INNER_GITIGNORE = "*\n!config/\n!config/**\n!.gitignore\n"  # !config/** is needed; see module 3
-KIT_KEEP = {"engine"}  # never copied: the engine is installed by the launcher, not by init (module 3)
 
 STARTER_FACTORY_YAML = """base_branch: main
 tracker: github
@@ -82,7 +81,20 @@ def _copy_kit(src: Path, dst: Path) -> None:
         raise FactoryError("config.invalid", f"kit source {src} is not a folder", hint="pass the folder that holds the kit")
     if dst.exists():
         shutil.rmtree(dst)
-    shutil.copytree(src, dst, ignore=shutil.ignore_patterns(".venv", "__pycache__", "*.pyc", ".pytest_cache", ".gitkeep", *KIT_KEEP))
+    shutil.copytree(src, dst, ignore=_ignore_engine_tests(src))
+
+
+def _ignore_engine_tests(src: Path):
+    """copytree ignore hook: the usual junk, plus factory/engine/tests (not the engine itself, which each snapshot needs)."""
+    skip = shutil.ignore_patterns(".venv", "__pycache__", "*.pyc", ".pytest_cache", ".gitkeep")
+
+    def ignore(folder: str, names: list[str]) -> set[str]:
+        out = set(skip(folder, names))
+        if Path(folder) == src / "engine" and "tests" in names:
+            out.add("tests")
+        return out
+
+    return ignore
 
 
 def init_repo(repo: Path) -> InitReport:

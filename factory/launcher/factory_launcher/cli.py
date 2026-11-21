@@ -12,22 +12,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 from pathlib import Path
 
-from factory_engine import state
+from factory_engine import api, state
 from factory_engine.errors import FactoryError
 from factory_engine.loadcfg import load_config
 
 from . import schedule as schedule_mod
 from . import tick as tick_mod
 
-MACHINE = {"tick", "watch", "schedule", "dashboard", "inbox", "doctor", "config"}
+MACHINE = {"tick", "watch", "schedule", "dashboard", "inbox", "doctor", "config", "triage"}
 RUN_COMMANDS = {"resume", "recover", "status", "where", "events", "logs", "open", "decide", "check", "reopen",
                 "note", "retry", "goto", "skip", "abort", "usage", "run", "add", "sync", "gc", "init", "upgrade",
-                "intake", "triage", "sink", "plugins"}
+                "intake", "sink", "plugins"}
 
 
 def _emit(ok: bool, code: str, message: str, hint: str, data: dict, as_json: bool) -> None:
@@ -62,11 +63,25 @@ def _engine_argv(argv: list[str], repo: Path) -> list[str]:
     return [sys.executable, "-m", "factory_engine", *argv, "--repo", str(repo)]
 
 
-def _dispatch(argv: list[str], repo: Path, home: Path) -> int:
-    """Hand the command to the repo's engine and pass its output and exit code straight through."""
-    env = {**__import__("os").environ, "FACTORY_HOME": str(home)}
+def _dispatch(argv: list[str], repo: Path, home: Path, *, run_id: str | None = None, installed: bool = False) -> int:
+    """Hand the command to an engine and pass its output and exit code straight through.
+
+    A command about a run runs on that run's own kit snapshot (api.run_engine_env). A command that creates a run
+    runs on the repo's own factory/engine. --installed-engine runs either on the launcher's installed engine."""
+    env = {**os.environ, "FACTORY_HOME": str(home)}
+    if not installed:
+        env = api.run_engine_env(run_id, home=home, env=env) if run_id else _repo_engine_env(repo, env)
     proc = subprocess.run(_engine_argv(argv, repo), cwd=str(repo), env=env, check=False)
     return proc.returncode
+
+
+def _repo_engine_env(repo: Path, env: dict[str, str]) -> dict[str, str]:
+    """PYTHONPATH for a command that creates a run: the repo's own factory/engine, which must exist."""
+    engine = repo / "factory" / "engine"
+    if not engine.is_dir():
+        raise FactoryError("kit.no_engine", f"the repo's kit at {engine} has no engine folder",
+                           hint="run factory init or factory upgrade, or add --installed-engine")
+    return {**env, "PYTHONPATH": os.pathsep.join(p for p in (str(engine), env.get("PYTHONPATH", "")) if p)}
 
 
 def _tick_repos(args, home: Path) -> list[Path]:
@@ -160,6 +175,19 @@ def _inbox(args, home: Path) -> int:
     return 0
 
 
+def _triage(args, home: Path) -> int:
+    """`factory triage`: the `rules` task of the triage stage. It runs in the task folder, which is not a repo, so it
+    takes no repo and goes to the engine's triage code directly (module 4; the engine copies the request in)."""
+    from factory_engine.triage_cli import run_triage
+    try:
+        run_triage()
+    except FactoryError as e:
+        _emit(False, e.code, e.message, e.hint, {}, getattr(args, "json", False))
+        return e.exit_code
+    _emit(True, "ok", "triage.json written", "", {"triage": "written"}, getattr(args, "json", False))
+    return 0
+
+
 def _config_init(args, home: Path) -> int:
     from factory_engine.loadcfg import factory_home
     target = home / "config.yaml"
@@ -220,6 +248,8 @@ def _parser() -> argparse.ArgumentParser:
     dr.add_argument("--no-repo", action="store_true")
     dr.add_argument("--json", action="store_true")
 
+    tr = sub.add_parser("triage", help="the rules task of the triage stage: write triage.json from the task's request")
+    tr.add_argument("--json", action="store_true")
     c = sub.add_parser("config", help="machine config")
     c.add_argument("action", choices=["init"])
     c.add_argument("--json", action="store_true")
@@ -251,6 +281,8 @@ def main(argv: list[str] | None = None) -> int:
             return _doctor(args, home)
         if args.command == "config":
             return _config_init(args, home)
+        if args.command == "triage":
+            return _triage(args, home)
     except FactoryError as e:
         _emit(False, e.code, e.message, e.hint, {}, getattr(args, "json", False))
         return e.exit_code
@@ -258,9 +290,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _engine_passthrough(argv: list[str]) -> int:
-    """Send a run command to its engine. The repo comes from --repo, the run's run.json, or the current folder."""
+    """Send a run command to its engine. The repo comes from --repo, the run's run.json, or the current folder.
+
+    --installed-engine is taken out here, so the engine never sees it, and the command runs on the installed engine."""
     home = state.factory_home()
     args_list = list(argv)
+    installed = "--installed-engine" in args_list
+    args_list = [a for a in args_list if a != "--installed-engine"]
     repo_arg = None
     if "--repo" in args_list:
         i = args_list.index("--repo")
@@ -275,7 +311,11 @@ def _engine_passthrough(argv: list[str]) -> int:
     if repo is None:
         _emit(False, "config.invalid", "the current folder is not in a git repo", "pass --repo <path>", {}, "--json" in argv)
         return 2
-    return _dispatch(args_list, repo, home)
+    try:
+        return _dispatch(args_list, repo, home, run_id=run_id, installed=installed)
+    except FactoryError as e:
+        _emit(False, e.code, e.message, e.hint, {}, "--json" in argv)
+        return e.exit_code
 
 
 def _is_run(value: str, home: Path) -> bool:
