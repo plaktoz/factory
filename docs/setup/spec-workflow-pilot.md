@@ -51,8 +51,8 @@ These come from the ADRs. Read them when you judge the numbers.
 | Item | Value |
 | --- | --- |
 | Owner of the first draft | The repo owner (`plaktoz`) |
-| Pilot ticket 1 | Drafted: `factory gc` by real GitHub pull request state (task 34). Issue number: not yet opened |
-| Pilot ticket 2 | Drafted: an engine crash stops a task after `max_interruptions` (module 8). Issue number: not yet opened |
+| Pilot ticket 1 | [#88](https://github.com/plaktoz/factory/issues/88): give `merge.json` a checked format |
+| Pilot ticket 2 | [#89](https://github.com/plaktoz/factory/issues/89): test seven open module 17 cleanup criteria |
 | Baseline ticket 1 | [PR #74](https://github.com/plaktoz/factory/pull/74), see the baseline record below |
 | Baseline ticket 2 | [PR #71](https://github.com/plaktoz/factory/pull/71), see the baseline record below |
 | Start day | 2026-11-22. Day 14 is 2026-12-06 |
@@ -72,4 +72,6 @@ Taken on 2026-11-22 from GitHub. Neither pull request links to an issue, so a de
 | Defect window ends | 2026-12-05 | 2026-12-05 |
 
 **Not similar in size.** The pilot's own rule asks for baseline tickets of similar size. PR #71 is about ten times PR #74 by changed lines, and it bundles four separate changes. Review time is also undefined for both: neither has an approval, so the measure "hours from opened to first approval" has no value to compare. Both were merged by the author without review.
+
+**Review time, as changed on 2026-11-22** (owner decision D2, ADR `2026-11-22-measure-review-time-as-open-to-merge.md`): the measure is now minutes from opening to merging, which has a value for both: #74 4.4 min, #71 171.4 min. The first-approval measure above is no longer used.
 

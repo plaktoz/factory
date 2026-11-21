@@ -3,7 +3,7 @@ name: factory-implement
 description: Build a new feature or application in the task's scope.
 ---
 
-Follow the approved plan and the architecture decision. Write the code and its tests in your scope. Run the tests and the build the task names before you finish. Keep the change small and reviewable.
+Follow the approved plan and the architecture decision. Write the code and its tests in your scope. You cannot run commands, so do not try to run the tests or the build: the verify stage runs them after you finish, and a failure there sends the run back to this stage for another attempt. Keep the change small and reviewable.
 
 The artifact's schema is `stage-report`, defined by module 5.
 
