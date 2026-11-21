@@ -198,6 +198,47 @@ def test_worker_log_has_the_output_while_the_worker_is_still_running_and_masks_i
     assert token not in log.read_text()
 
 
+# ---- the live stream (owner decision D3, ADR 2026-11-21-a-running-claude-task-streams-its-log) -------------------
+
+def test_the_worker_runs_with_the_streaming_output(stub, machine, make_ctx, tmp_path):
+    stub.set(result=str(RECORDED / "stream.jsonl"))
+    attempt(gateway_adapter(machine), make_ctx(), GW_CONF, tmp_path)
+    argv = stub.argv()
+    assert argv[argv.index("--output-format") + 1] == "stream-json"
+    assert "--verbose" in argv  # Claude Code refuses stream-json with -p unless --verbose is given
+
+
+def test_a_streamed_result_gives_its_tokens_and_models(stub, machine, make_ctx, tmp_path):
+    stub.set(result=str(RECORDED / "stream.jsonl"))
+    result, _ = attempt(gateway_adapter(machine), make_ctx(), GW_CONF, tmp_path)
+    assert result.exit == "ok"
+    assert result.models_observed == ["claude-advantage-assist"]
+    assert (result.input_tokens, result.output_tokens) == (4, 88)
+
+
+def test_the_worker_log_shows_each_message_as_plain_text_not_raw_events(stub, machine, make_ctx, tmp_path):
+    stub.set(result=str(RECORDED / "stream.jsonl"))
+    _, log = attempt(gateway_adapter(machine), make_ctx(), GW_CONF, tmp_path)
+    lines = log.read_text().splitlines()
+    assert "$ echo hello-from-tool" in lines
+    assert "hello-from-tool" in lines
+    assert "done" in lines
+    assert not any(line.startswith("{") for line in lines)  # no raw JSON event reaches the log
+
+
+def test_a_streamed_message_reaches_the_worker_log_while_the_worker_is_still_running(stub, machine, make_ctx, tmp_path):
+    first = (RECORDED / "stream.jsonl").read_text().splitlines()[1]  # the assistant's Bash call
+    stub.set(early_out=first, sleep=60)
+    adapter, log = gateway_adapter(machine), tmp_path / "worker.log"
+    handle = adapter.start(make_ctx(), GW_CONF, log)
+    seen, running = log_seen_while_running(adapter, handle, log, "$ echo hello-from-tool")
+    assert seen and running
+
+
+def test_plain_log_keeps_a_line_that_is_not_an_event():
+    assert C.plain_log("warming up\n") == "warming up"
+
+
 # ---- the sandbox settings file ------------------------------------------------------------------------------------
 
 def test_every_attempt_has_a_settings_file_with_the_required_sandbox_rules(stub, machine, make_ctx, worktree, task_dir,
