@@ -25,6 +25,7 @@ class _Pr:
     auto_merge: bool = False
     reviewers: list[str] = field(default_factory=list)
     merged_with: str | None = None
+    comments: list[str] = field(default_factory=list)
 
 
 class FakePullRequests:
@@ -79,6 +80,11 @@ class FakePullRequests:
         self.calls.append("request_reviewers")
         self._maybe_fail()
         self._get(pr).reviewers.extend(users)
+
+    def comment(self, pr: PrRef, body: str) -> None:
+        self.calls.append("comment")
+        self._maybe_fail()
+        self._get(pr).comments.append(body)
 
     # Test controls (not part of the PullRequests protocol).
     def set_ci(self, pr: PrRef, ci: str, output: str = "") -> None:

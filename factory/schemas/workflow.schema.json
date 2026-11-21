@@ -178,6 +178,10 @@
         "tasks_from": {
           "type": "string"
         },
+        "task_template": {
+          "description": "With tasks_from: the task fields each generated task starts from. Each artifact item is then {id, question} plus any task field it overrides (owner decision, 2026-11-21).",
+          "type": "object"
+        },
         "join": {
           "type": "string",
           "pattern": "^(all|any|quorum:[1-9][0-9]*)$"
@@ -209,6 +213,7 @@
         {"required": ["tasks"]},
         {"required": ["tasks_from"]}
       ],
+      "dependentRequired": {"task_template": ["tasks_from"]},
       "additionalProperties": false
     }
   },

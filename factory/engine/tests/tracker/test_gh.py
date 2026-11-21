@@ -116,6 +116,14 @@ def test_request_reviewers_adds_them_and_does_nothing_for_an_empty_list():
     assert len(stub.calls) == 1 and stub.calls[0][stub.calls[0].index("--add-reviewer") + 1] == "bob,carol"
 
 
+def test_comment_posts_the_body_on_the_pull_request():
+    stub = Stub()
+    GitHubPullRequests("a/b", stub).comment(PrRef(5, "u", "h", "b"), "Merge check with CI green: Human review: x")
+    (call,) = stub.calls
+    assert call[:3] == ["pr", "comment", "5"] and call[call.index("--body") + 1].startswith("Merge check")
+    assert call[call.index("-R") + 1] == "a/b"
+
+
 # --- CI mapping (entry shape ASSUMED from GitHub's documented fields) ---
 
 def entry(name, status="COMPLETED", conclusion="SUCCESS"):

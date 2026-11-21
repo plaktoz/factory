@@ -137,7 +137,11 @@ def _semantic_problems(wf: Workflow) -> list[Problem]:
 def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]:
     """One task per item of the JSON array in `artifact`, each in the workflow's task form (module 5).
 
-    Every item is checked against the workflow schema's task definition before any task is returned, so a bad item
+    With a `task_template` on the stage, each item is a plain question, `{id, question}`, and may override any task
+    field; the task is the template, then the item, without the question (owner decision D2, 2026-11-21). The
+    question reaches the worker as the task's `question` file (see `question_of`).
+
+    Every task is checked against the workflow schema's task definition before any task is returned, so a bad item
     stops the stage before a worker starts. The error names the item's index and the path inside it.
     """
     where = f"{artifact} (stage {stage.id})"
@@ -149,6 +153,12 @@ def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]:
     if not isinstance(items, list):
         raise FactoryError("config.invalid", f"{where}: the generated task list must be a JSON array",
                            hint="write a JSON array with one task object per item")
+    if stage.task_template is not None:
+        items = [_from_template(stage.task_template, item, i, where) for i, item in enumerate(items)]
+    elif any(isinstance(item, dict) and "question" in item for item in items):
+        raise FactoryError("config.invalid", f"{where}: the items are questions, but stage {stage.id!r} has no "
+                           "task_template to build tasks from", hint="add task_template to the stage, such as "
+                           "{skill: gather, timeout_minutes: 20}")
     schema = _task_schema()
     validator = jsonschema.Draft202012Validator(schema)
     for i, item in enumerate(items):
@@ -168,6 +178,25 @@ def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]:
         raise FactoryError("config.invalid", f"{where}: " + "; ".join(p.message for p in problems),
                            hint=problems[0].hint)
     return tasks
+
+
+def _from_template(template: dict, item: object, i: int, where: str) -> dict:
+    """The task for one question: the template, then the item's own task fields. The question is left out, because it
+    is not a task field; the engine writes it to the task's folder."""
+    if not isinstance(item, dict) or not isinstance(item.get("question"), str) or not item["question"].strip():
+        raise FactoryError("config.invalid", f"{where}: item {i}: each item needs a question (non-empty text)",
+                           hint='write each item as {"id": "q1", "question": "..."}')
+    return {**template, **{k: v for k, v in item.items() if k != "question"}}
+
+
+def questions_of(artifact: Path) -> dict[str, str]:
+    """Task id to question text, for the items of a templated `tasks_from` artifact that have one."""
+    try:
+        items = json.loads(artifact.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {str(it["id"]): str(it["question"]) for it in items if isinstance(it, dict) and "question" in it
+            and "id" in it} if isinstance(items, list) else {}
 
 
 def expand_helpers(task: TaskSpec, subagents: Literal["native", "none"]) -> list[TaskSpec]:
@@ -217,7 +246,25 @@ def _schema_problems(doc: dict, text: str, file: str) -> list[Problem]:
             continue  # reported above with the list form to write
         problems.append(Problem(file, _line_at(text, path), f"{_dotted(path)}: {e.message}",
                                 f"fix {_dotted(path)} to match factory/schemas/workflow.schema.json"))
+    if not problems:
+        problems += _template_problems(doc, text, file)
     return problems
+
+
+def _template_problems(doc: dict, text: str, file: str) -> list[Problem]:
+    """A stage's task_template must be a valid task once a question gives it an id, so a bad template fails at load,
+    not when the question list arrives."""
+    task = jsonschema.Draft202012Validator(_task_schema())
+    out: list[Problem] = []
+    for i, stage in enumerate(doc.get("stages") or []):
+        template = stage.get("task_template") if isinstance(stage, dict) else None
+        if not isinstance(template, dict):
+            continue
+        for e in sorted(task.iter_errors({"id": "question", **template}), key=lambda e: list(e.absolute_path)):
+            path = ["stages", i, "task_template", *e.absolute_path]
+            out.append(Problem(file, _line_at(text, path[:3]), f"{_dotted(path)}: {e.message}",
+                               "a task_template holds task fields only, such as skill, helpers and timeout_minutes"))
+    return out
 
 
 def _string_commands(node, path: tuple = ()) -> list[list]:
@@ -293,6 +340,7 @@ def _parse_stage(s: dict, defaults: Defaults) -> Stage:
         on_reject=(s.get("on_reject") or {}).get("goto"),
         sync_base=s.get("sync_base", s["id"] == "verify"),
         source="workflow",
+        task_template=s.get("task_template"),
     )
 
 

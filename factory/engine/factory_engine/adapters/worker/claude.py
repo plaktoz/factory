@@ -34,7 +34,8 @@ HELPER_TOOLS = ("Agent", "Task")
 
 # Flags of `claude -p` that the adapter sets (Claude Code 2.1.325).
 FLAG_HEADLESS = "-p"
-FLAG_OUTPUT = ("--output-format", "json")
+# Workers and the doctor probe both stream, so worker.log fills while a task runs (owner decision, 2026-11-21).
+# Claude Code refuses stream-json with -p unless --verbose is also given.
 FLAG_STREAM = ("--output-format", "stream-json", "--verbose")
 FLAG_NO_SESSION = "--no-session-persistence"
 FLAG_SOURCES = ("--setting-sources", "project")      # no user settings, plugins or hooks
@@ -137,7 +138,8 @@ def mcp_config(servers: list[McpServer]) -> dict:
 # ---- reading the result -----------------------------------------------------------------------------------------------
 
 def parse_result(stdout: str) -> dict | None:
-    """The `-p --output-format json` result is one object. A stream of lines gives its `result` line."""
+    """The `result` line of a `--output-format stream-json` stream. A single JSON object, the older `json` output and
+    the form of the recorded fixtures, is read as the result."""
     text = stdout.strip()
     if not text:
         return None
@@ -154,6 +156,48 @@ def parse_result(stdout: str) -> dict | None:
         if isinstance(doc, dict) and doc.get("type") == "result":
             return doc
     return None
+
+
+def plain_log(stdout: str) -> str:
+    """worker.log text from the stream: assistant text, each tool call as `$ <command>` or `<tool>: <input>`, each tool
+    result, and the final result when it is an error. A line that is not an event is kept as it is."""
+    lines: list[str] = []
+    for raw in stdout.splitlines():
+        try:
+            ev = json.loads(raw)
+        except ValueError:
+            if raw.strip():
+                lines.append(raw)
+            continue
+        if not isinstance(ev, dict):
+            continue
+        kind = ev.get("type")
+        if kind == "result":
+            if ev.get("is_error"):
+                lines.append(f"error: {ev.get('result') or ev.get('subtype') or 'the worker failed'}")
+            continue
+        message = ev.get("message")
+        content = message.get("content") if isinstance(message, dict) else None
+        if kind not in ("assistant", "user") or not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            if part.get("type") == "text" and part.get("text"):
+                lines.append(str(part["text"]).rstrip("\n"))
+            elif part.get("type") == "tool_use":
+                args = part.get("input") or {}
+                if part.get("name") == "Bash" and isinstance(args, dict) and "command" in args:
+                    lines.append(f"$ {args['command']}")
+                else:
+                    lines.append(f"{part.get('name')}: {json.dumps(args, ensure_ascii=False)}")
+            elif part.get("type") == "tool_result":
+                out = part.get("content")
+                if isinstance(out, list):
+                    out = "\n".join(str(c.get("text", "")) for c in out if isinstance(c, dict))
+                if out:
+                    lines.append(str(out).rstrip("\n"))
+    return "\n".join(lines)
 
 
 def parse_usage(result: dict | None) -> tuple[int | None, int | None, list[str]]:
@@ -297,7 +341,7 @@ class ClaudeAdapter:
             write_private(prompt, build_prompt(ctx))
             model = ctx.model or conf.model
             argv = self._argv(conf, model=model, settings=settings, mcp=mcp_path, allowed=self._allowed(ctx),
-                              helpers=ctx.helpers, output=FLAG_OUTPUT)
+                              helpers=ctx.helpers, output=FLAG_STREAM)
             secrets = secret_values(env, resolved)
             proc = self._spawn(argv, ctx, conf, prompt, folder)
         except BaseException:
@@ -327,7 +371,7 @@ class ClaudeAdapter:
             return AttemptResult("failed", 127, None, None, None, [], "binary_missing")
         timed_out = False
         try:
-            tail = LogTail(data["log"], [(data["stdout"], str), (data["stderr"], str)], data["secrets"])
+            tail = LogTail(data["log"], [(data["stdout"], plain_log), (data["stderr"], str)], data["secrets"])
             rc = wait_tailing(proc, timeout_s, tail)
         except subprocess.TimeoutExpired:
             timed_out = True
@@ -335,7 +379,7 @@ class ClaudeAdapter:
             rc = proc.returncode
         stdout = read_text(data["stdout"])
         stderr = read_text(data["stderr"])
-        write_log(data["log"], "\n".join(x for x in [stdout, stderr] if x), data["secrets"])
+        write_log(data["log"], "\n".join(x for x in [plain_log(stdout), stderr] if x), data["secrets"])
         remove_attempt(data["folder"])  # settings, MCP config and prompt are deleted with the attempt (module 9)
         if timed_out:
             return AttemptResult("timeout", None, None, None, None, [], None)
