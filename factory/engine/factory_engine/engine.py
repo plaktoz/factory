@@ -579,7 +579,15 @@ class Engine:
             feedback=sorted((run_dir / "tasks" / spec.id / "feedback").glob("*.json")),
             notes=notes.delivered_notes(run_dir, spec.id), progress=None, output_schema=None, model=spec.model,
             mcp=[], practices=[], artifact_name=spec.out or "artifact.json", bash=[],
-            cmd=list(spec.cmd) if spec.cmd else None, run=spec.run, plugin_dir=None)
+            cmd=list(spec.cmd) if spec.cmd else None, run=spec.run, plugin_dir=None,
+            question=self._question_of(run_dir, stage, spec))
+
+    @staticmethod
+    def _question_of(run_dir: Path, stage: Stage, spec: TaskSpec) -> str | None:
+        """The question a task built from a templated `tasks_from` artifact answers (owner decision D2)."""
+        if stage.task_template is None or not stage.tasks_from:
+            return None
+        return wf_mod.questions_of(run_dir / "tasks" / stage.tasks_from).get(spec.id)
 
     def _supervise(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, batch: list[TaskSpec],
                    result: TickResult) -> None:
@@ -843,11 +851,16 @@ class Engine:
     def _finish(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
         """Every stage is done: write the summary and deliver through the sink. A run with a pull request then waits at
         its merge review and ends only when GitHub merges or closes the pull request; any other sink ends the run."""
+        opening = run.pr is None and delivery.sink_of(run) in ("pull_request", "doc")
+        if opening:  # the verdict is in the pull request body from the start (owner decision D1, 2026-11-21)
+            delivery.evaluate_merge(run_dir, self.cfg, changed=delivery.changed_since_base(run, self.cfg), ci="pending")
         summary.render_summary(run_dir, usage_mod.summarize([run_dir]))
         if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
             gitops.push(run.worktree, run.pr.head)
         sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
         if sink.pr is not None:
+            if opening:
+                self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run))
             run.pr = sink.pr
             run.status = "awaiting_approval"
             result.attention = run.attention = notify.attention_for(run, now=self.clock.now().isoformat())
@@ -885,7 +898,25 @@ class Engine:
                 rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
                                       max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
             return self._apply(run, run_dir, lock, wf, stage, routing, result)
+        elif pr.ci == "green" and not delivery.green_check_done(run_dir):
+            self._merge_at_green(run, run_dir)
         return result
+
+    def _merge_at_green(self, run: Run, run_dir: Path) -> None:
+        """The first green read: check the merge rules again, and ask GitHub to merge only when every rule passes. A
+        merge that branch protection refuses leaves the run waiting for a person, with the refusal in the events."""
+        decision = delivery.evaluate_merge(run_dir, self.cfg, changed=delivery.changed_since_base(run, self.cfg),
+                                           ci="green")
+        verdict = "Auto-merge: every rule passed" if decision.auto else f"Human review: {decision.reason}"
+        self.prs.comment(run.pr, f"Merge check with CI green: {verdict}")
+        if not decision.auto:
+            return  # reviewers were asked when the pull request opened
+        try:
+            delivery.merge_or_request_review(run.pr, decision, self.prs, delivery.reviewers_for(run))
+        except FactoryError as e:
+            if e.code != "delivery.merge_blocked":
+                raise
+            state.append_event(run_dir, "merge_blocked", pr=run.pr.number, reason=e.message)
 
     # ---- helpers ---------------------------------------------------------------------------------------------------
 

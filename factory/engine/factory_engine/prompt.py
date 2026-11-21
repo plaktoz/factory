@@ -65,6 +65,8 @@ def build_prompt(ctx: TaskContext) -> str:
         summary.append("Acceptance:\n" + "\n".join(f"- {a}" for a in rq.acceptance))
     summary.append(f"Body:\n{rq.source.body}")
     out.append(_section("Request", "\n".join(summary)))
+    if ctx.question:
+        out.append(_section("Your question", "Answer this question for the request above. Answer only this one.\n\n" + ctx.question))
     out.append(_section("Scope", "You may change only these paths:\n" + ("\n".join(f"- {p}" for p in ctx.scope) or "- (none)")
                         + "\nYou must never change these paths:\n" + ("\n".join(f"- {p}" for p in ctx.deny) or "- (none)")
                         + "\nYour working folder is the task worktree. Never commit, push or touch git history."))

@@ -84,7 +84,7 @@ It then takes one action per run:
 | running | stale (no process holds the lock) | Resumes it: ends any worker left over, closes open attempts as interrupted, starts an engine |
 | awaiting\_approval, decision now answered | free | Starts an engine, as a safety net if the answer did not already start one |
 | awaiting\_approval, still unanswered | free | Sends a reminder if one is due |
-| awaiting\_approval, merge review | free | Reads the pull request (`watch_pr`) and writes nothing; starts an engine when it is merged, closed or red, and that engine ends or routes the run |
+| awaiting\_approval, merge review | free | Reads the pull request (`watch_pr`) and writes nothing; starts an engine when it is merged, closed or red, or when its checks turn green and the merge rules have not been checked with green CI yet; that engine ends the run, routes it, or checks the merge rules again (module 13) |
 | retrying | free | Starts an engine that repeats the failed operation; blocks the run once `infra_wait_hours` have passed |
 | blocked | free | Reminder only; it waits for you |
 | done, failed or aborted | free | Housekeeping candidate |
@@ -244,7 +244,7 @@ flowchart LR
 | Gates and rework | `gate_passed`, `gate_failed`, `gate_skipped`, `routed_back`, `run_retried`, `run_routed`, `merge_conflict` |
 | Human stops | `attention_requested`, `attention_cleared`, `decision_requested`, `decision_recorded`, `decision_approved`, `decision_rejected`, `decision_invalidated`, `decision_reopened` |
 | Steering | `note_queued`, `note_delivered`, `worker_restarted` |
-| Delivery and cleanup | `pr_opened`, `merge_evaluated`, `merged`, `sink_written`, `archived` |
+| Delivery and cleanup | `pr_opened`, `merge_evaluated`, `merge_blocked`, `merged`, `sink_written`, `archived` |
 | Snapshot | `run_snapshot` [snapshot-event] |
 
 `run_snapshot` is written after each change to a run and carries the whole run. It is the only event that does: the other events record what happened, and a rebuild uses the last `run_snapshot`, not the other events. Its payload (field names, schema and storage format) is Unspecified; see **Run rebuild** above.

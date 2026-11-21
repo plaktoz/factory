@@ -4,7 +4,7 @@ Part of the [phase 1 design](../phase-1.md#module-map). Build wave: 2. Contracts
 
 You watch any running task through its live log and steer it with notes, which the engine delivers at the next checkpoint. Workers stay headless, so results stay repeatable.
 
-1. The adapter writes the worker's output to `tasks/<id>/worker.log` while the task runs, about once a second, one complete line at a time. The dashboard shows the last 200 lines for each running task.
+1. The adapter writes the worker's output to `tasks/<id>/worker.log` while the task runs, about once a second, one complete line at a time. The dashboard shows the last 200 lines for each running task. A Claude task shows each message, tool call and tool result as it arrives ([module 9](09-worker-adapters-and-governed-helpers.md), Live log). A tool call that prints nothing adds no line until it ends.
 2. You send a note with `factory note <run>/<task> "text"` or the Add note box. The engine appends it to `notes.jsonl` as queued.
 3. At the next checkpoint, the engine stops the worker and starts a new attempt. The new prompt carries `progress.md`, every delivered note and the scope reminder. Each restart counts toward `max_restarts`.
 4. For a hard rule, add a deny path: `factory note <run>/<task> --deny "auth/**" "text"`. The scope check then fails any edit there, whether or not the worker follows the note.
