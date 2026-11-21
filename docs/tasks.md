@@ -147,6 +147,7 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Log
 
+- 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-gc-keeps-a-worktree-while-its-pull-request-is-open.md`): the owner chose to keep a worktree while its pull request is open: `gc` reads the pull request state, and `api.gc` now passes the client (commit `6a69067`). Real GitHub state is untested; item 34 stays open.
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-nine-module-5-choices.md`): the owner chose to keep the nine choices written into module 5 where it was silent; none is built yet (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-usage-unreadable-event.md`): the owner chose to keep the `usage_unreadable` event: `start_attempt` writes one per unreadable line, once, with the task id and line number (commit `6a69067`).
 - 2026-11-21 (issue 55 follow-ups, ADR `2026-11-21-keep-the-multi-model-double-count-and-label-it.md`): the owner chose to keep the multi-model double count and label it: `factory usage` prints a total that counts each attempt once, and `--json` has a `total` group (commit `6a69067`).
