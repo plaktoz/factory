@@ -5,7 +5,7 @@ import json
 
 from factory_engine.adapters.worker.fake import FakeWorkerAdapter, ok
 
-from conftest import TRIAGE_JSON
+from engine_helpers import TRIAGE_JSON
 
 
 def test_the_request_is_in_the_cmd_task_folder_when_the_command_starts(new_run, repo, cfg, tracker, prs, clock):

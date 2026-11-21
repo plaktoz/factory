@@ -22,7 +22,7 @@ from factory_engine.skills import resolve_skill
 from factory_engine.validate import validate
 from factory_engine.config import Config
 
-from conftest import ctx_for
+from workers_helpers import ctx_for
 
 KIT = Path(__file__).resolve().parents[3]  # factory/
 OWN = KIT / "skills" / "own"

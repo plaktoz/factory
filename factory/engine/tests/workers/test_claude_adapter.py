@@ -12,7 +12,7 @@ from factory_engine.adapters.worker.claude import ClaudeAdapter
 from factory_engine.errors import FactoryError
 from factory_engine.types import HelperPolicy, McpServer
 
-from conftest import ENV_GW, RECORDED, harness, log_seen_while_running
+from workers_helpers import ENV_GW, RECORDED, harness, log_seen_while_running
 
 
 def attempt(adapter, ctx, conf, tmp_path, timeout=60):

@@ -9,7 +9,7 @@ from factory_engine.errors import FactoryError
 from factory_engine.types import GateContext, GateSpec, StageState
 from factory_engine.validate import validate
 
-from conftest import architect_packet, decision, option, set_run, without
+from decisions_helpers import architect_packet, decision, option, set_run, without
 
 
 def events(run, type_=None):

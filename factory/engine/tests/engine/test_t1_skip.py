@@ -8,7 +8,7 @@ from factory_engine.adapters.worker.fake import FakeWorkerAdapter, failed, ok
 from factory_engine.engine import Engine
 from factory_engine.errors import FactoryError
 
-from conftest import TRIAGE_JSON
+from engine_helpers import TRIAGE_JSON
 from test_verify_report import JUNIT_TWO_PASS, VERIFY_ONLY
 
 

@@ -16,7 +16,7 @@ from factory_engine.adapters.worker.command import CommandAdapter, classify_exit
 from factory_engine.errors import FactoryError
 from factory_engine.types import RunSpec
 
-from conftest import harness, log_seen_while_running
+from workers_helpers import harness, log_seen_while_running
 
 SRT = shutil.which("srt")
 needs_srt = pytest.mark.skipif(SRT is None or sandbox.node_version() is None or sandbox.node_version()[:2] < (22, 12),

@@ -14,7 +14,7 @@ from factory_engine.types import TaskBranch
 from factory_engine.housekeeping import apply, cleanup_after_join, cleanup_after_merge, plan
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from conftest import KEY, branch_exists, dirty, days_ago, git_run, make_run, set_event_times, write_repo_config  # noqa: E402
+from housekeeping_helpers import KEY, branch_exists, dirty, days_ago, git_run, make_run, set_event_times, write_repo_config  # noqa: E402
 
 
 def worktree_for(cfg, repo, run_id):
