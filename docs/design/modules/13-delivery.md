@@ -101,7 +101,7 @@ Human review: bug-fix is not in the auto workflows
 
 ```python
 # summary.py
-def render_summary(run_dir: Path, usage: UsageReport) -> Path
+def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None) -> Path   # base: the repo's base branch, for the file list before a PR names its own
 # delivery.py
 def write_adr(run_dir: Path, worktree: Path) -> Path | None        # docs/adr/<date>-<run id>.md
 def open_pr(run_dir: Path, cfg: Config, prs: PullRequests) -> PrRef
