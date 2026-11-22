@@ -16,7 +16,7 @@ from .gitops import git
 from .state import read_events, read_run
 from .types import Run
 from .validate import validate
-from .usage import UsageReport
+from .usage import ModelTotals, UsageReport
 from .yamlio import load_yaml
 
 MAX_FILES_LISTED = 20
@@ -178,13 +178,31 @@ def _decisions_and_notes(run_dir: Path) -> str:
     return "\n".join(lines) or "None"
 
 
-def _usage(usage: UsageReport) -> str:
+def _command_attempts(run_dir: Path) -> int:
+    """Finished attempts of tasks that run a command, not a model. They have no model name and no tokens, so
+    `usage.summarize` files them under `unknown` (module 14); the summary names them for what they are."""
+    from .usage import read_usage
+    tasks = run_dir / "tasks"
+    return sum(1 for tdir in (sorted(tasks.iterdir()) if tasks.is_dir() else []) for r in read_usage(run_dir, tdir.name)
+               if r.exit != "started" and r.harness == "command" and not r.models)
+
+
+def _usage(usage: UsageReport, commands: int = 0) -> str:
     lines = []
     for model, t in sorted(usage.by_model.items()):
+        attempts = t.attempts
+        if model == "unknown" and commands:
+            attempts -= commands          # the command attempts have their own line below; none of them has a token count
+            if attempts <= 0:
+                continue
+            t = ModelTotals(attempts, t.input_tokens, t.output_tokens, t.total_tokens, t.attempts_without_count - commands,
+                            t.minutes)
         tokens = "tokens unknown" if t.attempts_without_count == t.attempts else f"{t.total_tokens:,} tokens"
         if 0 < t.attempts_without_count < t.attempts:
             tokens += f" ({t.attempts_without_count} without a count)"
         lines.append(f"{model}: {t.attempts} attempt{'s' if t.attempts != 1 else ''}, {tokens}, {t.minutes:.0f} min")
+    if commands:
+        lines.append(f"commands, no model: {commands} attempt{'s' if commands != 1 else ''}, no tokens to count")
     return "\n".join(lines) or "No attempts recorded."
 
 
@@ -199,14 +217,17 @@ def _merge(run_dir: Path) -> str:
     return "Auto-merge: every rule passed" if doc.get("auto") else f"Human review: {doc.get('reason', 'no reason recorded')}"
 
 
-def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None) -> Path:
+def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None, *, delivering: bool = False) -> Path:
     """Write `summary.md` from the run's state and artifacts, and return its path. Rendering twice gives the same text.
 
     `base` is the repo's configured base branch. It is used for the file list until a pull request names its own base
-    (item 37: before the pull request exists, a repo whose base is not main had no file list)."""
+    (item 37: before the pull request exists, a repo whose base is not main had no file list).
+
+    `delivering` is set when the summary is written as the run delivers. The run is then about to wait for review, so
+    the header says that instead of `running`, which is what run.json still holds until the pull request exists."""
     run = read_run(run_dir)
     approved_by = {stage: str(dec.get("by", "unknown")) for stage, _, _, dec in answered_decisions(run_dir)}
-    head = f"Request: {run.request.source.ref} · Workflow: {run.workflow or 'none'} · Result: {run.status}"
+    head = f"Request: {run.request.source.ref} · Workflow: {run.workflow or 'none'} · Result: {'awaiting review' if delivering and run.status == 'running' else run.status}"
     if run.pr:
         head += f" · PR #{run.pr.number}"
     closes = _closes(run)
@@ -217,7 +238,7 @@ def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None) -
         f"## Stages\n{_stages(run, approved_by)}",
         f"## Evidence\n{_evidence(run, run_dir)}",
         f"## Decisions and notes\n{_decisions_and_notes(run_dir)}",
-        f"## Usage\n{_usage(usage)}",
+        f"## Usage\n{_usage(usage, _command_attempts(run_dir))}",
         f"## Merge\n{_merge(run_dir)}",
     ]) + "\n"
     path = run_dir / "summary.md"
