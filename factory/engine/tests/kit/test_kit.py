@@ -222,7 +222,26 @@ def test_the_driver_adds_the_toolchain_checks_to_modules_3s_doctor(repo, fake_ki
     _go_repo_with_no_tools(repo, monkeypatch, tmp_path)
     checks = api.doctor(repo)
     assert any(r.name == "toolchain:go:golangci-lint" and not r.ok for r in checks), checks
-    assert [r.name for r in checks if not r.name.startswith("toolchain:")] == [r.name for r in kit.doctor(repo)]
+    assert [r.name for r in checks if not r.name.startswith("toolchain:") and r.name not in ("skills-lock", "practice-packs")] == [r.name for r in kit.doctor(repo)]
+
+
+def test_the_driver_adds_module_10s_lock_and_pack_checks(repo, fake_kit, monkeypatch, tmp_path):
+    """Module 10: `factory doctor` reports an uninstalled locked skill and a pack over its line limit."""
+    from factory_engine import api, skills
+    _go_repo_with_no_tools(repo, monkeypatch, tmp_path)
+    monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "home"))
+    by = {r.name: r for r in api.doctor(repo)}
+    assert by["skills-lock"].ok and by["practice-packs"].ok
+    (repo / "factory").mkdir()
+    (repo / "factory" / "skills.lock").write_text("sources: {ex: {repo: /nowhere, ref: abc}}\n")
+    kit_root = tmp_path / "pk"
+    big = kit_root / "skills" / "own" / "practices" / "java"
+    big.mkdir(parents=True)
+    (big / "SKILL.md").write_text("---\nname: x\ndescription: y\n---\n" + "line\n" * 200)
+    monkeypatch.setattr(skills, "KIT", kit_root)
+    by = {r.name: r for r in api.doctor(repo)}
+    assert not by["skills-lock"].ok and "not installed" in by["skills-lock"].detail
+    assert not by["practice-packs"].ok and "java is" in by["practice-packs"].detail
 
 
 def test_modules_3_doctor_reports_only_its_own_checks(repo, fake_kit, monkeypatch, tmp_path):
