@@ -77,11 +77,29 @@ def _write_if_absent(path: Path, text: str, report: InitReport) -> None:
 
 
 def _copy_kit(src: Path, dst: Path) -> None:
+    """Copy the kit to `dst`. A kit already there is replaced only after the whole copy succeeds: the new one is built
+    in a scratch folder beside it, the old one is moved aside, and the scratch folder takes its place. A failure at any
+    point leaves the old kit whole and no scratch folder behind."""
     if not src.is_dir():
         raise FactoryError("config.invalid", f"kit source {src} is not a folder", hint="pass the folder that holds the kit")
-    if dst.exists():
-        shutil.rmtree(dst)
-    shutil.copytree(src, dst, ignore=_ignore_engine_tests(src))
+    if dst.exists() and src.resolve() == dst.resolve():
+        raise FactoryError("config.invalid", f"{dst} is both the kit source and the folder to replace",
+                           hint="run upgrade from a kit that lives outside this repo's factory/ folder")
+    scratch, aside = dst.with_name(dst.name + ".new"), dst.with_name(dst.name + ".old")
+    for leftover in (scratch, aside):  # left by a process that died between the steps below
+        shutil.rmtree(leftover, ignore_errors=True)
+    try:
+        shutil.copytree(src, scratch, ignore=_ignore_engine_tests(src))
+        if dst.exists():
+            os.replace(dst, aside)
+        os.replace(scratch, dst)
+    except OSError as e:
+        shutil.rmtree(scratch, ignore_errors=True)
+        if aside.exists() and not dst.exists():
+            os.replace(aside, dst)
+        raise FactoryError("config.invalid", f"could not copy the kit to {dst}: {e}",
+                           hint=f"{dst} is unchanged; free the space or fix the permissions, then run upgrade again") from e
+    shutil.rmtree(aside, ignore_errors=True)
 
 
 def _ignore_engine_tests(src: Path):
@@ -147,9 +165,8 @@ def _which(cmd: str, env: Mapping[str, str]) -> str | None:
 def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]:
     """Check the tools and settings a run needs. With as_scheduler, run in an empty, cron-like environment.
 
-    Wave 1 checks what module 3 owns: git, gh, node (srt's floor), credentials and the repo's settings. The sandbox
-    canary, harness binaries and probe worker belong to module 9; they add their checks in their waves. The toolchain
-    checks of 17A run here too, for a repo with a valid config."""
+    Only what module 3 owns: git, gh, credentials and the repo's settings. It imports no other module, because 9, 10
+    and 17A depend on 3. The driver (module 16, `api.doctor`) adds their checks to this list."""
     base = dict(os.environ)
     if as_scheduler:
         # what cron gives a job: a short PATH, no profile, no secrets
@@ -173,18 +190,4 @@ def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult
                 out.append(CheckResult("repo-config", True, "factory.yaml is valid", ""))
             except FactoryError as e:
                 out.append(CheckResult("repo-config", False, e.message, e.hint))
-            else:
-                out.extend(_toolchain_checks(repo))
     return out
-
-
-def _toolchain_checks(repo: Path) -> list[CheckResult]:
-    """The toolchain checks of module 17A: every tool a detected profile needs. Runs only when the repo's config is
-    valid, because the profile lookup reads it; a repo with a bad config already reports that above."""
-    from .loadcfg import load_config
-    from .toolchains import doctor_checks
-    try:
-        cfg = load_config(repo)
-    except FactoryError as e:
-        return [CheckResult("toolchains", False, e.message, e.hint)]
-    return doctor_checks(repo, cfg)
