@@ -93,12 +93,13 @@ Taken on 2026-11-22 from GitHub and the two pull requests' descriptions.
 **Fresh-session findings** (the report in each PR, sorted by whether the finding was real):
 
 - **PR #96, two sessions.** Real and fixed: a task 34 paraphrase that contradicted its older text (`e8912db`), and a `--apply` output pasted as prose instead of raw JSON (`41b5f14`). Real and open: the empty `detail` case is untested. Noise or judgment, not changed: the wording of criterion 3b ("removes nothing" holds for worktrees only), the stub's `gh` error text, the test's `sys.path` import, and the absence of commit evidence on the issue's boxes.
-- **PR #99, one session.** Real and open: the test for the `high` half of the two-task case would pass even if the loop never evaluated `high`; the status test does not check that the output names the task or the reason; the resume-time `config.invalid` when a workflow is edited after a crash is a design choice, recorded and not changed. Noise: the negative and non-integer refusal is the schema's job, and the test for it passes as intended.
+- **PR #99, one session.** Real and open: the test for the `high` half of the two-task case would pass even if the loop never evaluated `high`; the status test does not check that the output names the task or the reason. Judgment, not changed: the resume-time `config.invalid` when a workflow is edited after a crash is a design choice, recorded in the PR. Noise: the negative and non-integer refusal is the schema's job, and the test for it passes as intended.
 
-Count: PR #96 had 2 real findings, both fixed, and 1 real gap open. PR #99 had 3 real findings, none fixed. Noise: 4 on PR #96, 1 on PR #99.
+Count: PR #96 had 2 real findings, both fixed, and 1 real gap open. PR #99 had 2 real findings, both open. Judgment or noise, not changed: 4 on PR #96, 2 on PR #99.
 
 **Steps skipped or changed:**
+
 - Step 2 of "Run each pilot ticket" (approve the spec in a comment on the issue) was done in chat for both tickets. The issues carry no approval comment.
-- The pilot was run as pull requests merged by their author within a minute of opening, with no review. Both baselines were the same.
+- Both pilot PRs were merged by their author, with no review, 25 s and 54 s after opening. The baselines had no review either. Their open-to-merge times were 4.4 and 171.4 minutes, so the pilot's speed is not a like-for-like comparison.
 - The pilot table named #88 and #89 until this fix, while task 18 named #86 and #87.
 
