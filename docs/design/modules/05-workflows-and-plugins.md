@@ -354,7 +354,7 @@ Acceptance criteria:
 - [x] A plugin Python function that raises is a task error (exit 2). (test: factory/engine/tests/workers/test_plugin_runner.py::test_a_function_that_raises_is_a_task_error, factory/engine/tests/workers/test_command_adapter.py::test_a_plugin_function_that_raises_is_a_task_error)
 - [x] A plugin that cannot be loaded, whether by a syntax error, any other error at import or a `sys.exit`, is a task error (exit 2). (test: factory/engine/tests/workers/test_plugin_runner.py::test_a_syntax_error_at_import_is_a_task_error, ::test_any_other_error_raised_at_import_is_a_task_error)
 - [x] A plugin result with `passed: false` and no `status` is a check failure (exit 1), and a result that cannot be written as JSON is a task error (exit 2). (test: factory/engine/tests/workers/test_plugin_runner.py::test_a_result_with_passed_false_and_no_status_is_a_check_failure, ::test_a_result_that_cannot_be_written_as_json_is_a_task_error)
-- [ ] A workflow whose `join` is `quorum:N` with N above the stage's task count is refused at load. (not ticked: a test exists, factory/engine/tests/workflow/test_workflow.py::test_a_quorum_larger_than_the_task_count_is_refused, but the owner's issue 55 edit does not tick criteria)
+- [x] A workflow whose `join` is `quorum:N` with N above the stage's task count is refused at load. (test: factory/engine/tests/workflow/test_workflow.py::test_a_quorum_larger_than_the_task_count_is_refused)
 
 **Choices made where this file was silent (2026-11-21, issue 55)**
 
