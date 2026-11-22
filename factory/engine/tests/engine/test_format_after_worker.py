@@ -75,7 +75,7 @@ def test_a_formatter_that_fails_fails_the_attempt_and_the_unformatted_file_is_no
 
 def test_a_cmd_task_is_never_formatted_even_when_it_writes_a_python_file(new_run, engine, stubs, tmp_path):
     """A cmd task writes its own files (17A: formatting is for a worker's files). Its .py output must stay unformatted."""
-    marker = tmp_path / "ruff-ran-on"
+    marker = "ruff-ran-on"   # relative: the formatter runs in the worktree, and srt refuses writes outside it
     run_dir = new_run()
     work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
     _stub(stubs, "ruff", f'if [ "$1" = format ] && [ "$2" != --check ]; then echo "$@" >> {marker}; fi')
@@ -91,7 +91,8 @@ def test_a_cmd_task_is_never_formatted_even_when_it_writes_a_python_file(new_run
 
     worker.start = check_writes_py
     eng.run([RUN])
-    formatted = marker.read_text().splitlines()
+    run = state.read_run(run_dir)
+    formatted = (run.worktree / marker).read_text().splitlines()
     assert formatted == ["format services/new.py"]     # the worker's file, once; the cmd task's generated.py is not formatted
 
 

@@ -249,9 +249,9 @@ def test_format_changed_files_runs_each_profile_on_its_own_files_only(tmp_path, 
 
 def test_a_build_tool_formatter_runs_once_with_no_file_arguments(tmp_path, path_with):
     w = fixture(tmp_path, {"pom.xml": "<project/>", "src/A.java": "class A{}\n"})
-    stub(path_with, "mvn", f'echo "$@" > {tmp_path}/mvn.args')
+    stub(path_with, "mvn", 'echo "$@" > mvn.args')          # the formatter runs in the worktree, so its record stays there
     toolchains.format_changed_files(w, CFG, ["src/A.java"], log_dir=tmp_path / "logs")
-    assert (tmp_path / "mvn.args").read_text().strip() == "-q spotless:apply"   # a file name would be read as a phase
+    assert (w / "mvn.args").read_text().strip() == "-q spotless:apply"   # a file name would be read as a phase
 
 
 def test_a_formatter_that_exits_non_zero_is_reported_not_raised(tmp_path, path_with):
@@ -270,14 +270,15 @@ def test_a_missing_formatter_fails_fast_with_its_name(tmp_path, monkeypatch):
 
 
 def test_a_gradle_wrapper_in_the_repo_is_found_and_formatting_runs_it(tmp_path, monkeypatch):
-    """`gradlew` is the repo's own script, not a program on PATH."""
+    """`gradlew` is the repo's own script, not a program on PATH. srt must still be on PATH for the step to run."""
     w = fixture(tmp_path, {"build.gradle": "apply plugin: 'java'", "src/A.java": "class A{}\n"})
     wrapper = w / "gradlew"
-    wrapper.write_text(f'#!/bin/sh\necho "$@" > {tmp_path}/gradle.args\n')
+    wrapper.write_text('#!/bin/sh\necho "$@" > gradle.args\n')
     wrapper.chmod(0o755)
-    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    srt_dir = os.path.dirname(sandbox.srt_bin() or "/usr/bin/false")
+    monkeypatch.setenv("PATH", f"{srt_dir}{os.pathsep}/usr/bin:/bin")
     [r] = toolchains.format_changed_files(w, CFG, ["src/A.java"], log_dir=tmp_path / "logs")
-    assert r.ok and (tmp_path / "gradle.args").read_text().strip() == "spotlessApply"
+    assert r.ok and (w / "gradle.args").read_text().strip() == "spotlessApply"
     assert [c.ok for c in toolchains.doctor_checks(w, CFG) if c.name.endswith(":gradlew")] == [True]
 
 
@@ -295,3 +296,29 @@ def test_a_renamed_file_lists_its_new_path_and_not_its_old_path_or_a_cut_one(tmp
     subprocess.run(["git", "-C", str(w), "mv", "src/old.py", "src/new_name.py"], check=True)
     (w / "fresh.py").write_text("y=2\n")
     assert gitops.task_changed_files(w, None) == ["fresh.py", "src/new_name.py"]
+
+
+# ---- item 2 (owner answer, 2026-11-22): formatter and lint steps run under srt, like cmd tasks and gate commands ----
+
+from factory_engine.adapters.worker import sandbox  # noqa: E402
+
+needs_srt = pytest.mark.skipif(sandbox.srt_bin() is None or (sandbox.node_version() or (0, 0))[:2] < (22, 12),
+                               reason="srt 0.0.83 and Node 22.12 or later are needed")
+
+
+@needs_srt
+def test_a_formatter_cannot_write_outside_the_worktree_under_srt(tmp_path, path_with):
+    """The formatter stub tries to write a file outside the worktree. Under srt the write is refused, so the step fails."""
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "a.py": "x=1\n"})
+    outside = tmp_path / "escaped.txt"
+    stub(path_with, "ruff", f'if [ "$1" = format ]; then echo leaked > "{outside}"; fi; exit 0')
+    [r] = toolchains.format_changed_files(w, CFG, ["a.py"], log_dir=tmp_path / "logs")
+    assert not outside.exists(), "a sandboxed formatter wrote outside the worktree"
+
+
+@needs_srt
+def test_a_formatter_can_still_format_its_own_files_under_srt(tmp_path, path_with):
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "a.py": "x=1\n"})
+    stub(path_with, "ruff", 'if [ "$1" = format ]; then shift; for f in "$@"; do echo formatted > "$f"; done; fi; exit 0')
+    [r] = toolchains.format_changed_files(w, CFG, ["a.py"], log_dir=tmp_path / "logs")
+    assert r.ok and (w / "a.py").read_text() == "formatted\n"
