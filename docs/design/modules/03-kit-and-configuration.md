@@ -17,7 +17,7 @@ factory/                    the kit: replaced whole on update, never edited
                             factory-config (factory.yaml), merge-policy
                             (12 are written in wave 0. `stage-report`, `test-report`, `source-notes` and `review-findings` had no fields in the
                             spec; the owner accepted the wave 3 drafts as the phase 1 schemas, see
-                            [module 5](05-workflows-and-plugins.md#report-schemas)). `merge` has no schema yet; module 13 writes `merge.json`)
+                            [module 5](05-workflows-and-plugins.md#report-schemas)). `merge` is checked by `factory/schemas/merge.schema.json`, written by hand because module 13 builds the file from a dict; its tests are in `tests/delivery/test_delivery.py`)
   policies/                 default scope and protected-path rules
   engine/                   Python engine and the factory CLI (copied by init and upgrade without its tests/ folder, so each snapshot carries it)
   adapters/tracker/         file, github
