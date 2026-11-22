@@ -3,14 +3,13 @@
 The spawn is a recorder, so a test sees which engines a tick would start and no process starts.
 """
 
-import fcntl
 import json
 import os
 from pathlib import Path
 
 import pytest
 
-from factory_engine import state
+from factory_engine import filelock, state
 from factory_engine.clock import FakeClock
 from factory_engine.config import Config
 from factory_engine.loadcfg import load_config
@@ -120,13 +119,13 @@ def test_a_tick_that_finds_another_tick_holding_the_lock_exits_at_once(home, tmp
     repo = _repo(tmp_path)
     _run(home, "bump-q1w2e", repo, "pending")
     fd = os.open(str(home / tick_mod.TICK_LOCK), os.O_RDWR | os.O_CREAT, 0o644)
-    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    assert filelock.try_lock(fd)
     started: list[str] = []
     try:
         report = tick_mod.tick(load_config(None, env={"FACTORY_HOME": str(home)}), repos=[],
                                home=home, spawn=lambda r, rid: started.append(rid) or 1)
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        filelock.unlock(fd)
         os.close(fd)
     assert report.skipped_tick is True and started == []
     assert "tick_skipped" in (home / "logs" / "tick.log").read_text()

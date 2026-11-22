@@ -202,8 +202,10 @@ def test_tick_spawn_refuses_a_run_whose_snapshot_has_no_engine(home, tmp_path):
 
 
 @pytest.mark.parametrize("command", [["init"], ["upgrade", "0.2.0"], ["doctor"]])
-def test_a_kit_command_runs_on_the_installed_engine_even_before_the_repo_has_one(home, tmp_path, capfd, command):
+def test_a_kit_command_runs_on_the_installed_engine_even_before_the_repo_has_one(home, tmp_path, capfd, command,
+                                                                                  monkeypatch):
     """init, upgrade and doctor manage the kit, so they run before a repo has an engine; they must not need one."""
+    monkeypatch.delenv("PYTHONPATH", raising=False)  # a PYTHONPATH from the shell is not what this test is about
     bare = tmp_path / "bare"
     bare.mkdir()
     _git("init", "-q", cwd=bare)
