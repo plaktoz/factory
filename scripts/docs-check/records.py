@@ -105,23 +105,31 @@ for item in re.split(r"\n(?=\d+\. |\*\*)", tasks):
 
 adr_dir = root / "docs/adr"
 proposed = set()
-for adr in sorted(adr_dir.glob("2*.md")):
-    text = adr.read_text(encoding="utf-8")
+for adr in sorted(p for p in adr_dir.rglob("*") if p.is_file() and p.name != "README.md"):
+    rel = adr.relative_to(adr_dir).as_posix()
+    if adr.suffix != ".md" or "/" in rel:
+        problems.append(f"docs/adr/{rel}: only <date>-<slug>.md files sit in docs/adr/; fold or delete it")
+        continue
+    text = adr.read_text(encoding="utf-8-sig").replace("\r\n", "\n")
     front = re.match(r"---\n(.*?)\n---\n(.*)", text, re.S)
     if front is None or not front.group(2).strip():
         problems.append(f"{adr.name}: no front matter or no body; an ADR needs both")
         continue
-    status = re.search(r"^status:\s*(\S+)", front.group(1), re.M)
-    if status is None or status.group(1) != "proposed":
-        problems.append(f"{adr.name}: status is {status.group(1) if status else 'missing'}; fold it into a spec Decisions table and delete the file (docs/process.md)")
+    statuses = re.findall(r"^status:\s*[\"']?([A-Za-z]+)[\"']?\s*$", front.group(1), re.M)
+    if len(statuses) != 1:
+        problems.append(f"{adr.name}: needs exactly one status line, found {len(statuses)}")
+    elif statuses[0] != "proposed":
+        problems.append(f"{adr.name}: status is {statuses[0]}; fold it into a spec Decisions table and delete the file (docs/process.md)")
     else:
         proposed.add(adr.name)
+# Specs, AGENTS.md and process.md must not depend on an ADR that is not proposed. Skills and
+# calibration records may name a folded ADR as history.
 scanned = [root / "AGENTS.md", root / "docs/process.md", *sorted((root / "docs/design").rglob("*.md"))]
 for doc in scanned:
     if doc.exists():
-        for name in set(re.findall(r"adr/(2\d{3}-[0-9a-z-]+\.md)", doc.read_text(encoding="utf-8"))):
-            if name not in proposed:
-                problems.append(f"{doc.relative_to(root)} links to docs/adr/{name}, which is not a proposed ADR; cite the Decisions row id as text")
+        for name in set(re.findall(r"adr/(2\d{3}-[0-9a-z_-]+)(?:\.md)?", doc.read_text(encoding="utf-8"))):
+            if name + ".md" not in proposed:
+                problems.append(f"{doc.relative_to(root)} names docs/adr/{name}, which is not a proposed ADR; cite the Decisions row id as text")
 
 log = tasks.split("\n## Log", 1)[1] if "\n## Log" in tasks else ""
 entries = len(re.findall(r"^- 20\d\d-\d\d-\d\d", log, re.M))

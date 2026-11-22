@@ -442,7 +442,7 @@ flowchart TD
 
 - A gate is a `GateSpec` with a `check` or a `cmd` ([section 18](shared/18-shared-contracts.md)), so a new deterministic check needs no new gate kind.
 - Every module has a fake, so a new layer can be tested without a model.
-- The ADRs in `docs/adr/` record why each rule exists, so the review does not reopen a settled decision without a new ADR.
+- The `Decisions` tables in the specs record why each rule exists, so the review does not reopen a settled decision without a new `proposed` ADR.
 
 **Where to look (candidates, not findings).** This list is a starting point from reading the module titles. It has not been assessed, and some items may already be covered.
 
