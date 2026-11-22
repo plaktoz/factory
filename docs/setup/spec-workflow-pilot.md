@@ -2,9 +2,9 @@
 
 The pilot tests the spec steps from [issue #56](https://github.com/plaktoz/factory/issues/56) by hand on two medium tickets. The factory's workflows do not change. The decisions behind it are three ADRs:
 
-- [`2026-11-21-spec-workflow-applies-by-hand-first`](../adr/2026-11-21-spec-workflow-applies-by-hand-first.md): run it by hand first.
-- [`2026-11-21-spec-rules-live-in-agents-md-and-issue-form`](../adr/2026-11-21-spec-rules-live-in-agents-md-and-issue-form.md): the rules are in `AGENTS.md`, and each ticket's spec is its GitHub issue.
-- [`2026-11-21-adversarial-check-is-a-fresh-session-by-hand`](../adr/2026-11-21-adversarial-check-is-a-fresh-session-by-hand.md): a fresh session checks the diff before the pull request.
+- `2026-11-21-spec-workflow-applies-by-hand-first` (row in `docs/process.md`): run it by hand first.
+- `2026-11-21-spec-rules-live-in-agents-md-and-issue-form` (row in `docs/process.md`): the rules are in `AGENTS.md`, and each ticket's spec is its GitHub issue.
+- `2026-11-21-adversarial-check-is-a-fresh-session-by-hand` (row in `docs/process.md`): a fresh session checks the diff before the pull request.
 
 The ADRs leave steps 2 to 5 below undecided. Each of those steps has a default. Change a default in this file before the pilot starts, and record the change in task 18 of [`docs/tasks.md`](../tasks.md).
 

@@ -14,8 +14,10 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    MAX_BEHIND merges behind it.
 4. A PR that docs/tasks.md calls open or blocked (the same item says "not merged", "open and
    not merged" or "blocked") must not already be merged on origin/main.
-5. Every ADR dated TRACKED_FROM or later is named by file name in docs/tasks.md or
-   docs/tasks-archive.md (Log or task), so the session that records a decision also updates the task list.
+5. docs/adr/ holds only proposed ADRs (docs/process.md, the fold rule). Each one has front matter with
+   status: proposed and a body. An accepted or superseded ADR is folded into a spec's Decisions table and
+   its file deleted. No file under docs/design/, AGENTS.md or docs/process.md links to an ADR that is not
+   a proposed ADR in docs/adr/.
 6. docs/reviews/ is retired (last commit 746ec67): the folder must not exist, and
    docs/tasks.md must not name it. ADRs may still cite it; they are not edited.
 7. The Log in docs/tasks.md has at most LOG_CAP entries; older ones move to docs/tasks-archive.md,
@@ -30,7 +32,6 @@ from pathlib import Path
 
 MAX_BEHIND = 3
 LOG_CAP = 12
-TRACKED_FROM = "2026-11-16"  # the 33 ADRs backfilled on 2026-11-14 and 15 are exempt
 root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 problems = []
 
@@ -102,11 +103,25 @@ for item in re.split(r"\n(?=\d+\. |\*\*)", tasks):
         if n in merged_prs:
             problems.append(f"tasks.md: PR #{n} is called open or blocked but is merged on origin/main: {head[:80]!r}")
 
-archive_path = root / "docs/tasks-archive.md"
-archive = archive_path.read_text(encoding="utf-8") if archive_path.exists() else ""
-for adr in sorted((root / "docs/adr").glob("*.md")):
-    if adr.name[:10] >= TRACKED_FROM and adr.name not in tasks and adr.name not in archive:
-        problems.append(f"tasks.md does not name {adr.name}; a decision is not carried through until the task list says so")
+adr_dir = root / "docs/adr"
+proposed = set()
+for adr in sorted(adr_dir.glob("2*.md")):
+    text = adr.read_text(encoding="utf-8")
+    front = re.match(r"---\n(.*?)\n---\n(.*)", text, re.S)
+    if front is None or not front.group(2).strip():
+        problems.append(f"{adr.name}: no front matter or no body; an ADR needs both")
+        continue
+    status = re.search(r"^status:\s*(\S+)", front.group(1), re.M)
+    if status is None or status.group(1) != "proposed":
+        problems.append(f"{adr.name}: status is {status.group(1) if status else 'missing'}; fold it into a spec Decisions table and delete the file (docs/process.md)")
+    else:
+        proposed.add(adr.name)
+scanned = [root / "AGENTS.md", root / "docs/process.md", *sorted((root / "docs/design").rglob("*.md"))]
+for doc in scanned:
+    if doc.exists():
+        for name in set(re.findall(r"adr/(2\d{3}-[0-9a-z-]+\.md)", doc.read_text(encoding="utf-8"))):
+            if name not in proposed:
+                problems.append(f"{doc.relative_to(root)} links to docs/adr/{name}, which is not a proposed ADR; cite the Decisions row id as text")
 
 log = tasks.split("\n## Log", 1)[1] if "\n## Log" in tasks else ""
 entries = len(re.findall(r"^- 20\d\d-\d\d-\d\d", log, re.M))

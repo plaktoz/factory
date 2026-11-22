@@ -56,6 +56,7 @@ stages:
 **Rules**
 
 - Triage order: explicit type, then label, then front matter, then keyword rules. Only if all fail does an LLM task propose a type with a confidence score. A low score becomes a human stop with the candidate workflows as options. The candidates are the request types whose workflow loads, best keyword match first, at most four (`triage_candidates` in `triage.py`); the engine supplies the load check, and blocks the run when fewer than two load.
+- Before a `cmd` task starts, the engine copies the run's `request.json` into that task's `work/` folder. `factory triage` reads `$FACTORY_TASK_DIR/request.json` and writes `$FACTORY_TASK_DIR/triage.json`, so it needs no access to the factory home.
 - Duplicates are caught by source ref plus body hash, so the same issue never starts two runs. The check covers active runs, archived runs and `history.jsonl`. When a run ends, the engine removes the `factory` label from its GitHub issue, so a finished issue is not picked up again.
 - If a GitHub issue body changes while its run is active, the engine logs `request_changed` and raises an attention item. It does not restart the run by itself.
 - Status goes back to the source at each change: GitHub labels `factory:queued`, `factory:running`, `factory:needs-human`, `factory:blocked`, `factory:done`, `factory:failed` plus a comment at the start, at each human stop and at the end; markdown front matter `factory_status` and `factory_run`; for the CLI, printed output and `factory status`.
@@ -118,3 +119,11 @@ Acceptance criteria:
 - [x] The run id is a hyphen slug plus 5 characters and never matches an existing branch or run folder. (test: factory/engine/tests/intake/test_intake.py::test_run_id_format_is_slug_then_five_characters, ::test_run_id_avoids_an_existing_branch, ::test_run_id_never_matches_an_existing_run_folder)
 - [ ] A created run has request.json, run.json with its reserved paths, a run folder in the factory home and the `factory:queued` label; its worktree, shims and branch appear only after triage. (not ticked: test_created_run_has_request_run_json_paths_and_the_queued_label and test_worktree_and_branch_are_not_created_until_triage cover the files, label, worktree and branch; no test checks the shims are absent before triage, because shims are generated only in a worktree that intake never creates)
 - [x] `triage_rules` follows the order explicit, label, front matter, keyword, and records `type_source`. (test: factory/engine/tests/intake/test_intake.py::test_explicit_type_wins_over_every_other_rule, ::test_a_type_label_wins_over_front_matter_and_keywords, ::test_front_matter_type_wins_over_keywords, ::test_keyword_rule_records_its_source_and_workflow)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Before a `cmd` task starts, the engine copies `request.json` into that task's `work/` folder. `factory triage` reads and writes there through `$FACTORY_TASK_DIR`. | The sandbox rules stay as module 9 and D7 state them. The command needs no factory home, run lookup or git repo. | Allow the run's request in the sandbox. Pass the request on stdin. | 2026-11-17-factory-triage-reads-its-request-from-the-task-folder |

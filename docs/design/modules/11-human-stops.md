@@ -205,3 +205,11 @@ Acceptance criteria:
 - [x] A `question` answer returns `Outcome(status="question")` with the questions. (test: factory/engine/tests/decisions/test_decisions.py::test_a_question_answer_returns_the_questions)
 - [x] GitHub requests get the `factory:needs-human` label and a comment with the dashboard link and file path; markdown requests get `factory_status` and `factory_attention`. (test: factory/engine/tests/decisions/test_notify.py::test_a_github_request_gets_the_needs_human_label_and_a_comment_with_link_and_path, ::test_a_markdown_request_gets_factory_status_and_attention_in_front_matter)
 - [x] Reminders fire after `remind_after_hours`, and a failed webhook never stops the run. (test: factory/engine/tests/decisions/test_notify.py::test_reminders_fire_after_remind_after_hours, ::test_a_failed_webhook_retries_then_reports_and_the_run_is_untouched)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| There is one decision file per stage and visit: `decisions/<stage>.<n>.yaml`. | The owner chose this on 2026-11-14. The answer is the record's. No other reason is recorded. | Not recorded in the ADR. | 2026-11-14-one-decision-file-per-stage-and-visit (D4) |

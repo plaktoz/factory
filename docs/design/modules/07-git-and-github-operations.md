@@ -31,7 +31,7 @@ Only skill tasks: reproduce, root cause, propose, fix, review, architecture pack
 **Rules**
 
 - The engine never force-pushes and never pushes to the base branch.
-- **Commit authority.** Workers never commit. The engine commits in two places only: checkpoint commits on a task branch, which stay local and are never pushed, and one join commit per task on the run branch, which is the only history that is pushed. A repo whose own rules say "no commit without a request" (the pilot repo, see [checkpoint commits stay local](../../adr/2026-11-14-checkpoint-commits-stay-local.md)) accepts these engine commits when its owner runs `factory init` there ([module 3](03-kit-and-configuration.md)). There is no switch to turn checkpoints off: crash recovery (D12), note delivery and the reset target all need them.
+- **Commit authority.** Workers never commit. The engine commits in two places only: checkpoint commits on a task branch, which stay local and are never pushed, and one join commit per task on the run branch, which is the only history that is pushed. A repo whose own rules say "no commit without a request" (the pilot repo; decision P1) accepts these engine commits when its owner runs `factory init` there ([module 3](03-kit-and-configuration.md)). There is no switch to turn checkpoints off: crash recovery (D12), note delivery and the reset target all need them.
 
 ```mermaid
 flowchart LR
@@ -143,3 +143,13 @@ Acceptance criteria:
 - [x] After a run with several checkpoints per task, the pushed run branch holds only `task(<task>): ...` join commits: no `wip(...)` commit is reachable from it, and no ref on the remote except the run branch exists. (test: factory/engine/tests/gitops/test_gitops.py::test_push_sends_only_the_run_branch_with_join_commits_and_no_wip)
 - [x] Checkpoints exist only on local task branches; after a run, `git ls-remote` shows no task branch. (test: factory/engine/tests/gitops/test_gitops.py::test_the_engine_pushes_only_the_run_branch_and_nothing_else_reaches_the_remote)
 - [x] A worker that runs `git commit` or `git push` changes nothing the engine uses: the engine's checkpoint and join commits are the only ones counted. (test: factory/engine/tests/gitops/test_gitops.py::test_a_worker_that_commits_does_not_change_what_the_engine_counts, ::test_a_worker_that_pushes_changes_nothing_the_engine_counts)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Checkpoints stay on a local task branch that is never pushed. Only the join commit is pushed. No switch turns checkpoints off. | Crash recovery, note delivery and the D12 reset target all need checkpoints. Removing them costs more than keeping them local. | `no-commits` (snapshot with a stash or patch file); `ask-once` (record the owner's request once in the repo config). | 2026-11-14-checkpoint-commits-stay-local (P1) |
+| A task branches from its dependency's branch. The join applies each task's own diff in `needs` order. | The owner chose this on 2026-11-14. The answer is the record's. No other reason is recorded. | Not recorded in the ADR. | 2026-11-14-dependent-tasks-branch-from-their-dependency (D3) |
+| The repo supplies the worktree comparison as a command and sets `cleanup_check`. The engine has no built-in comparison. | P2 made the repo's comparison the gate, so the repo should provide it. The rule lives with the repo that owns it. | `builtin-compare` (the engine decides what is safe to remove); `never-force` (a worktree that is not clean is always kept). | 2026-11-14-repo-supplies-worktree-comparison (R3) |

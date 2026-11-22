@@ -23,6 +23,8 @@ critique:          {skill: own:critique}
 
 The factory ships its own skill for every stage. Upstream skills such as `diagnosing-bugs`, `tdd`, `code-review`, `grill-me` and `research` are reference material for writing them, not dependencies: the installed versions are interactive (they ask a person questions, start their own subagents or write into the repo), so a gate cannot rely on their output.
 
+**The implement skill says the worker cannot run commands.** The implement worker has no shell (`bash=[]`), so it cannot run the tests or the build. The skill says so, and says that the verify stage runs them after the worker finishes.
+
 **The headless rule.** An own skill never asks a person a question. Where a human is needed, the skill writes a decision packet and the engine raises the human stop. A skill reads its inputs from the prompt, writes one artifact to `$FACTORY_TASK_DIR` that matches the task's output schema, and starts no subagents except as the helper policy allows.
 
 ```yaml
@@ -102,3 +104,12 @@ Acceptance criteria:
 - [x] A changed upstream ref is reported by `verify_lock`. (test: factory/engine/tests/skills/test_skills.py::test_a_changed_upstream_ref_is_reported_by_verify_lock)
 - [x] With an empty `skills.lock`, every stage of every built-in workflow resolves to an `own` skill. (test: factory/engine/tests/skills/test_skills.py::test_with_an_empty_lock_every_stage_resolves_to_an_own_skill; its stage list is hand-written and covers every skill name the shipped workflows use: classify, fix, implement, propose, reproduce, review-spec, review-standards, root-cause)
 - [ ] Each own skill asks no question: run against `FakeWorkerAdapter` fixtures, it writes an artifact that passes its schema or a decision packet. (not ticked: tests/workers/test_own_skills_against_fake.py proves wiring only (its docstring says so): it scripts each skill's artifact instead of running the skill, so no test shows a skill writes its own artifact on the fake)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| The factory writes its own headless skill for every stage. Upstream skills are reference only. | The owner chose this on 2026-11-14. The answer is the record's. No other reason is recorded. | Not recorded in the ADR. | 2026-11-14-factory-writes-its-own-stage-skills (D9) |
+| The implement skill tells the worker it cannot run commands, and that the verify stage runs the tests. | The worker has no shell (`bash=[]`), so the old instruction to run the tests could not be followed. The ADR file is empty; this row is built from commit `ac3c9f5` and `docs/tasks-archive.md`. | `let-worker-run-tests` (give the worker a way to run tests): not built, and it needs its own ADR. | 2026-11-21-tell-the-worker-not-to-run-the-tests (owner decision D3, `fix-the-words`, 2026-11-21) |

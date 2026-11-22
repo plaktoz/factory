@@ -29,7 +29,7 @@ never_auto_if:
   rework_loops_used_at_least: 2
 ```
 
-- **When the rules are checked** (owner decision, 2026-11-21, [ADR](../../adr/2026-11-21-auto-merge-is-checked-at-open-and-at-green.md)). The engine checks every rule twice and writes `merge.json`, with each rule's result and the CI state it saw:
+- **When the rules are checked** (owner decision, 2026-11-21). The engine checks every rule twice and writes `merge.json`, with each rule's result and the CI state it saw:
   1. **At open.** Before the pull request opens, with CI `pending`. The verdict is in the pull request body's Merge line from the start, such as "Human review: chore is not in the auto workflows; CI is pending". The engine asks for a review at the same time.
   2. **At the first green read.** When `tick` sees the pull request's checks green, it starts the engine, which checks the rules again with CI `green`. Only this check can say auto. The engine posts its verdict as a comment on the pull request, such as "Merge check with CI green: Human review: chore is not in the auto workflows"; the body keeps the verdict it opened with. It runs once per pull request: a later green read changes nothing.
 - **Auto:** `gh pr merge --auto --squash --delete-branch`. GitHub branch protection and required checks still apply, and the factory never bypasses them. A merge that branch protection refuses is logged as `merge_blocked`, and the run keeps waiting for a person.
@@ -51,6 +51,7 @@ flowchart TD
   auto -- "refused" --> blocked["merge_blocked event<br/>run keeps waiting for a person"]
 ```
 
+- **Review findings.** The rule `review_findings_at_or_above` reads each review stage's findings with `factory/schemas/review-findings.schema.json`. A finding at or above the threshold blocks auto-merge. A review task with no findings file, or a file that fails the schema, also blocks it. The run summary reports the same findings and their count.
 - **CI red on the pull request:** treated as a gate failure. The run is routed back to fix with the failing check output as feedback, up to the fix stage's loop maximum.
 
 **Sinks**
@@ -132,3 +133,12 @@ Acceptance criteria:
 - [x] A read-only run with an in-repo doc sink creates its branch only at delivery and opens a PR. (test: factory/engine/tests/delivery/test_delivery.py::test_a_read_only_run_with_an_in_repo_doc_sink_creates_its_branch_only_at_delivery_and_opens_a_pr)
 - [x] ADR and report names contain the run id, never a counter. (test: factory/engine/tests/delivery/test_delivery.py::test_adr_and_report_names_contain_the_run_id_never_a_counter, ::test_the_research_report_name_is_the_run_id)
 - [x] An ADR starts with YAML front matter (`scope`, `repo`, `topic`, `status`, `supersedes`); `status` is `accepted` and `supersedes` is empty. (test: factory/engine/tests/delivery/test_delivery.py::test_an_adr_starts_with_front_matter_naming_its_scope_status_and_supersedes)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| The engine checks the merge rules at open (CI pending) and again at the first green read. Only the green check can allow auto-merge. The person who raised the request is asked to review. | A review is asked for at once, with the reason shown. The re-check at green is the only point where auto-merge can say yes. | `green-only` (no verdict or review request in a repo with no checks); `human-only-1a` (no auto-merge in phase 1a). | `2026-11-21-auto-merge-is-checked-at-open-and-at-green` (owner decision 2026-11-21, D1) |
+| The merge rule reads each review stage's findings. A finding at or above `medium`, a missing findings file, or a file that fails the schema blocks auto-merge. | The spec gives a threshold and the schema is accepted. A blanket block contradicts both. | `keep-blanket-block` (fix only the wording); `record-only` (leave code and text). | `2026-11-21-merge-rule-reads-review-findings` (owner decision 2026-11-21, C9) |

@@ -70,7 +70,7 @@ class FactoryError(Exception):
 
 **Frozen cross-module types** (`types.py`)
 
-These 21 types, `ErrorKind` above and the 20 below, are used by two or more modules, or appear in a field of a shared type. Their shapes were accepted on 2026-11-14 (decision R1, see [freeze the shared types](../../adr/2026-11-14-freeze-shared-types.md)), so every module in waves 1 to 3 and every wave 0 fake codes to one shape. A change to one of them is made in this section and in every module in its **Used by** cell, in the same commit.
+These 21 types, `ErrorKind` above and the 20 below, are used by two or more modules, or appear in a field of a shared type. Their shapes were accepted on 2026-11-14 (decision R1, freeze the shared types), so every module in waves 1 to 3 and every wave 0 fake codes to one shape. A change to one of them is made in this section and in every module in its **Used by** cell, in the same commit.
 
 ```python
 # types.py
@@ -168,7 +168,7 @@ class UsageRecord:    run_id: str; task_id: str; stage: str; attempt: int; harne
 | `UsageRecord` | 13, 14, 15, 16 | The `usage.jsonl` table in 14, with P4 |
 | `ErrorKind` | 8, 19 | The five handling types in [section 19](19-error-handling-types.md) |
 
-**Commands are argument lists.** `GateSpec.cmd`, `TaskSpec.cmd` and `Workflow.join_cmd` hold a list of strings, never a shell string. A string in a workflow or plugin file fails at load with `config.invalid`, the file, the line and the list form to write. The decision is Q3, [commands are lists only](../../adr/2026-11-14-commands-are-lists-only.md).
+**Commands are argument lists.** `GateSpec.cmd`, `TaskSpec.cmd` and `Workflow.join_cmd` hold a list of strings, never a shell string. A string in a workflow or plugin file fails at load with `config.invalid`, the file, the line and the list form to write. The decision is Q3, commands are lists only.
 
 **`Config`.** `Config` is the one configuration type. It has a `.machine` part, read from the machine file, and a `.repo` part, read from `.factory/config/`. `load_config(repo)` ([module 3](../modules/03-kit-and-configuration.md)) builds it, and `.repo` is `None` when `repo` is `None`. A function that runs without a repo, such as `tick` ([module 16](../modules/16-drivers.md)), takes a `Config` loaded that way. The keys of each part are defined by the schemas in module 3, not here.
 
@@ -183,7 +183,7 @@ The JSON Schemas in `factory/schemas/` are the source of truth for every file; t
 - **Fakes for parallel work:** each module that others call ships a fake, so downstream modules can be tested before it exists. The fakes are `FakeWorkerAdapter` (9), `FakeTracker` and `FakePullRequests` (7), and `FakeClock` (18), which implements `Clock` as `SystemClock` does.
 - **Two install layers:**
   - The machine-level launcher (`factory`) handles the machine commands: `tick`, `dashboard`, `inbox`, `config init`, `doctor`, `schedule`.
-  - It hands every command about a run to that run's own engine, `python -m factory_engine` from the run's kit snapshot, and every command that creates a run to the repo's committed kit, so repos and runs on different kit versions coexist. In phase 1a the launcher selects that engine by setting `PYTHONPATH` to `kits/<kit hash>/factory/engine` (or the repo's `factory/engine` for a command that creates a run) and runs it with its own Python; the per-snapshot virtual environment of [module 3](../modules/03-kit-and-configuration.md) is phase 1b ([ADR](../../adr/2026-11-20-which-engine-serves-each-repo.md)).
+  - It hands every command about a run to that run's own engine, `python -m factory_engine` from the run's kit snapshot, and every command that creates a run to the repo's committed kit, so repos and runs on different kit versions coexist. In phase 1a the launcher selects that engine by setting `PYTHONPATH` to `kits/<kit hash>/factory/engine` (or the repo's `factory/engine` for a command that creates a run) and runs it with its own Python; the per-snapshot virtual environment of [module 3](../modules/03-kit-and-configuration.md) is phase 1b (decision 2026-11-20-which-engine-serves-each-repo).
   - The dashboard makes its writes by calling the launcher with `--json`, which puts each write through the right engine version.
 
 **CLI exit codes** (all commands)
@@ -230,3 +230,12 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | `config.no_credentials` | `fail_fast` | Set `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`; a login session is not supported in phase 1 |
 
 **Versions.** Python 3.10 is the floor and the tests also run on the newest Python installed (decision G9, below). Node 22.12 is the floor for `srt`, and the factory is tested on Node 26 (decision, 2026-11-14).
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Freeze the 20 shared types now, with the shapes proposed in the readiness review, in this section. | Types that cross modules are where parallel builds fail. Fixing them first costs less than reconciling later. | `freeze-core`: freeze only the types already listed, and let each module define the rest. | `2026-11-14-freeze-shared-types` (R1) |
+| Commands in gates and `join_cmd` are lists of strings. A string fails at load with `config.invalid`. | Nine examples are cheap to fix now. A list keeps one meaning for the frozen type. | `split-string` (hidden shlex rule); `string-is-shell` (breaks Windows, opens injection). | `2026-11-14-commands-are-lists-only` (Q3) |

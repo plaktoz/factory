@@ -82,3 +82,14 @@ Acceptance criteria:
 - The event is written once per line: a later `start_attempt` for the same task does not repeat it for a line already reported.
 - A torn last line is ended with a newline by the next append, so the new record is not joined to it. The torn line stays in the file and is skipped.
 - The `total` group in `UsageReport` is a new field. It is the only report field the spec did not list, and no shared contract or schema lists `UsageReport` fields.
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Leave `model` unset and store the models the harness result reports as the observed models. | The usage record is for facts, so it keeps what the harness reported. | `label`: a fixed label from repo config. It can hide a real model change. | `2026-11-14-record-the-model-the-harness-reports` (P4) |
+| An attempt with several models is counted once under each model, with its full summed tokens and minutes. `factory usage` labels the model rows and prints one total that counts each attempt once. | A split would show numbers the harness did not report. | No other option is recorded. | `2026-11-21-keep-the-multi-model-double-count-and-label-it` (owner decision 2026-11-21) |
+| `start_attempt` writes one `usage_unreadable` event for each unreadable usage line, with the task id and line number. Each line is reported once. Read paths write nothing. | A skipped line is lost data, and the run's record should show it. | No other option is recorded. | `2026-11-21-keep-the-usage-unreadable-event` (owner decision 2026-11-21) |
+| Reads skip unreadable lines. The last readable line for an attempt wins. A record after a torn line starts on a new line. A number seen in an unreadable line is never given out again. | Usage is written before the worker starts and read after a crash, so a torn write must not hide the attempt. | No other option is recorded. | `2026-11-21-usage-reads-the-last-whole-line-for-each-attempt` (owner decision 2026-11-21) |

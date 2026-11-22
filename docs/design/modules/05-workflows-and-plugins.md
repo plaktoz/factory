@@ -44,7 +44,7 @@ stages:
 - A gate may carry `skippable: true` (default `false`, and no shipped gate sets it). Only such a gate can be passed by `factory skip` on a blocked run ([module 8](08-gates-error-handling-and-rework.md)). The one exception is `no-test-results`, the T1 block, which module 8 describes. A gate's id is the name its results carry: `cmd: [make, lint]` for a command, `schema: stage-report` for a schema, and the check name (`scope-diff`) for a check.
 - `tasks_from` builds a stage's task list from an earlier artifact at run time. The engine validates the generated tasks against the workflow schema before starting them.
 - **Join.** Phase 1a code waits for every task of a stage before its join, whatever `join` says. When a task fails for good, no new task starts, the tasks already running finish, and the run is blocked for a person (module 8). Every shipped workflow uses `all`. `any` and `quorum:N` load (`quorum:N` needs N no larger than the stage's task count), but no code acts on them yet. Their phase 1b rule: the join runs once one task (`any`) or N tasks (`quorum:N`) are done. Tasks still running then are stopped, as a timeout stops a task, and their changes are not joined. If so many tasks have failed that N cannot be reached, the stage fails and the run is blocked, as for any failed task.
-- With `task_template`, the artifact is a list of plain questions, `[{"id": "q1", "question": "..."}]`, and each task is the template plus the item's own fields; an item may override a template field, such as `timeout_minutes`. The question goes into that task's prompt under "Your question". The template is checked as a task when the workflow loads, so a bad template fails before any run starts. A question list on a stage with no `task_template` is refused, and so is `task_template` on a stage with no `tasks_from` (owner decision, 2026-11-21, [ADR](../../adr/2026-11-21-research-questions-use-a-task-template.md)).
+- With `task_template`, the artifact is a list of plain questions, `[{"id": "q1", "question": "..."}]`, and each task is the template plus the item's own fields; an item may override a template field, such as `timeout_minutes`. The question goes into that task's prompt under "Your question". The template is checked as a task when the workflow loads, so a bad template fails before any run starts. A question list on a stage with no `task_template` is refused, and so is `task_template` on a stage with no `tasks_from` (owner decision, 2026-11-21).
 - Lookup order: `.factory/config/workflows/`, then `factory/workflows/`. The built-in workflows, their phases and where each is specified are in the table under **Built-in workflows and scope**, below.
 - A workflow file is checked against `factory/schemas/workflow.schema.json`. Only `stages` is required. A file that omits keys gets these values: `name` from the file name, `type` from the name, `policy.write: false`, `sink: pull_request` when it writes and `comment` when it does not, and the `defaults` values in the example above. A task with `cmd` and no `skill` gets `retries: 0` unless it sets its own. A task may set `max_interruptions`, an integer of 0 or more, default 3. Its Nth interruption by an engine crash fails it, so with 3 the third crash fails the task and two still resume ([module 8](08-gates-error-handling-and-rework.md)).
 - A stage with `verify` as its id has `sync_base: true` unless the file says otherwise.
@@ -63,7 +63,7 @@ In phase 1a this module builds loading, validation, `expand_tasks_from` and `exp
 | feature | 1b | none | No stage list. [Module 11](11-human-stops.md) gives an architecture stage that feature runs when a rule fires; [modules 3](03-kit-and-configuration.md) and [13](13-delivery.md) only name it |
 | new-app | 1b | none | No stage list. [Module 11](11-human-stops.md) gives its architecture stage, which always runs |
 | research | 1b | none | This file, the example below (illustrative) |
-| reviewer-eval | phase 2 | `factory/workflows/reviewer-eval.yaml`, shipped in the kit | Not in this file. It is phase 2 work that stayed on main under [the ADR](../../adr/2026-11-15-keep-reviewer-eval-on-main.md) |
+| reviewer-eval | phase 2 | `factory/workflows/reviewer-eval.yaml`, shipped in the kit | Not in this file. It is phase 2 work that stayed on main. It is its own workflow, not a stage in `bug-fix.yaml`: nothing starts it except a person who runs the eval by hand |
 
 **Bug-fix workflow**
 
@@ -193,7 +193,7 @@ insert:
 
 **Report schemas**
 
-The spec gave no fields to four report schemas, so a gate that names one could not run. Wave 3 drafted them in `factory/schemas/`, and the owner accepted the drafts as the phase 1 schemas (wave 3, decision D1, [accept draft report schemas](../../adr/2026-11-15-accept-draft-report-schemas.md)). They are the smallest shape the skills and gates need. Real model output has not been run against them yet, so the first live run may show a field to change; change the schema and its tests together.
+The spec gave no fields to four report schemas, so a gate that names one could not run. Wave 3 drafted them in `factory/schemas/`, and the owner accepted the drafts as the phase 1 schemas (wave 3, decision D1). They are the smallest shape the skills and gates need. Real model output has not been run against them yet, so the first live run may show a field to change; change the schema and its tests together.
 
 | Schema | Written by | Fields | Read by |
 | --- | --- | --- | --- |
@@ -202,7 +202,7 @@ The spec gave no fields to four report schemas, so a gate that names one could n
 | `review-findings` | review-standards, review-spec, critique, plugin reviewers | `findings[]` of `file`, `line`, `severity` (low, medium, high), `rule`, optional `message` | `no-blocking-findings`: a finding of **medium or high** blocks (the owner accepted this; it matches `review_findings_at_or_above: medium` in module 13) |
 | `source-notes` | gather | `sources[]` of `address`, `says`, `trust` (free text; no scale is specified) | `{schema: source-notes}`. The check `every-claim-has-source` is still unbuilt, because the spec does not say how a claim is matched to a source |
 
-`questions.json` is a list of plain questions, `{id, question}`, not `source-notes` (owner decision, 2026-11-21, [ADR](../../adr/2026-11-21-research-questions-use-a-task-template.md)). `source-notes` is what each `gather` task writes. The research workflow is phase 1b.
+`questions.json` is a list of plain questions, `{id, question}`, not `source-notes` (owner decision, 2026-11-21). `source-notes` is what each `gather` task writes. The research workflow is phase 1b.
 
 **Deterministic plugin tasks, checks and hooks**
 
@@ -346,3 +346,18 @@ Acceptance criteria:
 - The merged workflow of a plugin is checked with the same goto check as any workflow, so a missing goto target fails the load.
 - A plugin's `goto` must name a stage in every workflow its `applies_to` names.
 - The license-check example's `applies_to` is narrowed to bug-fix, because only bug-fix has the `fix` stage its `goto` names.
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| `RunSpec` has `script`, `python` and `args`. Exactly one of `script` and `python` is set. | It freezes what the spec already writes and changes no example. The schema can check it. | A tagged union with a `kind` field. | 2026-11-14-runspec-script-or-python (Q4) |
+| Accept the draft report schemas as the phase 1 schemas. | The drafts are the smallest shape that makes bug-fix run. A live run will show whether a field is wrong. | Keep them as drafts until a live run. Also write a merge schema now. | 2026-11-15-accept-draft-report-schemas (wave 3 D1) |
+| The bug-fix `verify` to `fix` loop has `max: 3`. | The shipped value is the one the tests pin. A walkthrough example is the easier thing to change. | Keep `max: 2` and change the walkthrough. | 2026-11-15-bug-fix-loop-count-3 (wave 3 D2) |
+| Keep phase 2 PRs #39 and #40 on main. `reviewer-eval.yaml` ships in the phase 1 kit. | No work is needed. The owner accepted the cost that `factory init` copies the workflow. | Move the workflow out of the kit. Revert both PRs. | 2026-11-15-keep-reviewer-eval-on-main (wave 3 D3) |
+| The reviewer eval is its own workflow, `reviewer-eval`, not a stage in `bug-fix.yaml`. A person starts it by hand. | A stage would cost money on every bug fix, grade fixtures not the real change, and put fixtures in the kit. | An eval stage in `bug-fix.yaml`. | 2026-11-15-reviewer-eval-outside-bug-fix |
+| Keep the nine choices made where this file was silent: joins, hook keys, `when`, `changed_paths`, timeout, `srt`, goto checks and the license example. | The section marks each choice as made where the file was silent, so a reader can tell it from a rule the file already had. | Not recorded in the ADR. | 2026-11-21-keep-the-nine-module-5-choices |
+| A plugin task exits 0 on pass, 1 on a failed check and 2 on a task error. A result with no `status` is decided by `passed`. | A check that reports `passed: false` must not pass the gate. | Not recorded in the ADR. | 2026-11-21-plugin-exit-codes-match-the-spec |
+| A research question list is plain questions. A `task_template` on the stage builds one task per question. | A plain list is the only form that shows just the questions, and the template keeps task settings in one place. | Full task objects written by the scope step. | 2026-11-21-research-questions-use-a-task-template (D2) |

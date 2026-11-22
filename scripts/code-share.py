@@ -1,7 +1,7 @@
 """How much of the work is product code. Run from the repo root: python3 -I scripts/code-share.py [days]
 
 Prints, for the last N days (default 7): non-merge commits that touch factory/ against those that do not, and ADRs
-written per day. Target: more than 60% of commits touch factory/ (docs/adr/2026-11-22-decide-by-default-and-scale-the-record.md).
+written per day. Target: more than 60% of commits touch factory/ (the decide-by-default row in docs/process.md).
 """
 import subprocess, sys
 from collections import Counter
