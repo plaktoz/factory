@@ -345,3 +345,31 @@ def test_reminders_off_and_a_failed_tracker_are_both_quiet_for_the_tick(stopped,
     _told_at(stopped.run_dir, "2026-11-22T10:00:00+00:00")
     report = _tick_at(home, Down(), "2026-11-23T10:00:00+00:00", monkeypatch=monkeypatch)
     assert report.skipped_tick is False and any("could not tell tracker" in e for e in report.errors)
+
+
+def test_a_tick_that_dies_holding_the_lock_releases_it_for_the_next_tick(home):
+    """Module 6 step 1: the tick lock is an OS file lock, so a killed tick frees it at once. A real process holds the lock
+    and is killed with SIGKILL; a second tick then gets the lock. A lock file left behind would fail this test."""
+    import subprocess
+    import sys
+    import textwrap
+
+    src = Path(tick_mod.__file__).resolve().parents[2]  # the folder that holds factory_launcher and factory_engine
+    child = subprocess.Popen([sys.executable, "-c", textwrap.dedent(f"""
+        import sys, time
+        sys.path[:0] = {[str(src / "launcher"), str(src / "engine")]!r}
+        from pathlib import Path
+        from factory_launcher import tick
+        assert tick._take_tick_lock(Path({str(home)!r})) is not None
+        print("held", flush=True)
+        time.sleep(60)
+    """)], stdout=subprocess.PIPE, text=True)
+    try:
+        assert child.stdout.readline().strip() == "held"
+        assert tick_mod._take_tick_lock(home) is None
+    finally:
+        child.kill()
+        child.wait()
+    lock = tick_mod._take_tick_lock(home)
+    assert lock is not None
+    tick_mod._release_tick_lock(lock)
