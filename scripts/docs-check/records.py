@@ -22,6 +22,8 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    so tasks.md stays live state a session can read whole.
 8. Each entry line of docs/decisions.md has the form "- YYYY-MM-DD `slug`: ... Undo: ...", so every
    choice made at the recommendation can be found and reversed.
+9. A pull request merged on main since 2026-11-22 must not name an open issue in its title (AGENTS.md,
+   "Close the ticket with the work"). Skipped, with a note, when `gh` cannot answer.
 """
 import json, re, subprocess, sys
 from pathlib import Path
@@ -117,6 +119,15 @@ if decisions_path.exists():
         if re.match(r"- \d{4}-\d\d-\d\d ", line):
             if not re.match(r"- \d{4}-\d\d-\d\d `[a-z0-9][a-z0-9-]*`: .+ Undo: .+", line):
                 problems.append(f"decisions.md:{n}: write '- YYYY-MM-DD `slug`: what was chosen, over what. Undo: how'")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import issue_close  # noqa: E402
+
+github = issue_close.fetch(str(root))
+if github is None:
+    print("records: skipped the issue-close check (9): gh could not list pull requests and issues")
+else:
+    problems += issue_close.open_issue_problems(*github)
 
 RETIRED = "docs/reviews"
 if (root / RETIRED).exists():
