@@ -4,6 +4,8 @@ Part of the [phase 1 design](../phase-1.md#module-map). Build wave: 1 (6A), 3 (6
 
 The engine owns the run lifecycle, the state files, the scheduler, the lock on each run and crash recovery. Nothing in it calls an LLM.
 
+**Boundary.** This file gives the scheduler pass ("What one tick does", below) for context. The `factory tick` command that runs it is built in [module 16](16-drivers.md), which also writes `tick.json`. The word *tick* has two meanings: the **scheduler tick** is the machine-wide pass of `factory tick` that starts engines; `Engine.tick(run_id)` is one pass of one run's engine. Only the second writes a run's state.
+
 **Run lifecycle**
 
 1. `factory add` or `factory sync` creates the run: run id, branch, worktree, `request.json`, `run.json`, event `run_created`.
@@ -64,7 +66,9 @@ What one tick does, in order:
 5. It resumes runs whose engine has died: status running and no process holding the lock. A sleeping laptop is not a death; its engine still holds the lock and carries on when it wakes.
 6. It sends due reminders for open attention items.
 7. It runs the housekeeping plan when `retention.auto_gc` is on.
-8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds.
+8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds. `tick.json` is `{"last_tick": <ISO time>, "result": {started, resumed, skipped, repo_missing: [run id], synced: {repo key: [run id]}, errors: [text], skipped_tick: bool}}`, written by replacing a temporary file.
+
+The per-repo sync cursor in step 2 (`$FACTORY_HOME/sync/<repo key>.json`) is specified but not built: no code writes or reads it yet, so every sync queries all tagged issues. Its shape is not fixed until it is built.
 
 **How a tick finds and judges runs**
 
@@ -287,6 +291,14 @@ class RunScanner:                                                  # change-awar
         """Runs added, changed and removed since the last scan, judged by file time and size.
         Runs whose repo_path no longer exists are flagged repo_missing."""
 
+@dataclass
+class ScanResult:
+    added: list[str]           # run ids new since the last scan
+    changed: list[str]         # run ids whose files changed
+    removed: list[str]         # run ids that are gone
+    repo_missing: list[str]    # run ids whose repo_path no longer exists
+    reread: int                # how many run folders this scan read; the 500-run criterion counts it
+
 def history_append(home: Path, record: HistoryRecord) -> None
 
 @dataclass
@@ -314,7 +326,7 @@ Acceptance criteria:
 - [x] `acquire_lock` refuses while another process holds the lock, whatever its heartbeat says, and succeeds right after that process is killed. (test: factory/engine/tests/state/test_state.py::test_acquire_refuses_while_another_process_holds_the_lock, ::test_acquire_succeeds_right_after_the_holder_is_killed, ::test_a_held_lock_with_a_stale_heartbeat_still_refuses, ::test_a_killed_holder_with_a_stale_heartbeat_releases_the_lock_at_once)
 - [ ] A process stopped with SIGSTOP for longer than the old 60-second limit keeps its lock; `lock_status` reports `live`, and a tick starts no second engine. (not ticked: test_a_stopped_process_keeps_its_lock_past_the_old_limit checks the lock right after SIGSTOP, not past 60 seconds; a tick starting no second engine is module 16 and needs 6B)
 - [x] A `run_snapshot` event is written after each change to a run and carries the whole run [snapshot-event]. Creating a run is a change, so `init_run` writes one too; a run whose `run.json` is lost before its first engine change rebuilds (test: factory/engine/tests/state/test_state.py::test_a_run_that_was_never_changed_after_creation_still_rebuilds, which fails without the creation snapshot). The whole-run check is by the rebuild tests: test_every_change_writes_a_run_snapshot counts one snapshot per write, and the rebuild tests compare the rebuilt run to the written one.
-- [ ] `rebuild_run` replays only the last `run_snapshot` in `events.jsonl` and gives the same status, stage, stage and task states, loop counters and attention item as the engine wrote. Heartbeat and conflict signals are not part of the rebuild; they are recomputed on the next tick. (not ticked: test_rebuild_gives_the_same_state_the_engine_wrote checks status, stage, stages, loops and attention; the snapshot holds no task states (task.json is outside run.json, and StageState holds only task ids))
+- [x] `rebuild_run` replays only the last `run_snapshot` in `events.jsonl` and gives the same status, stage, stage states (each with its task ids), loop counters and attention item as the engine wrote. Task states are not part of the rebuild: they live in each `task.json`. Heartbeat and conflict signals are not part of the rebuild; they are recomputed on the next tick. (test: factory/engine/tests/state/test_state.py::test_rebuild_gives_the_same_state_the_engine_wrote, ::test_rebuild_replays_only_the_last_snapshot)
 - [x] With every other event removed from `events.jsonl` and one `run_snapshot` left, `rebuild_run` gives the same run. A rebuild never reads the other events. (test: factory/engine/tests/state/test_state.py::test_a_rebuild_from_one_snapshot_gives_the_whole_run_without_heartbeat_or_signals, ::test_rebuild_reads_no_other_events)
 - [x] `repo_key` gives `github.com/acme/report` for both SSH and HTTPS remotes, `local/<folder>` with no remote, and the override when set. (test: factory/engine/tests/state/test_state.py::test_repo_key_from_ssh_and_https_and_override_and_no_remote)
 - [x] Run ids are unique across the whole factory home, not only within one repo. (test: factory/engine/tests/intake/test_intake.py::test_a_run_id_taken_under_another_repo_key_is_avoided; factory/engine/tests/state/test_state.py::test_run_ids_are_unique_across_repos_in_the_home)
@@ -323,6 +335,7 @@ Acceptance criteria:
 **Module contract: 6B Engine loop**
 
 - **Depends on:**
+  - 4: `triage_candidates` (the triage stop)
   - 5: `load_workflow`, `expand_tasks_from`, `expand_helpers`
   - 6A: all of it
   - 7: `create_run_worktree` (after triage), `create_task_worktree`, `checkpoint`, `join`, `sync_base`, `conflict_signals`
@@ -333,6 +346,7 @@ Acceptance criteria:
   - 12: `pending_notes`, `delivered_notes`, `mark_delivered`
   - 13: `render_summary`, `write_adr`, `open_pr`, `evaluate_merge`, `merge_or_request_review`, `watch_pr`, `write_sink`
   - 14: `start_attempt`, `finish_attempt`, `close_open_attempts`, `summarize`
+  - 17: `cleanup_after_join`, `cleanup_after_merge`
   - 17: `cleanup_after_join`, `cleanup_after_merge`
   - 17A: `detect`, `run_step` (format once, after a task's worker has stopped)
 - **Writes:** run and task state through 6A; every event in the catalogue above.
