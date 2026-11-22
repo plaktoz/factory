@@ -7,6 +7,8 @@ are sandboxed (open, see docs/tasks.md). The cache variables a tool needs are se
 
 from __future__ import annotations
 
+import shutil
+
 import fnmatch
 import re
 import subprocess
@@ -133,9 +135,13 @@ def run_step(tc: Toolchain, step: Literal["format", "format_check", "lint", "tes
                            hint=f"install {cmd[0]} before the run; factory doctor reports this too")
     cmd[0] = tool
     args = cmd + ([f for f in (files or [])] if step in ("format", "lint") and files else [])
-    # The environment is the minimal base; the cache variables for this task are set by the adapter (module 9),
-    # which passes them in through the task's own environment, never through this step's signature.
-    r = subprocess.run(args, cwd=worktree, capture_output=True, text=True, env=_base_env())
+    # Under srt, like every cmd task and gate command (module 9; owner answer 2026-11-22). The environment is the minimal
+    # base; the cache variables for this task are set by the adapter (module 9), not by this step's signature.
+    wrapped, folder = _sandboxed(worktree, args)
+    try:
+        r = subprocess.run(wrapped, cwd=worktree, capture_output=True, text=True, env=_base_env())
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
     log.parent.mkdir(parents=True, exist_ok=True)
     log.write_text(r.stdout + r.stderr)
     tail = "\n".join((r.stdout + r.stderr).splitlines()[-200:])
@@ -165,6 +171,21 @@ def format_changed_files(worktree: Path, cfg: Config, changed: list[str], *, log
 def _matches(path: str, globs: list[str]) -> bool:
     """`**/*.py` matches `a.py` as well as `sub/a.py`: fnmatch's `*` crosses `/`, but a `**/` prefix needs a folder."""
     return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch(path, g.removeprefix("**/")) for g in globs)
+
+
+def _sandboxed(worktree: Path, args: list[str]) -> tuple[list[str], Path]:
+    """The srt command for one step, and the folder its settings file is in. The worktree is writable and the factory
+    home is denied, as for a worker. The caller removes the folder when the step is done."""
+    import json
+    import tempfile
+    from .adapters.worker import sandbox
+    from .loadcfg import factory_home
+    home_tmp = factory_home() / "tmp"
+    home_tmp.mkdir(parents=True, exist_ok=True)
+    folder = Path(tempfile.mkdtemp(prefix="fmt-", dir=home_tmp))
+    settings = folder / "srt-settings.json"
+    settings.write_text(json.dumps(sandbox.srt_settings(worktree, folder)))
+    return sandbox.srt_command(sandbox.require_srt(), settings, args), folder
 
 
 def _base_env() -> dict[str, str]:
