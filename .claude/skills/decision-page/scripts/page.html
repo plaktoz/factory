@@ -83,6 +83,7 @@ D.forEach(d=>{
   const el=document.createElement("section");el.className="card";
   el.innerHTML=
    `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   (d.trigger?`<p class="tag">Asked because: ${esc(d.trigger)}. ${esc(d.trigger_detail||"")}</p>`:"")+
    (d.today ? (d.question?`<p class="q">${esc(d.question)}</p>`:"")+
      `<div class="ta"><div><b>Today</b>${esc(d.today)}</div><div><b>After the recommended option</b>${esc(d.after)}</div></div>`+
      `<div class="pv"><b>What it looks like</b><pre>${esc(d.preview)}</pre></div>`

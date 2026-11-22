@@ -38,9 +38,11 @@ A reusable software factory: a deterministic Python engine that turns a request 
 ## Working rules
 
 - Work in your own worktree, on the one task in your brief. Edit only files in the scope the brief names.
-- Do not run `git pull`, `git fetch` or `git merge` to bring in main. Whoever integrates the branch does that at a checkpoint.
-- Before you build on a choice other work will depend on (a library, an architecture, an interface, a data format), write an ADR: `docs/adr/<date>-<slug>.md`. Start it with YAML front matter: `scope` (`global` or `repo`), `repo`, `topic`, `status` (`proposed`, `accepted` or `superseded`), and `supersedes` (a list of ADR ids). An ADR's id is its file name without `.md`.
-- An architecture choice stops your work. Write the options as a `proposed` ADR and wait for a human to accept one.
+- **Decide by default.** Take the recommended option and keep working. Stop for the owner only on a **stop trigger**: the choice reopens D1 to D14 or an accepted ADR; changes scope or phase; costs a lot to reverse (a public post under the owner's name, a data format or shared contract other work reads, a new dependency); or has no option that is clearly better ([why](docs/adr/2026-11-22-decide-by-default-and-scale-the-record.md)).
+- Record a choice at its cost. A bug fix, a test or record upkeep: the commit message only. A reversible choice: one line in [`docs/decisions.md`](docs/decisions.md). A stop trigger: a `proposed` ADR, and a card on the next decision page. Send at most one page a day, and keep working on what the open ADRs do not block.
+- An ADR is `docs/adr/<date>-<slug>.md`. Start it with YAML front matter: `scope` (`global` or `repo`), `repo`, `topic`, `status` (`proposed`, `accepted` or `superseded`), and `supersedes` (a list of ADR ids). An ADR's id is its file name without `.md`.
+- Push your own branch and open its pull request when the work is done. Just before the push, merge `origin/main` into the branch. At any other time, leave main alone; whoever integrates does that ([approval](docs/approvals.md)).
+- Build product before process. Until item 12 in `docs/tasks.md` (a full live run) is done, a new skill, check script, calibration round or process ADR needs the owner to ask for it.
 - Never edit an ADR another author wrote. Write a new one with `supersedes` set to the old id.
 - Before you mark a change to `docs/design/**` or a `proposed` ADR done, run the `revise-spec` skill. It is advice, not a gate. Make at most one pass of fixes, then report the scorecard.
 - Tick an acceptance criterion only with evidence on the same line, for example `- [x] AC-2 Export runs async (test: test_export_async, commit 3f9a1c)`. If you cannot tick it, leave it unticked and say why in one line.
@@ -59,7 +61,7 @@ A pilot, set on 2026-11-21: two medium tickets, followed by hand, with no change
 | Tier | Rule |
 | --- | --- |
 | Always | Follow this file. Add a test for new logic. |
-| Ask first | Add a dependency. Change a shared contract in [section 18](docs/design/shared/18-shared-contracts.md). An architecture choice already stops work: see Working rules. |
+| Ask first | A stop trigger (see Working rules). This includes adding a dependency and changing a shared contract in [section 18](docs/design/shared/18-shared-contracts.md). |
 | Never | Hard-code a secret. Edit an ADR another author wrote. Edit a file outside the scope your brief names. |
 
 ## Build order
