@@ -84,7 +84,7 @@ def _notify_cfg(cfg: Config) -> dict:
 def _link(item: AttentionItem, cfg: Config) -> str:
     base = str(cfg.machine.get("dashboard_url") or DEFAULT_DASHBOARD_URL).rstrip("/")
     if item.page is not None:
-        return f"{base}/runs/{item.run_id}/decisions/{item.page.name}"
+        return f"{base}/runs/{item.run_id}/decisions/{Path(item.page).name}"
     return f"{base}/runs/{item.run_id}"
 
 
@@ -93,7 +93,7 @@ def _comment(item: AttentionItem, cfg: Config, author: str | None) -> str:
     lines = [f"{mention}Run `{item.run_id}` needs you: {item.summary}", "", f"Dashboard: {_link(item, cfg)}"]
     if item.page is not None:
         lines.append(f"Decision page: `{item.page}`")
-        lines.append(f"Decision file: `{item.page.with_suffix('.yaml')}`")
+        lines.append(f"Decision file: `{Path(item.page).with_suffix('.yaml')}`")
     if item.command:
         lines += ["Answer with:", "", f"    {item.command}"]
     return "\n".join(lines)
@@ -159,7 +159,7 @@ def notify(item: AttentionItem, cfg: Config, tracker: TrackerAdapter) -> NotifyR
         if src.type == "markdown":
             if src.files:
                 channel("front_matter", lambda: _front_matter(Path(src.files[0]), "needs-human", item.summary))
-        else:
+        elif src.type == "github":
             channel("tracker", lambda: tracker.set_status(src.ref, status, comment=_comment(item, cfg, src.author)))
     if settings.get("desktop"):
         channel("desktop", lambda: _desktop(f"Factory: {item.run_id}", item.summary))
