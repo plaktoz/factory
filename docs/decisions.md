@@ -6,6 +6,7 @@ Line format, checked by `scripts/docs-check/records.py`:
 
 `- YYYY-MM-DD \`slug\`: what was chosen, over what. Undo: how to reverse it.`
 
+- 2026-11-22 `summary-names-delivery-state-and-command-attempts`: the pull request summary says `Result: awaiting review` (not `running`) and lists command attempts as `commands, no model` (not `unknown`), found in the first whole live run, over changing module 14's `unknown` grouping or leaving both lines. Undo: remove `delivering` from `render_summary` and `_command_attempts` from `_usage` in `summary.py`.
 - 2026-11-22 `no-default-test-workers`: the engine suite runs serially by default, and `-n` opts in to pytest-xdist, over `addopts = -n auto` or `-n 4` (owner answer, 2026-11-22). `pyproject.toml` already has no default. Undo: add `-n auto` to `[tool.pytest.ini_options]` addopts.
 - 2026-11-22 `gateway-token-rotated-per-owner`: the gateway token printed on 2026-11-14 is recorded as rotated, on the owner's word (owner answer, 2026-11-22). Nothing in the repo can verify it. Undo: rotate again and write the new date.
 - 2026-11-22 `calibration-took-the-scorers-numbers`: on modules 14 and 17 the independent scorers' numbers replaced my own first scores after each finding was checked against the file and the code, over keeping my scores. Undo: edit the run 4 rows in the calibration reference.

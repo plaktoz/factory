@@ -961,7 +961,8 @@ class Engine:
         opening = run.pr is None and delivery.sink_of(run) in ("pull_request", "doc")
         if opening:  # the verdict is in the pull request body from the start (owner decision D1, 2026-11-21)
             delivery.evaluate_merge(run_dir, self.cfg, changed=delivery.changed_since_base(run, self.cfg), ci="pending")
-        summary.render_summary(run_dir, usage_mod.summarize([run_dir]), base=(self.cfg.repo or {}).get("base_branch", "main"))
+        summary.render_summary(run_dir, usage_mod.summarize([run_dir]), base=(self.cfg.repo or {}).get("base_branch", "main"),
+                               delivering=True)
         if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
             gitops.push(run.worktree, run.pr.head)
         sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)

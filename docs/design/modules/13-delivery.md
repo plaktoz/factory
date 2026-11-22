@@ -90,6 +90,8 @@ claude-opus-5-5: 6 attempts, 412,880 tokens, 38 min
 Human review: bug-fix is not in the auto workflows
 ```
 
+The `Result` in the header is the run's status when the file is written. The summary written as a run delivers (the pull request body) says `awaiting review`, because the run is about to wait for a person and `run.json` still says `running` until the pull request exists. The final comment and the archive copy say `done`. In `## Usage`, attempts of command tasks (a `cmd`, script or python task) have no model and no tokens, so they get one line, `commands, no model: <n> attempts, no tokens to count`, and not a row named `unknown`. A worker attempt whose model could not be read is still `unknown` (module 14).
+
 **Module contract: 13 Delivery**
 
 - **Depends on:**

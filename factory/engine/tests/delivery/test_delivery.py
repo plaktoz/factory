@@ -439,3 +439,40 @@ def test_the_summary_reads_the_review_findings_instead_of_saying_they_cannot_be_
     text = render_summary(run_dir, usage.summarize([run_dir])).read_text()
     assert "not readable yet" not in text
     assert "Review findings: 1 read, first: high app/main.py:1 review-spec" in text
+
+
+# ---- found in the first whole live run (2026-11-22): two lines in the pull request body read as faults ----
+
+def test_a_summary_names_a_command_attempt_as_a_command_and_not_as_an_unknown_model(home, tmp_path, cfg):
+    """`rules` and `check` are shell commands: they run no model, so they have no model name and no tokens. The summary
+    says so instead of printing `unknown: 2 attempts, tokens unknown`, which reads as a missing model."""
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    for task in ("rules", "check"):
+        attempt = usage.start_attempt(run_dir, state.read_run(run_dir), task, stage="verify", harness="command",
+                                      model_requested=None)
+        usage.finish_attempt(run_dir, task, attempt, exit="ok", input_tokens=None, output_tokens=None, models=[])
+    attempt = usage.start_attempt(run_dir, state.read_run(run_dir), "change", stage="implement", harness="claude",
+                                  model_requested=None)
+    usage.finish_attempt(run_dir, "change", attempt, exit="ok", input_tokens=12, output_tokens=2205, models=["claude-x"])
+    text = render_summary(run_dir, usage.summarize([run_dir])).read_text()
+    assert "claude-x: 1 attempt, 2,217 tokens" in text
+    assert "commands, no model: 2 attempts" in text
+    assert "unknown:" not in text
+
+
+def test_a_summary_still_calls_a_worker_with_no_reported_model_unknown(home, tmp_path, cfg):
+    """A Claude attempt whose model could not be read is a real unknown (module 14); only command attempts are renamed."""
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    attempt = usage.start_attempt(run_dir, state.read_run(run_dir), "change", stage="implement", harness="claude",
+                                  model_requested=None)
+    usage.finish_attempt(run_dir, "change", attempt, exit="ok", input_tokens=5, output_tokens=5, models=[])
+    text = render_summary(run_dir, usage.summarize([run_dir])).read_text()
+    assert "unknown: 1 attempt, 10 tokens" in text and "commands, no model" not in text
+
+
+def test_the_pull_request_body_says_the_run_awaits_review_not_that_it_is_running(home, tmp_path, cfg):
+    """The body is written as the pull request opens, when run.json still says running. It must name the state the run
+    is entering, or a reviewer reads `Result: running` on a pull request that waits for them."""
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    text = render_summary(run_dir, usage.summarize([run_dir]), delivering=True).read_text()
+    assert "Result: awaiting review" in text and "Result: running" not in text
