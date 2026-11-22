@@ -6,6 +6,8 @@ Line format, checked by `scripts/docs-check/records.py`:
 
 `- YYYY-MM-DD \`slug\`: what was chosen, over what. Undo: how to reverse it.`
 
+- 2026-11-22 `told-only-after-the-tell-works`: `Engine._tell_source` writes `source_told` after the tracker call succeeds, over before it, which lost a notice for good when GitHub was down for one pass. Undo: move the `append_event` back above the call.
+- 2026-11-22 `daily-reminder-from-the-tick`: `factory tick` reminds a run that waits for a person through `notify.remind`, using the existing `due_reminders` and `remind_after_hours`, over a reminder sent by the engine (no engine runs while a run waits). Undo: remove `_remind` and its call in `tick.py`, and `notify.remind`.
 - 2026-11-22 `tell-the-source-after-each-pass`: the engine sets the issue's status label after every pass and comments at a stop, a block and the end, over wiring `notify()` only where `attention_for` is called, which would miss `running` and `done`. Undo: remove `Engine._tell_source` and its call in `_pass`.
 - 2026-11-22 `log-oldest-to-archive`: the oldest Log entry (task 33, 2026-11-21) moved to `docs/tasks-archive.md` unchanged, to keep the Log at 12 when this session's entry was added. Undo: move it back.
 - 2026-11-22 `issue-close-check-reads-titles`: `records.py` check 9 fails when a PR merged since 2026-11-22 names an open issue in its title, over reading the body, which names issues a PR only touches (PR #96's body names #87). Undo: remove check 9 from `records.py` and delete `issue_close.py`.

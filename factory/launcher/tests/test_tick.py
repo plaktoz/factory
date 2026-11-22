@@ -257,3 +257,91 @@ def test_a_tick_does_not_read_a_pull_request_while_an_engine_holds_the_run(waiti
         assert spawned == [] and "state" not in prs.calls
     finally:
         release(lock)
+
+
+# ---- reminders for a run that waits for a person (module 11, owner decision D2, 2026-11-22) ------------------------
+
+@pytest.fixture
+def stopped(home, tmp_path):
+    """A GitHub-issue run parked at an approval stop with no engine, opened at 2026-11-22T10:00 UTC."""
+    from factory_engine.types import AttentionItem, Request, Source
+
+    repo = _repo(tmp_path)
+    cfg = Config(machine={}, repo={"base_branch": "main"})
+    src = Source("github", "acme/report#1", "Bump", "Bump it.", ["chore"], "alice", [])
+    request = Request("gh-1", src, "sha1", "repo", "Bump", "chore", "explicit", None, [])
+    ref = state.init_run(home, repo, state.repo_key(repo, cfg), "bump-q1w2e", request, branch="bump-q1w2e",
+                         worktree=tmp_path / "wt", kit_hash="0" * 12)
+    run = state.read_run(ref.run_dir)
+    run.status, run.stage, run.workflow = "awaiting_approval", "implement", "chore"
+    run.attention = AttentionItem(kind="approval", run_id="bump-q1w2e", stage="implement", since="2026-11-22T10:00:00+00:00",
+                                  summary="Approve implement", page=None, command="factory decide bump-q1w2e D1=approve")
+    lock = acquire_lock(ref.run_dir, "test")
+    state.write_run(ref.run_dir, run, lock=lock)
+    release(lock)
+    return ref
+
+
+def _tick_at(home, tracker, when, started=None, monkeypatch=None):
+    from datetime import datetime, timezone
+    at = datetime.fromisoformat(when).astimezone(timezone.utc)
+    if monkeypatch is not None:                                      # events are stamped with the tick's own time
+        monkeypatch.setattr(state, "_now", lambda: at.isoformat(timespec="seconds"))
+    return tick_mod.tick(load_config(None, env={"FACTORY_HOME": str(home)}), repos=[], home=home,
+                         spawn=lambda r, rid: (started if started is not None else []).append(rid) or 1,
+                         now=at, tracker_for=lambda repo: tracker)
+
+
+def _told_at(run_dir, when):
+    """The engine's first notice of the stop, as `notify` leaves it."""
+    state.append_event(run_dir, "attention_notified", kind="approval", stage="implement", sent=["tracker"], failed={})
+    lines = (run_dir / "events.jsonl").read_text().splitlines()
+    last = json.loads(lines[-1])
+    last["ts"] = when
+    lines[-1] = json.dumps(last)
+    (run_dir / "events.jsonl").write_text("\n".join(lines) + "\n")
+
+
+def test_a_tick_sends_one_reminder_a_day_while_a_run_waits_and_starts_no_engine(stopped, home, monkeypatch):
+    from factory_engine.adapters.tracker.fake import FakeTracker
+    tracker, started = FakeTracker(), []
+    _told_at(stopped.run_dir, "2026-11-22T10:00:00+00:00")
+    tick = lambda when: _tick_at(home, tracker, when, started, monkeypatch)  # noqa: E731
+    for when in ("2026-11-22T11:00:00+00:00", "2026-11-22T20:00:00+00:00", "2026-11-23T09:59:00+00:00"):
+        assert tick(when).reminded == []                                  # under 24 hours since the notice
+    assert tracker.statuses == []
+    assert tick("2026-11-23T10:00:00+00:00").reminded == ["bump-q1w2e"]
+    assert [c.status for c in tracker.statuses] == ["factory:needs-human"]
+    assert "Reminder: run `bump-q1w2e` still needs you: Approve implement" in tracker.statuses[0].comment
+    assert "@alice" in tracker.statuses[0].comment
+    assert tick("2026-11-23T11:00:00+00:00").reminded == [] and len(tracker.statuses) == 1
+    assert tick("2026-11-24T10:00:00+00:00").reminded == ["bump-q1w2e"] and len(tracker.statuses) == 2
+    assert started == []
+
+
+def test_a_run_that_is_not_waiting_gets_no_reminder(stopped, home, monkeypatch):
+    from factory_engine.adapters.tracker.fake import FakeTracker
+    tracker = FakeTracker()
+    _told_at(stopped.run_dir, "2026-11-20T10:00:00+00:00")
+    run = state.read_run(stopped.run_dir)
+    run.status, run.attention = "running", None
+    lock = acquire_lock(stopped.run_dir, "test")
+    state.write_run(stopped.run_dir, run, lock=lock)
+    release(lock)
+    assert _tick_at(home, tracker, "2026-11-23T10:00:00+00:00", monkeypatch=monkeypatch).reminded == []
+    assert tracker.statuses == []
+
+
+def test_reminders_off_and_a_failed_tracker_are_both_quiet_for_the_tick(stopped, home, monkeypatch):
+    from factory_engine import notify
+    from factory_engine.adapters.tracker.fake import FakeTracker
+
+    monkeypatch.setattr(notify.time, "sleep", lambda s: None)
+
+    class Down(FakeTracker):
+        def set_status(self, ref, status, *, comment=None, link=None):
+            raise OSError("gh is down")
+
+    _told_at(stopped.run_dir, "2026-11-22T10:00:00+00:00")
+    report = _tick_at(home, Down(), "2026-11-23T10:00:00+00:00", monkeypatch=monkeypatch)
+    assert report.skipped_tick is False and any("could not tell tracker" in e for e in report.errors)

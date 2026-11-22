@@ -148,14 +148,27 @@ Submitting with `status: question` routes the run back to the packet task with y
 
 | Request source | Where you are told | How you answer |
 | --- | --- | --- |
-| GitHub issue | A comment mentioning the author or assignee, and the label `factory:needs-human`, with the dashboard link and the CLI command | Dashboard, CLI or chat. Answering by issue comment is phase 2 |
+| GitHub issue | The status label at every change (below). At a stop, a comment mentioning the author or assignee and the label `factory:needs-human` (`factory:blocked` for a blocked run), with the dashboard link and the CLI command | Dashboard, CLI or chat. Answering by issue comment is phase 2 |
 | Markdown file | Front matter `factory_status: needs-human` and `factory_attention: <summary>` | Dashboard, CLI, chat, or edit the decision file |
 | CLI | The foreground command prints it and exits with code 3; optional desktop notification | Dashboard, CLI or chat |
 | Any source | Dashboard Needs you list and a count in the tab title; optional webhook such as Slack or Teams |  |
 
 - **One place to check:** the dashboard's Needs you list holds every attention item across all repos, oldest first, each with one action button. Every other channel links to it.
 - **Terminal:** `factory inbox` prints the same list.
-- **Reminders:** an item still open after `remind_after_hours` is notified again.
+- **What the source is told:** the status label at every change, and a comment at a stop and at the end.
+
+  | Run state | Label | Comment |
+  | --- | --- | --- |
+  | Queued (intake, module 4) | `factory:queued` | `Run <id> is queued.` |
+  | Working, and again after an answer | `factory:running` | None |
+  | Waiting for an answer or a merge review | `factory:needs-human` | The attention comment: summary, dashboard link, command |
+  | Blocked | `factory:blocked` | The same comment, with the retry command |
+  | Pull request merged | `factory:done` | The pull request number and link |
+  | Pull request closed unmerged, or aborted | `factory:failed` | The reason |
+
+  A markdown request gets `factory_status` in its front matter, and `factory_attention` while the run waits. A CLI request has no source to tell; its stops reach the desktop and the webhook only.
+- **Once per stop:** the engine tells the source after each pass, and a `source_told` event keyed by the kind, stage and `since` of the stop means a pass that finds the same stop says nothing. Checking a parked run again never repeats a comment.
+- **Reminders:** a run that waits for you is reminded when `remind_after_hours` (default 24, 0 turns them off) have passed since the last notice, so a run left for a week gets one comment a day. The tick sends them (module 6, step 6), because no engine runs while a run waits.
 - **Merge reviews:** these also appear on GitHub as a review request.
 
 **Module contract: 11 Human stops**
@@ -164,7 +177,7 @@ Submitting with `status: question` routes the run back to the packet task with y
   - 3: `load_config` (notify, `dashboard_url`), `validate`
   - 6A: `append_event`, `read_run`
   - 7: `TrackerAdapter.set_status`
-- **Writes:** `decisions/<stage>.<n>.yaml` and `.html`; events `decision_*`, `attention_requested`, `attention_cleared`, and `attention_notified` (one per notification pass, with the channels that sent and failed, read by `due_reminders`). It returns an `Outcome`; 6B decides the routing through 8, so this module never routes or starts an engine.
+- **Writes:** `decisions/<stage>.<n>.yaml` and `.html`; events `decision_*`, `attention_requested`, `attention_cleared`, `attention_notified` (one per notification pass, with the channels that sent and failed, read by `due_reminders`) and `source_told` (the key of the last change the source was told). It returns an `Outcome`; 6B decides the routing through 8, so this module never routes or starts an engine.
 - **CLI it backs:** `decide`, `check`, `reopen`, `open`, `inbox`.
 
 ```python
@@ -183,7 +196,9 @@ def check_build_stack(spec: GateSpec, ctx: GateContext) -> GateResult     # used
 def render_page(run_dir: Path, stage: str, visit: int, *, cli: str = "factory", submit_url: str | None = None) -> Path
 # notify.py
 def attention_for(run: Run, *, now: str) -> AttentionItem | None
-def notify(item: AttentionItem, cfg: Config, tracker: TrackerAdapter) -> NotifyReport   # retries, never raises
+def notify(item: AttentionItem, cfg: Config, tracker: TrackerAdapter, *, reminder: bool = False) -> NotifyReport   # retries, never raises
+def remind(run_dir: Path, cfg: Config, tracker: TrackerAdapter, *, now: str) -> NotifyReport | None
+    """Notify a parked run again when its reminder is due; None when nothing is due. The tick calls it."""
 def due_reminders(items: list[AttentionItem], cfg: Config, *, now: str) -> list[AttentionItem]
 
 @dataclass
@@ -205,6 +220,8 @@ Acceptance criteria:
 - [x] A `question` answer returns `Outcome(status="question")` with the questions. (test: factory/engine/tests/decisions/test_decisions.py::test_a_question_answer_returns_the_questions)
 - [x] GitHub requests get the `factory:needs-human` label and a comment with the dashboard link and file path; markdown requests get `factory_status` and `factory_attention`. (test: factory/engine/tests/decisions/test_notify.py::test_a_github_request_gets_the_needs_human_label_and_a_comment_with_link_and_path, ::test_a_markdown_request_gets_factory_status_and_attention_in_front_matter)
 - [x] Reminders fire after `remind_after_hours`, and a failed webhook never stops the run. (test: factory/engine/tests/decisions/test_notify.py::test_reminders_fire_after_remind_after_hours, ::test_a_failed_webhook_retries_then_reports_and_the_run_is_untouched)
+- [x] The issue's label follows the run, a stop is told once, and a CLI request is never sent to the tracker. (test: factory/engine/tests/engine/test_tells_the_source.py, five tests)
+- [x] A parked run is reminded once a day by the tick, in the words of a reminder, and the tick starts no engine for it. (test: factory/engine/tests/decisions/test_notify.py::test_a_reminder_is_worded_as_one_and_reaches_the_source_and_the_webhook, ::test_remind_notifies_only_a_parked_run_whose_reminder_is_due; factory/launcher/tests/test_tick.py::test_a_tick_sends_one_reminder_a_day_while_a_run_waits_and_starts_no_engine, ::test_a_run_that_is_not_waiting_gets_no_reminder, ::test_reminders_off_and_a_failed_tracker_are_both_quiet_for_the_tick)
 
 ## Decisions
 
@@ -213,3 +230,5 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | Rule | Why | Not chosen | Id |
 | --- | --- | --- | --- |
 | There is one decision file per stage and visit: `decisions/<stage>.<n>.yaml`. | An approved decision file is locked, and a loop back needs a fresh approval. One file per visit keeps the full history with no unlock rule. The audit trail matters more than short paths. | Rework resets the stage and reopens its decision automatically. It overwrites the earlier answer, so history would live only in events. | 2026-11-14-one-decision-file-per-stage-and-visit (D4) |
+| The source's status label follows the run at every change (queued, running, needs-human, blocked, done, failed), with a comment only at a stop and at the end. | Intake and the operator walkthrough already promise a label at every change and `factory:done` after a merge, and a merged issue that still says queued reads as broken. | `stops-only` (a label only when the run needs you, so a merged issue keeps its old label); `stops-and-end` (no `factory:running`, so a working run looks unstarted). | 2026-11-22-tell-the-source-at-every-change (owner decision 2026-11-22, D1) |
+| A stop is told to the source once, and a run that keeps waiting gets one reminder after each `remind_after_hours` (default 24). | A test that told the source on every check posted the same comment, mentioning the author, three times. The reminder is the one the spec already promised, and it was built and unused. | `once-only` (a forgotten run waits in silence, and the built reminder goes unused). | 2026-11-22-a-stop-is-told-once-then-reminded-daily (owner decision 2026-11-22, D2) |
