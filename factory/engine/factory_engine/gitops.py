@@ -137,6 +137,26 @@ def changed_files(worktree: Path, base_ref: str) -> list[str]:
     return [line for line in out.splitlines() if line]
 
 
+def task_changed_files(worktree: Path, base_ref: str | None) -> list[str]:
+    """Every file the task changed: committed since its base, plus edits and new files not yet committed. Files the
+    engine keeps out of commits are left out (module 17A formats these once, after the worker stops)."""
+    committed = changed_files(worktree, base_ref) if base_ref else []
+    out = git(worktree, "status", "--porcelain", "-uall", "-z").stdout.split("\0")
+    pending: list[str] = []
+    i = 0
+    while i < len(out):
+        e = out[i]
+        i += 1
+        if len(e) < 4:
+            continue
+        status, path = e[:2], e[3:]
+        if "R" in status or "C" in status:
+            i += 1  # under -z a rename or copy is followed by its source path, which is not a changed file
+        if "D" not in status:
+            pending.append(path)
+    return sorted({f for f in [*committed, *pending] if not any(f.startswith(n) for n in NEVER_COMMITTED)})
+
+
 def check_scope_diff_paths(files: list[str], scope: list[str], deny: list[str]) -> list[str]:
     """Module 7 check: returns the files that are out of scope or inside a deny glob. Empty means the check passes.
     Deny globs always win over scope globs."""

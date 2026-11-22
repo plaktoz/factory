@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from factory_engine import state
 from factory_engine.adapters.worker.fake import ok
 
@@ -640,3 +642,22 @@ def test_an_answered_triage_stop_continues_with_the_chosen_workflow(new_run, eng
     assert run.workflow == "chore" and run.request.type == "chore" and run.request.type_source == "explicit"
     assert result.runs["bump-q1w2e"] == "awaiting_approval"
     assert [e.type for e in state.read_events(run_dir) if e.type == "triage_answered"]
+
+
+# ---- D7 (owner decision 2026-11-22): one exit code for several runs, blocked over waiting over failed over success ----
+
+@pytest.mark.parametrize("statuses,code", [
+    (["done", "done"], 0),
+    (["done", "failed"], 1),
+    (["failed", "awaiting_approval"], 3),            # a failure hides behind a run waiting on a person
+    (["failed", "awaiting_approval", "blocked"], 4),
+    (["done", "blocked", "failed"], 4),
+])
+def test_the_exit_code_for_several_runs_is_blocked_then_waiting_then_failed_then_success(engine, new_run, monkeypatch, statuses, code):
+    new_run()
+    eng, _ = engine({})
+    ids = [f"r{i}" for i in range(len(statuses))]
+    by_id = dict(zip(ids, statuses))
+    monkeypatch.setattr(eng, "_drive", lambda rid: by_id[rid])
+    result = eng.run(ids)
+    assert result.runs == by_id and result.exit_code == code

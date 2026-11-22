@@ -189,14 +189,23 @@ def test_parse_findings_reads_the_ruff_and_the_generic_form(tmp_path):
 
 def test_a_java_and_typescript_repo_gets_one_test_task_per_language_with_no_dependencies(tmp_path):
     w = fixture(tmp_path, {"pom.xml": "<project/>", "package.json": "{}"})
-    tasks = toolchains.language_tasks(w, CFG, "test")
+    tasks = toolchains.language_tasks(w, CFG, "test", ["src/A.java", "web/app.ts"])
     assert sorted(t.id for t in tasks) == ["test-java", "test-typescript"]
     assert all(t.needs == [] for t in tasks)  # parallel: no task waits for another
 
 
+def test_only_the_languages_with_changed_files_get_a_test_task(tmp_path):
+    """D5 (owner decision 2026-11-22): a run that changed only Python does not run the Java tests."""
+    w = fixture(tmp_path, {"pom.xml": "<project/>", "pyproject.toml": "[project]\n"})
+    assert [t.id for t in toolchains.language_tasks(w, CFG, "test", ["tools/gen.py"])] == ["test-python"]
+    assert [t.id for t in toolchains.language_tasks(w, CFG, "test", ["a.py", "src/main/A.java"])] == ["test-java", "test-python"]
+    assert toolchains.language_tasks(w, CFG, "test", ["README.md"]) == []        # no profile owns a .md file
+    assert toolchains.language_tasks(w, CFG, "test", []) == []
+
+
 def test_a_language_with_no_test_step_gets_no_task(tmp_path):
     w = fixture(tmp_path, {"pom.xml": "<project/>"})
-    assert toolchains.language_tasks(w, CFG, "nonexistent-step") == []
+    assert toolchains.language_tasks(w, CFG, "nonexistent-step", ["A.java"]) == []
 
 
 def test_checkpoint_format_is_the_engines_step_and_not_the_workers(tmp_path):
@@ -218,3 +227,71 @@ def test_doctor_is_silent_about_tools_that_are_present(tmp_path, path_with):
     stub(path_with, "mvn")
     w = fixture(tmp_path, {"pom.xml": "<project/>"})
     assert all(r.ok for r in toolchains.doctor_checks(w, CFG) if r.name == "toolchain:java:mvn")
+
+
+# ---- D8 (owner decision 2026-11-22): format the task's changed files once, after the worker has stopped ----
+
+def _formatter(path_with, body):
+    stub(path_with, "ruff", body)
+
+
+def test_format_changed_files_runs_each_profile_on_its_own_files_only(tmp_path, path_with):
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "go.mod": "module x\n", "a.py": "x=1\n", "sub/b.py": "y=2\n",
+                           "m.go": "package m\n", "notes.txt": "keep\n"})
+    _formatter(path_with, 'shift; for f in "$@"; do echo formatted > "$f"; done')
+    stub(path_with, "gofmt", "exit 0")
+    results = toolchains.format_changed_files(w, CFG, ["a.py", "sub/b.py", "notes.txt", "gone.py"], log_dir=tmp_path / "logs")
+    assert [(r.step, r.ok) for r in results] == [("format", True)]
+    assert (w / "a.py").read_text() == "formatted\n" and (w / "sub/b.py").read_text() == "formatted\n"
+    assert (w / "notes.txt").read_text() == "keep\n"            # no profile owns a .txt file
+    assert (w / "m.go").read_text() == "package m\n"            # the go profile had no changed file
+
+
+def test_a_build_tool_formatter_runs_once_with_no_file_arguments(tmp_path, path_with):
+    w = fixture(tmp_path, {"pom.xml": "<project/>", "src/A.java": "class A{}\n"})
+    stub(path_with, "mvn", f'echo "$@" > {tmp_path}/mvn.args')
+    toolchains.format_changed_files(w, CFG, ["src/A.java"], log_dir=tmp_path / "logs")
+    assert (tmp_path / "mvn.args").read_text().strip() == "-q spotless:apply"   # a file name would be read as a phase
+
+
+def test_a_formatter_that_exits_non_zero_is_reported_not_raised(tmp_path, path_with):
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "a.py": "x=1\n"})
+    _formatter(path_with, "echo boom; exit 2")
+    [r] = toolchains.format_changed_files(w, CFG, ["a.py"], log_dir=tmp_path / "logs")
+    assert not r.ok and r.exit_code == 2 and "boom" in r.output_tail
+
+
+def test_a_missing_formatter_fails_fast_with_its_name(tmp_path, monkeypatch):
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n", "a.py": "x=1\n"})
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    with pytest.raises(FactoryError) as e:
+        toolchains.format_changed_files(w, CFG, ["a.py"], log_dir=tmp_path / "logs")
+    assert "ruff" in e.value.message
+
+
+def test_a_gradle_wrapper_in_the_repo_is_found_and_formatting_runs_it(tmp_path, monkeypatch):
+    """`gradlew` is the repo's own script, not a program on PATH."""
+    w = fixture(tmp_path, {"build.gradle": "apply plugin: 'java'", "src/A.java": "class A{}\n"})
+    wrapper = w / "gradlew"
+    wrapper.write_text(f'#!/bin/sh\necho "$@" > {tmp_path}/gradle.args\n')
+    wrapper.chmod(0o755)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    [r] = toolchains.format_changed_files(w, CFG, ["src/A.java"], log_dir=tmp_path / "logs")
+    assert r.ok and (tmp_path / "gradle.args").read_text().strip() == "spotlessApply"
+    assert [c.ok for c in toolchains.doctor_checks(w, CFG) if c.name.endswith(":gradlew")] == [True]
+
+
+def test_a_renamed_file_lists_its_new_path_and_not_its_old_path_or_a_cut_one(tmp_path):
+    import subprocess
+    from factory_engine import gitops
+    w = tmp_path / "wt"
+    w.mkdir()
+    for args in (["init", "-q", "-b", "main"], ["config", "user.email", "a@b"], ["config", "user.name", "a"]):
+        subprocess.run(["git", "-C", str(w), *args], check=True)
+    (w / "src").mkdir()
+    (w / "src" / "old.py").write_text("x=1\n")
+    subprocess.run(["git", "-C", str(w), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(w), "commit", "-q", "--no-verify", "-m", "base"], check=True)
+    subprocess.run(["git", "-C", str(w), "mv", "src/old.py", "src/new_name.py"], check=True)
+    (w / "fresh.py").write_text("y=2\n")
+    assert gitops.task_changed_files(w, None) == ["fresh.py", "src/new_name.py"]

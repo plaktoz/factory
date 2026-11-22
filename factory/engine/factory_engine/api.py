@@ -197,10 +197,11 @@ def gc(repo, *, apply=False) -> GcPlan:
 
 
 def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]:
-    """Module 3's checks, then the skills lock and pack size of 10 and the toolchain checks of 17A for a repo whose
-    settings load. Module 3 cannot call 10 or 17A, because they depend on 3, so this driver composes them. The
-    harness canary and probe of 9 are not wired in yet."""
+    """Module 3's checks, then the skills lock and pack size of 10, the toolchain checks of 17A for a repo whose
+    settings load, and the sandbox and harness checks of 9. Module 3 cannot call 9, 10 or 17A, because they depend on
+    3, so this driver composes them. The module 9 checks run on every call (owner decision D2, 2026-11-22)."""
     checks = kit.doctor(repo, as_scheduler=as_scheduler)
+    checks.extend(_harness_checks(as_scheduler))
     if repo is not None and all(c.ok for c in checks if c.name == "repo-config") and any(c.name == "repo-config" for c in checks):
         from . import skills
         from .toolchains import doctor_checks
@@ -212,6 +213,56 @@ def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult
         except FactoryError as e:
             checks.append(CheckResult("toolchains", False, e.message, e.hint))
     return checks
+
+
+def _harness_checks(as_scheduler: bool) -> list[CheckResult]:
+    """Module 9: `srt` and its canary, then the Claude binary and credentials, then, only when those pass, the Claude
+    sandbox canary and the isolation probe, which spend one short model call each. A call with no binary or no
+    credentials could only fail, so it is not made and the failing check says why. With `as_scheduler` the Claude
+    checks see the short environment cron gives a job; `srt` and Node still come from this process's PATH."""
+    from tempfile import TemporaryDirectory
+
+    from .adapters.worker import claude as claude_mod
+    from .adapters.worker import sandbox
+    from .loadcfg import factory_home
+
+    out = [sandbox.check_srt()]
+    home = factory_home()
+    if out[0].ok:
+        (home / "tmp").mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=home / "tmp", prefix="doctor-") as d:
+            worktree, task_dir = Path(d) / "worktree", Path(d) / "work"
+            worktree.mkdir()
+            task_dir.mkdir()
+            out.append(sandbox.canary_srt(worktree, task_dir, home))
+    environ = {"PATH": "/usr/bin:/bin", "HOME": os.environ.get("HOME", "")} if as_scheduler else None
+    adapter = ClaudeAdapter(environ)
+    try:
+        conf = _claude_conf(environ)
+        first = adapter.check(conf)
+    except FactoryError as e:  # an unset ${VAR:?message} in the harness env: report it, keep the other checks
+        out.append(CheckResult("claude", False, e.message, e.hint))
+        return out
+    out.append(first)
+    if first.ok:
+        out.append(claude_mod.canary_claude(conf, environ=environ, factory=home))
+        (home / "tmp").mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=home / "tmp", prefix="doctor-probe-") as d:
+            worktree, task_dir = Path(d) / "worktree", Path(d) / "work"
+            worktree.mkdir()
+            task_dir.mkdir()
+            out.append(claude_mod.probe_isolation(conf, worktree, task_dir, environ=environ, factory=home))
+    return out
+
+
+def _claude_conf(environ: Mapping[str, str] | None):
+    """The Claude harness settings from the machine file, or the defaults the engine itself starts workers with."""
+    from .adapters.worker.base import HarnessConfig
+    from .loadcfg import resolve_harness
+    cfg = load_config(None)  # the machine file always comes from the real FACTORY_HOME, the same home the canaries use
+    if "claude" in (cfg.machine.get("harnesses") or {}):
+        return resolve_harness(cfg, "claude", env=os.environ if environ is None else environ)
+    return HarnessConfig("claude", None, [], {})
 
 
 def _problems_check(name: str, problems: list, ok_detail: str) -> CheckResult:

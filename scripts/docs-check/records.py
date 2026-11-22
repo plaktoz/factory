@@ -21,7 +21,8 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
 6. docs/reviews/ is retired (last commit 746ec67): the folder must not exist, and
    docs/tasks.md must not name it. ADRs may still cite it; they are not edited.
 7. The Log in docs/tasks.md has at most LOG_CAP entries; older ones move to docs/tasks-archive.md,
-   so tasks.md stays live state a session can read whole.
+   so tasks.md stays live state a session can read whole. The merger does the move (AGENTS.md: a session does not
+   edit tasks.md; its pull request body carries a "## Task record").
 8. Each entry line of docs/decisions.md has the form "- YYYY-MM-DD `slug`: ... Undo: ...", so every
    choice made at the recommendation can be found and reversed.
 9. A pull request merged on main since 2026-11-22 must not name an open issue in its title (AGENTS.md,
@@ -118,7 +119,7 @@ for doc in scanned:
 log = tasks.split("\n## Log", 1)[1] if "\n## Log" in tasks else ""
 entries = len(re.findall(r"^- 20\d\d-\d\d-\d\d", log, re.M))
 if entries > LOG_CAP:
-    problems.append(f"tasks.md: the Log has {entries} entries (max {LOG_CAP}); move the oldest to docs/tasks-archive.md")
+    problems.append(f"tasks.md: the Log has {entries} entries (max {LOG_CAP}); whoever merges moves the oldest to docs/tasks-archive.md")
 
 decisions_path = root / "docs/decisions.md"
 if decisions_path.exists():

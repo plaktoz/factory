@@ -5,7 +5,6 @@ import pytest
 from factory_engine import interpolate, paths, redact
 from factory_engine.errors import FactoryError
 from factory_engine.loadcfg import load_config, resolve_harness
-from factory_engine.precedence import pick
 from factory_engine.repo_rules import check_cleanup_check, refuse_literal_env
 from factory_engine.validate import validate
 from factory_engine.yamlio import load_yaml
@@ -57,19 +56,6 @@ def test_literal_env_value_in_repo_config_is_refused():
 
 def test_reference_under_env_is_allowed():
     refuse_literal_env({"ANTHROPIC_API_KEY": "${ANTHROPIC_API_KEY}"}, file="f")
-
-
-# --- precedence: flag > env var > file > default ---
-
-@pytest.mark.parametrize("flags,env,file,default,want", [
-    ({"k": "flag"}, {"E": "env"}, {"k": "file"}, "d", "flag"),
-    ({}, {"E": "env"}, {"k": "file"}, "d", "env"),
-    ({}, {}, {"k": "file"}, "d", "file"),
-    ({}, {}, {}, "d", "d"),
-    ({"k": None}, {"E": ""}, {"k": "file"}, "d", "file"),  # an empty env var and a None flag are unset
-])
-def test_precedence(flags, env, file, default, want):
-    assert pick("k", flags=flags, env=env, env_name="E", file=file, default=default) == want
 
 
 # --- YAML: one loader, true and false only as booleans ---

@@ -23,11 +23,11 @@ The page (`<name>.json` and the `<name>.html` rendered from it) is created in **
 8. **Close each decision the moment it is answered.** Each line of the pasted prompt names a decision and an option id. For every line, in this order and before moving to the next line or the next piece of work:
    1. **Apply** the option to the spec or code, and keep related sections consistent.
    2. **Fold the decision** (below). The `proposed` ADR for the card becomes a `Decisions` row, and the ADR file is deleted in the same commit. If no ADR exists yet, write none: add the row.
-   3. **Record it in the task list** (below): a Log line now, and an item only when work is left.
-   4. **Commit** the row, the deletion and the task entry, following the trailer rules in `AGENTS.md` (`Agent-Run:`, and `Decision: <id>` because the commit writes a decision). Do not push unless asked.
+   3. **Record it in the task list** (below): a Log line, and an item only when work is left. A session does not edit `docs/tasks.md` (`AGENTS.md`): the Log line and the item go in the pull request's `## Task record`, and the merger pastes them in. The session that merges edits the file.
+   4. **Commit** the row and the deletion (the task entry is in the pull request body, step 3), following the trailer rules in `AGENTS.md` (`Agent-Run:`, and `Decision: <id>` because the commit writes a decision). Do not push unless asked.
 
    A line marked `NOT SURE` is not made yet. Answer the question, and do not apply the option. Preserve it anyway: write the ADR with `status: proposed` (the options, what each costs, the user's question and your answer, no `Decision` yet) and create a task that says it waits on the user. That card is not closed, so the page stays. When the user decides, fold it as in step 2 and update its task.
-9. **Remove the page only when every card is closed.** A card is closed when all of these are true, each checked by looking, not remembered: the option is applied (or, for `NOT SURE`, answered and waiting with a `proposed` ADR); the spec has a `Decisions` row whose Rule and Id cells name the decision and the option, and no accepted ADR file is left in `docs/adr/`; `docs/tasks.md` names the decision id (in a Log line, and in an item if work is left); both are committed (`git status` shows nothing for them); and `python3 -I scripts/docs-check/records.py .` prints `0 problem(s)`. If any card fails a check, fix it, and keep the page. If any card is still `NOT SURE`, keep the page. Then `rm .scratch/<name>.json .scratch/<name>.html` (plain `rm`: they are untracked). Report each decision with its ADR and task, then the removal. Done when `.scratch/<name>.*` is gone and nothing in the repo points at it as the only copy.
+9. **Remove the page only when every card is closed.** A card is closed when all of these are true, each checked by looking, not remembered: the option is applied (or, for `NOT SURE`, answered and waiting with a `proposed` ADR); the spec has a `Decisions` row whose Rule and Id cells name the decision and the option, and no accepted ADR file is left in `docs/adr/`; the pull request's `## Task record` names the decision id (in a Log line, and in an item if work is left), or, in the merge session, `docs/tasks.md` does; the row and the deletion are committed (`git status` shows nothing for them); and `python3 -I scripts/docs-check/records.py .` prints `0 problem(s)`. If any card fails a check, fix it, and keep the page. If any card is still `NOT SURE`, keep the page. Then `rm .scratch/<name>.json .scratch/<name>.html` (plain `rm`: they are untracked). Report each decision with its ADR and task, then the removal. Done when `.scratch/<name>.*` is gone and nothing in the repo points at it as the only copy.
 
 ## Fold the decision
 
@@ -45,7 +45,7 @@ Use this only for a `NOT SURE` line or a stop trigger waiting for the owner. Loo
 
 ## Task
 
-The follow-up task goes in **`docs/tasks.md`**, which is where this project keeps its durable state. Do not invent another list.
+The follow-up task goes in **`docs/tasks.md`**, which is where this project keeps its durable state. Do not invent another list. A session writes it in its pull request's `## Task record`, and whoever merges the pull request pastes it into `docs/tasks.md`; a session does not edit that file itself.
 
 - Add a dated line in the Log, and a numbered item to the "Not done" list when work is left. The Log line names the decision id (and the ADR file name, while it is still `proposed`).
 - The item says: the owner's decision and date, the decision id, the option chosen; what to change, in files and functions; how to check it (the test, or the command); and what is not built yet.

@@ -41,7 +41,7 @@ These are defaults. A repo whose build lacks a tool (such as the Spotless plugin
 
 1. **When a worker has stopped:** at the end of an attempt, and before a restart that delivers a note, the engine runs `format` on the task's changed files, then makes the final WIP commit. Checkpoints taken while the worker runs commit as they are.
 2. **At each code stage's join:** the `lint-clean` gate runs `format_check` and `lint` on changed files. Findings route back for rework, with file, line and rule in the feedback record.
-3. **In verify:** `tasks_from: languages` makes one `test` task per detected language, run in parallel.
+3. **In verify:** `tasks_from: languages` makes one `test` task for each detected language whose files the run changed (a file matches a profile by its `files` globs), run in parallel. A language the run did not touch gets no task (owner decision D5, 2026-11-22).
 4. **The repo's own git hooks** (pre-commit, husky, lefthook) run on each task commit at join and before push. A failing hook is a gate failure. WIP checkpoint commits skip hooks, so a slow hook never blocks a checkpoint.
 5. **For people committing by hand:** `factory hooks install` (optional, off by default) writes a local git hook that runs `factory lint --staged`, so they get the same rules. Nothing is committed to the repo for this.
 
@@ -53,7 +53,7 @@ These are defaults. A repo whose build lacks a tool (such as the Spotless plugin
 - **Hook tools are checked early.** `factory doctor` runs the repo's hooks once in dry-run mode where the framework supports it, so a hook needing a tool that isn't installed is found before a run, not at its join.
 - **What counts as a failure.** A hook failure is rework: the hook's output goes into the feedback record for the stage that produced the commit. A hook that fails for reasons outside the change (network, missing tool) is reported as an infrastructure error and retried with backoff, then blocked.
 
-In a repo with several languages, each changed file is matched to a profile by its `files` globs, and each profile's commands run for its own files.
+In a repo with several languages, each changed file is matched to a profile by its `files` globs, and each profile's commands run for its own files. `mvn`, `gradlew` and `dotnet` format the whole project, so they run once with no file arguments.
 
 **Module contract: 17A Language toolchains**
 
@@ -67,7 +67,8 @@ def detect(worktree: Path, cfg: Config) -> list[Toolchain]          # profiles t
 def run_step(tc: Toolchain, step: Literal["format", "format_check", "lint", "test", "build"],
              worktree: Path, *, files: list[str] | None = None, log: Path) -> StepResult
 def check_lint_clean(spec: GateSpec, ctx: GateContext) -> GateResult   # used by 8
-def language_tasks(worktree: Path, cfg: Config, step: str) -> list[TaskSpec]   # for tasks_from: languages
+def language_tasks(worktree: Path, cfg: Config, step: str, changed: list[str]) -> list[TaskSpec]   # for tasks_from: languages
+def format_changed_files(worktree: Path, cfg: Config, changed: list[str], *, log_dir: Path) -> list[StepResult]   # step 1 below
 def parse_findings(tc: Toolchain, output: str) -> list[Finding]        # file, line, rule, message
 ```
 
@@ -77,8 +78,17 @@ def parse_findings(tc: Toolchain, output: str) -> list[Finding]        # file, l
 Acceptance criteria:
 
 - [x] Maven and Gradle Java, TypeScript, Python and Go fixtures are detected with the right variant. (test: factory/engine/tests/toolchains/test_toolchains.py::test_detection_picks_the_right_profile_and_variant (Maven, Gradle, npm, ruff, go, dotnet), ::test_a_repo_with_java_and_typescript_detects_both)
-- [ ] After a worker leaves unformatted Java, the task's final commit contains formatted code; a checkpoint taken while the worker runs does not run the formatter. (not ticked: the formatter step (run_step) is called only by tests, and no engine code formats after a worker stops; checkpoint_format is a source grep, not a run; no test formats a Java fixture)
+- [x] After a worker leaves unformatted code, the task's final commit contains formatted code, and a checkpoint taken while the worker runs does not run the formatter. (test: factory/engine/tests/engine/test_format_after_worker.py::test_the_tasks_final_commit_holds_formatted_code_and_notes_stay_out, ::test_a_formatter_that_fails_fails_the_attempt_and_the_unformatted_file_is_not_committed, ::test_a_cmd_task_is_never_formatted; factory/engine/tests/toolchains/test_toolchains.py::test_format_changed_files_runs_each_profile_on_its_own_files_only, ::test_a_build_tool_formatter_runs_once_with_no_file_arguments. The tests use a stub `ruff`; no test formats a Java fixture)
 - [x] A lint violation fails `lint-clean`, and the feedback record lists file, line and rule. (test: factory/engine/tests/toolchains/test_toolchains.py::test_a_lint_violation_fails_lint_clean_and_lists_file_line_and_rule, ::test_a_lint_violation_reaches_the_feedback_record_with_file_line_and_rule (stub ruff on PATH; build_feedback writes the record))
 - [ ] Repo hooks run on the join commit and before push, and a failing hook routes to rework; checkpoint commits skip hooks. (not ticked: no test runs a repo hook on a join commit or before push; hook behavior is module 7 and the routing to rework is module 6B)
-- [ ] A repo with Java and TypeScript gets one verify test task per language, run in parallel. (not ticked: test_a_java_and_typescript_repo_gets_one_test_task_per_language_with_no_dependencies checks language_tasks, which no engine code calls (the verify stage that would use it is module 6B); the parallel run is not tested)
+- [ ] A repo with Java and TypeScript gets one verify test task for each language the run changed, run in parallel. (not ticked: test_only_the_languages_with_changed_files_get_a_test_task and test_a_java_and_typescript_repo_gets_one_test_task_per_language_with_no_dependencies check language_tasks, which no engine code calls (the verify stage that would use it is module 6B); the parallel run is not tested)
 - [x] `factory doctor` reports a missing tool before any run starts. (test: factory/engine/tests/toolchains/test_toolchains.py::test_doctor_reports_a_missing_tool_before_any_run, ::test_doctor_is_silent_about_tools_that_are_present)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| After a skill task's worker stops with an artifact, the engine formats the task's changed files with each matching profile, then makes the final commit. A formatter that exits non-zero fails the attempt as a worker crash and the unformatted files are not committed. A missing formatter is `binary_missing`, a stop for a person. A `cmd` task is not formatted. | Both specs already promised it, and without it each style problem cost a worker round trip through the lint gate. | Leave formatting to the lint gate and the worker's rework (specs reworded, nothing built). | 2026-11-22-owner-calls D8 build-format-step |
+| Verify makes a test task only for a language whose files the run changed. | A run that changed Python should not need the Java tools or wait for the Java tests. The owner took the faster option and accepted that a cross-language break can pass verify. | A test task for every language the repo has, whatever changed (safer, slower, and a missing tool for an unrelated language blocks the run). | 2026-11-22-owner-calls D5 changed-only |

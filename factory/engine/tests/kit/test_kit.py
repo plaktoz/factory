@@ -25,6 +25,14 @@ def fake_kit(tmp_path, monkeypatch):
     return src
 
 
+@pytest.fixture(autouse=True)
+def no_live_harness_checks(monkeypatch):
+    """`api.doctor` runs the sandbox canary and two model calls (module 9). These tests are about module 3's checks and
+    the composed ones of 10 and 17A, so the harness checks are replaced; they have their own tests below."""
+    from factory_engine import api
+    monkeypatch.setattr(api, "_harness_checks", lambda as_scheduler: [])
+
+
 @pytest.fixture
 def repo(tmp_path):
     r = tmp_path / "repo"
