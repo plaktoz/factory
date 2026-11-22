@@ -206,7 +206,7 @@ Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is 
 
 **Module contract: 3 Kit and configuration**
 
-- **Depends on:** nothing (foundation). `doctor` here checks only what this module owns: `git`, `gh`, credentials and `factory.yaml`. The checks of 9 (harness binaries, the sandbox canary, the probe worker), 10 (the skills lock and pack size) and 17A (toolchains) are added by the driver's `api.doctor` ([module 16](16-drivers.md)), because those modules depend on 3 and 3 may not import them. Today `api.doctor` adds only the 17A checks; the 9 and 10 checks are not wired in yet, and their criteria stay unticked.
+- **Depends on:** nothing (foundation). `doctor` here checks only what this module owns: `git`, `gh`, credentials and `factory.yaml`. The checks of 9 (harness binaries, the sandbox canary, the probe worker), 10 (the skills lock and pack size) and 17A (toolchains) are added by the driver's `api.doctor` ([module 16](16-drivers.md)), because those modules depend on 3 and 3 may not import them. Today `api.doctor` adds the 10 checks (`skills-lock`, `practice-packs`) and the 17A checks; the 9 checks (canary, probe, harness binaries) are not wired in yet, and their criteria stay unticked.
 - **Writes:** `factory/`, `.factory/config/*`, `.factory/.gitignore`, `~/.factory/config.yaml`, the env file.
 - **CLI it backs:** `init`, `upgrade`, `doctor`, `config init`.
 

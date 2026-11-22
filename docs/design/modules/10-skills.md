@@ -71,7 +71,7 @@ def practice_packs(languages: list[str], stage: str, repo: Path, cfg: Config) ->
 
 - [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (not ticked: practice_packs is tested with a language list the test passes in, but no production code calls it, so no task ever gets a pack from its files)
 - [x] A team override in `.factory/config/overrides/practices/` is used in place of, or merged with, the shipped pack. (test: factory/engine/tests/skills/test_skills.py::test_a_team_override_replaces_the_shipped_pack, ::test_a_team_override_can_be_merged_over_the_shipped_pack)
-- [ ] A pack over `max_lines` is reported by `factory doctor`. (not ticked: oversized_packs is tested (test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable) but no code calls it, so factory doctor never reports a pack over its limit)
+- [x] A pack over `max_lines` is reported by `factory doctor`. (test: factory/engine/tests/skills/test_skills.py::test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable, factory/engine/tests/kit/test_kit.py::test_the_driver_adds_module_10s_lock_and_pack_checks)
 
 **Module contract: 10 Skills**
 

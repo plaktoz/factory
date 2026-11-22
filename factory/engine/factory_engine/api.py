@@ -197,16 +197,27 @@ def gc(repo, *, apply=False) -> GcPlan:
 
 
 def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]:
-    """Module 3's checks, then the toolchain checks of 17A for a repo whose settings load. Module 3 cannot call 17A
-    itself, because 17A depends on 3, so this driver composes them."""
+    """Module 3's checks, then the skills lock and pack size of 10 and the toolchain checks of 17A for a repo whose
+    settings load. Module 3 cannot call 10 or 17A, because they depend on 3, so this driver composes them. The
+    harness canary and probe of 9 are not wired in yet."""
     checks = kit.doctor(repo, as_scheduler=as_scheduler)
     if repo is not None and all(c.ok for c in checks if c.name == "repo-config") and any(c.name == "repo-config" for c in checks):
+        from . import skills
         from .toolchains import doctor_checks
         try:
-            checks.extend(doctor_checks(repo, load_config(repo)))
+            cfg = load_config(repo)
+            checks.append(_problems_check("skills-lock", skills.verify_lock(repo), "the pinned skills match the lock"))
+            checks.append(_problems_check("practice-packs", skills.oversized_packs(repo, cfg), "every pack is within its line limit"))
+            checks.extend(doctor_checks(repo, cfg))
         except FactoryError as e:
             checks.append(CheckResult("toolchains", False, e.message, e.hint))
     return checks
+
+
+def _problems_check(name: str, problems: list, ok_detail: str) -> CheckResult:
+    if not problems:
+        return CheckResult(name, True, ok_detail, "")
+    return CheckResult(name, False, "; ".join(p.message for p in problems), problems[0].hint)
 
 
 def run_engine_env(run_id: str, *, home: Path, env: Mapping[str, str]) -> dict[str, str]:
