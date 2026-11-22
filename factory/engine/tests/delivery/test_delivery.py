@@ -274,6 +274,28 @@ def test_the_summary_has_request_stages_evidence_decisions_notes_usage_and_merge
     assert "Human review: an architecture decision was approved; a human steered the run with notes" in text
 
 
+def test_the_summary_lists_the_changed_files_when_the_base_is_not_main_and_there_is_no_remote(home, tmp_path, cfg):
+    """Item 37: a local-only repo whose base is not main still lists what the run changed. The base comes from the
+    config, and no pull request exists yet (so run.pr is None)."""
+    import subprocess
+    from factory_engine.types import Request, Source
+    cfg.repo["base_branch"] = "tutorial-base"
+    repo = tmp_path / "scratch"
+    subprocess.run(["git", "init", "-q", "-b", "tutorial-base", str(repo)], check=True)
+    (repo / "app").mkdir()
+    (repo / "app" / "main.py").write_text("x = 1\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "init")
+    wt = gitops.create_run_worktree(repo, cfg, "tidy-ab12c", base="tutorial-base", detached=False)
+    commit_change(wt, {"app/main.py": "x = 2\n"})
+    request = Request("r-1", Source("cli", "note.md", "t", "b", [], None, []), "sha", "scratch", "Tidy the app", "chore",
+                      "explicit", None, [])
+    run_dir = state.init_run(home, repo, "local/scratch", "tidy-ab12c", request, branch="tidy-ab12c", worktree=wt,
+                             kit_hash="kit1").run_dir
+    text = render_summary(run_dir, usage.summarize([run_dir]), base=cfg.repo["base_branch"]).read_text()
+    assert "Not available" not in text and "app/main.py" in text
+
+
 def test_the_summary_is_the_pull_request_body(home, tmp_path, cfg):
     run_dir, wt, _ = chore(home, tmp_path, cfg)
     render_summary(run_dir, usage.summarize([run_dir]))
