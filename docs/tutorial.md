@@ -278,13 +278,22 @@ The factory moves the issue's `factory:*` label as the run moves, and writes a c
 
 ## Part 3. Add the factory to a project you already have
 
-A new project is easy. An existing one has its own test tools, its own lint rules and its own `AGENTS.md`. This part ran on a real project, a Python library with 175 tests, `uv` and `ruff`. The kit goes in as it did in part 1, and four things about the project need a change. Each one below is a failure from the run, and the fix that cleared it.
+A new project is easy. An existing one has its own test tools, its own lint rules and its own `AGENTS.md`. This part ran on a real project, a Python library with 175 tests, `uv` and `ruff`. Steps 2 to 4 each fix a failure from that run.
 
-Run everything on a copy first: `git clone <your repo> factory-try`. The kit adds 131 files to the repo, and the run makes a worktree under `~/.factory/worktrees/`.
+**What the project needs first:** a `main` branch (see part 1, step 3 if yours has another name); `ruff` and `pytest` installed in a `.venv` inside the project; tests that pass; and code that `ruff check` and `ruff format --check` accept. The `verify` stage runs both, so a project that fails either one blocks at `verify`, and the log names the file.
+
+Run everything on a copy first. Replace the address with your repo's, and do every step in the copy:
+
+```sh
+git clone https://github.com/you/your-project.git factory-try
+cd factory-try
+```
+
+The kit adds 131 files to the repo. A run makes its own working copy (a *worktree*) under `~/.factory/worktrees/`.
 
 ### 1. Install the kit
 
-Do part 1, steps 1 and 3 (install the `factory` command, then `factory init`). `init` leaves your `AGENTS.md`, your CI and your config alone; it adds `factory/` and `.factory/config/` only. Commit both on `main`.
+Do part 1, step 1 (install the `factory` command), then, in the copy, the commands of part 1, step 3 (`factory init`, commit, `factory init --github`). `init` leaves your `AGENTS.md`, your CI and your config alone. It adds `factory/` (the *kit*) and `.factory/config/` only. If you skip this step, nothing below works, and `factory add` says that `main` has no `factory/` folder.
 
 ### 2. Keep your linter out of `factory/`
 
@@ -295,11 +304,11 @@ Do part 1, steps 1 and 3 (install the `factory` command, then `factory init`). `
 extend-exclude = ["factory"]
 ```
 
-Do the same for your test runner if it collects from the repo root. Here `pytest` already ran from `tests/`, so it needed nothing.
+Do the same for your test runner. This project set `testpaths = ["tests"]` in `pyproject.toml`, so `pytest` never looked in `factory/`. If yours collects from the repo root, set `testpaths` (or `norecursedirs`) the same way. The kit's own tests are not copied, but its other Python is.
 
 ### 3. Put your tools on the `PATH`
 
-`factory doctor` checks the tools of your language profile. For Python it runs `ruff` and `pytest` by their bare names. A project that keeps them in its own `.venv` fails the check:
+`factory doctor` checks the tools of your language profile (the file `factory/languages/python.yaml`). For Python it runs `ruff` and `pytest` by their bare names. A project that keeps them in its own `.venv` fails the check:
 
 ```text
 failed: 7 of 8 checks passed
@@ -331,7 +340,11 @@ error: Failed to download `typing-inspection==0.4.5`
   cause: tunnel error: unsuccessful
 ```
 
-The engine has no setting that lets a `cmd` task reach a package index, so the script must use the tools already installed. Call `pytest` and `ruff` directly, point them at your own folders, and turn their caches off, because a cache is a file in the worktree:
+The engine has no setting that lets a `cmd` task (a task that runs a command, as `verify` does) reach a package index, so the script must use the tools already installed. Call `pytest` and `ruff` directly, point them at your own code folders, and turn their caches off, because a cache is a file in the worktree. The script below names `src tests scripts`; change that list to your project's folders, and leave out any that do not exist:
+
+```sh
+mkdir -p scripts
+```
 
 ```sh
 cat > scripts/check <<'EOF'
@@ -348,7 +361,7 @@ EOF
 chmod +x scripts/check
 ```
 
-The two rules from part 1 still hold: the script writes `check.log` into `$FACTORY_TASK_DIR` and leaves no file in the worktree. Test it the way the engine runs it, with a minimal environment:
+The two rules from part 1 still hold: the script writes `check.log` into `$FACTORY_TASK_DIR` (the task's own folder, which the sandbox lets it write to) and leaves no file in the worktree. Test it the way the engine runs it, with a minimal environment. This test was run on the real project: exit code 0, 175 tests passed, and `git status --short` showed nothing new.
 
 ```sh
 mkdir -p /tmp/taskdir
@@ -356,7 +369,11 @@ env -i HOME="$HOME" PATH="$PATH" FACTORY_TASK_DIR=/tmp/taskdir ./scripts/check; 
 git status --short   # nothing new
 ```
 
-Commit the script on `main`, then run a request:
+Commit the script and the `pyproject.toml` change on `main`, because a run reads the committed `main`, then run a request:
+
+```sh
+git add scripts/check pyproject.toml && git commit -m "add the factory's verify step"
+```
 
 ```sh
 factory add "Test that a non-empty prompt is refused when the context window is zero" --type chore --no-run
