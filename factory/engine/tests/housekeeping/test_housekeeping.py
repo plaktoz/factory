@@ -934,3 +934,31 @@ def test_an_archive_with_a_member_that_differs_from_its_file_is_not_moved_into_p
     assert "wrong-bytes" not in report.archived
     assert any("archive differs from events.jsonl" in f.message for f in report.failed)
     assert not list((home / "archive").rglob("*wrong-bytes*.zip"))
+
+
+def test_an_archived_worker_log_is_whole_when_no_earlier_gc_cut_it_and_cut_when_one_did(home, repo, cfg, clock):
+    """Module 17, the archived worker.log: it is the copy as it was at archive time. A run archived at once keeps the
+    whole log; a run an earlier gc cut keeps the cut copy, because an archive is made as the run is, without a cut."""
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    mb = 1024 * 1024
+    big = b"a" * mb + b"b" * mb + b"NEWEST"
+
+    def archived_log(run_id, ended_days, *, cut_first):
+        wt = worktree_for(cfg, repo, run_id)
+        run_dir = make_run(home, repo, run_id, status="done", worktree=wt, tasks=[("backend", "done", None)],
+                           ended=days_ago(clock, ended_days))
+        log = run_dir / "tasks" / "backend" / "worker.log"
+        log.write_bytes(big)
+        if cut_first:
+            apply(plan(home, cfg, now=clock.now()))                      # ended 2 days ago, not yet due: its log is cut
+            assert len(log.read_bytes()) == mb
+            apply(plan(home, cfg, now=clock.now() + timedelta(days=6)))  # a later gc archives it, now due
+        else:
+            apply(plan(home, cfg, now=clock.now()))                      # ended 8 days ago, due at once: archived as it is
+        [zp] = [z for z in (home / "archive").rglob("*.zip") if run_id in z.name]
+        with zipfile.ZipFile(zp) as z:
+            return z.read("tasks/backend/worker.log")
+
+    assert archived_log("never-cut", 8, cut_first=False) == big, "no earlier gc cut it: the archive keeps it whole"
+    cut = archived_log("cut-first", 2, cut_first=True)
+    assert cut == big[-mb:] and cut.endswith(b"NEWEST"), "an earlier gc cut it: the archive keeps the cut copy"
