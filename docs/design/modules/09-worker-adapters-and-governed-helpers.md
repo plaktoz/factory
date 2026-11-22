@@ -137,6 +137,8 @@ The gate evidence has the same shape either way.
 - **Depends on:**
   - 3: `resolve_harness`, `mask`
   - 10: `resolve_skill`, which supplies the skill reference in the prompt
+  - 18: the shared types the contract uses (`CheckResult`, `HelperPolicy`, `McpServer`, `Request`, `RunSpec`) and the error catalogue
+  - Outside tool: `srt` (module 3 pins and checks it), which `CommandAdapter` runs commands under
 - **Writes:** `worker.log` only. Workers write their artifact, `progress.md` and the ledger into `$FACTORY_TASK_DIR`. The adapter returns token counts; 6B records them through 14.
 - **CLI it backs:** the harness checks and the sandbox canary in `doctor`.
 
@@ -220,7 +222,7 @@ A worker reads text the factory does not control (issue bodies, repo files, web 
 
   ```json
   {"sandbox": {"enabled": true, "failIfUnavailable": true, "allowUnsandboxedCommands": false,
-               "filesystem": {"denyRead": ["<factory home>", "~/.ssh", "~/.aws", "~/.config/gh", "<harness credential folders>"],
+               "filesystem": {"denyRead": ["<factory home>", "~/.ssh", "~/.aws", "~/.config/gh", "~/.claude", "~/.claude.json", "~/.codex"],
                               "allowRead": ["<this task's work/ folder>"],
                               "allowWrite": ["<task worktree>", "<this task's work/ folder>"]}}}
   ```
@@ -326,9 +328,9 @@ Acceptance criteria:
 
 **Implementation notes (wave 2 build, 2026-11-15).** These record what the code does where this file is silent or differs from what the first build assumed.
 
-- `TaskContext` has five defaulted fields after the 19 the spec lists: `artifact_name` (the file the task's `out` names), `bash` (the commands a stage grants), `cmd`, `run` and `plugin_dir` (for deterministic tasks). The spec names no field for the artifact file or the Bash grant, and `CommandAdapter` needs the rest.
+- `TaskContext` in code has the 18 fields of the block above, all required, and six more with defaults: `artifact_name` (the file the task's `out` names), `bash` (the commands a stage grants), `cmd`, `run`, `plugin_dir` (for deterministic tasks) and `question`. The block above does not list these six, and `CommandAdapter` needs them.
 - `TaskContext.skill` is `None` for a deterministic task. The spec types it as a skill reference only.
-- `AttemptResult.error_kind` carries `binary_missing` for a missing `cmd` or `claude` binary. The spec's list has no code for it, and the error-kind list in the contract has it.
+- `AttemptResult.error_kind` carries `binary_missing` for a missing `cmd` or `claude` binary. It is in the `error_kind` list above, so no code is missing from the spec.
 - A sandbox refusal Claude reports on stderr raises `sandbox.*` as a `FactoryError` from `wait`, since no attempt ran. Only stderr is checked, so a worker that quotes the phrase is not mistaken for a sandbox failure.
 - `CommandAdapter` writes its captured output to the task's `work/` folder, not the attempt folder. `srt` confines a sandboxed child's writes to the worktree and `work/`, so a capture file under the denied factory home is refused and the output is lost (observed with a Python child, 2026-11-15).
 - The Claude adapter resolves `${...}` values against the machine environment when an attempt starts, so a literal reference never reaches the child. The stub-tested config may carry references; the adapter resolves them at that point.

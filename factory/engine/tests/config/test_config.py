@@ -153,6 +153,25 @@ def test_load_config_repo_sets_both_parts(tmp_path):
     assert cfg.repo["infra_wait_hours"] == 6  # default
 
 
+def test_a_missing_machine_file_and_a_missing_repo_file_load_with_the_defaults(tmp_path):
+    """Module 3, Missing files: no ~/.factory/config.yaml is the defaults, and a repo with no factory.yaml loads with
+    only the repo defaults (doctor, not load_config, reports the missing file)."""
+    home = tmp_path / "empty-home"
+    home.mkdir()
+    repo = tmp_path / "bare"
+    repo.mkdir()
+    cfg = load_config(repo, env={"FACTORY_HOME": str(home)})
+    assert cfg.machine == {"max_workers": 6}
+    assert cfg.repo == {"concurrency": 4, "infra_wait_hours": 6, "serialize_overlapping_runs": False}
+
+
+def test_factory_worktree_root_replaces_the_machine_worktree_root(tmp_path):
+    home = write_home(tmp_path, "worktree_root: /from/the/file\n")
+    cfg = load_config(None, env={"FACTORY_HOME": str(home), "FACTORY_WORKTREE_ROOT": "/from/the/env"})
+    assert cfg.machine["worktree_root"] == "/from/the/env"
+    assert load_config(None, env={"FACTORY_HOME": str(home)}).machine["worktree_root"] == "/from/the/file"
+
+
 def test_load_config_refuses_a_bad_repo_file(tmp_path):
     home = write_home(tmp_path, "")
     repo = repo_with(tmp_path, BASE_REPO + "cleanup_check: scripts/x\n")
