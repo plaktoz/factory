@@ -12,7 +12,6 @@ The tick itself writes no run state.
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 from dataclasses import asdict, dataclass, field
@@ -20,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from factory_engine import api, decisions, delivery, state
+from factory_engine import api, decisions, delivery, filelock, state
 from factory_engine.clock import SystemClock
 from factory_engine.config import Config
 from factory_engine.errors import FactoryError
@@ -78,17 +77,17 @@ def _take_tick_lock(home: Path) -> _TickLock | None:
     """The machine-wide tick lock. None when another tick holds it, so the caller exits at once."""
     home.mkdir(parents=True, exist_ok=True)
     fd = os.open(str(home / TICK_LOCK), os.O_RDWR | os.O_CREAT, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    if not filelock.try_lock(fd):
         os.close(fd)
         return None
     return _TickLock(fd)
 
 
 def _release_tick_lock(lock: _TickLock) -> None:
-    fcntl.flock(lock.fd, fcntl.LOCK_UN)
-    os.close(lock.fd)
+    try:
+        filelock.unlock(lock.fd)
+    finally:
+        os.close(lock.fd)
 
 
 def _log(home: Path, event: str, **fields) -> None:

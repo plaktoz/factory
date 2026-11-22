@@ -1,19 +1,19 @@
 """The run lock (module 6A, decision D1): an OS file lock held for the life of the owning process.
 
-The lock is a kernel lock (fcntl.flock on POSIX), so a crash releases it at once, and a process that is stopped
-(SIGSTOP) keeps it. Heartbeat is display only (module 6A): it never decides ownership, so `acquire_lock` refuses
-while the holder lives, whatever its heartbeat says.
+The lock is a kernel lock (`filelock`: fcntl.flock on POSIX, msvcrt.locking on Windows), so a crash releases it at
+once, and a process that is stopped (SIGSTOP) keeps it. Heartbeat is display only (module 6A): it never decides
+ownership, so `acquire_lock` refuses while the holder lives, whatever its heartbeat says.
 """
 
 from __future__ import annotations
 
-import fcntl
 import json
 import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import filelock
 from .atomic import write_json_atomic
 from .errors import FactoryError
 
@@ -30,9 +30,7 @@ def acquire_lock(run_dir: Path, owner: str) -> Lock:
     run_dir.mkdir(parents=True, exist_ok=True)
     path = run_dir / "lock"
     fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
+    if not filelock.try_lock(fd):
         os.close(fd)
         holder = _read_holder(path)
         raise FactoryError("state.locked", f"run {run_dir.name} is locked by {holder.get('owner', 'another engine')} "
@@ -59,10 +57,16 @@ def heartbeat(lock: Lock) -> None:
 
 
 def release(lock: Lock) -> None:
+    """Idempotent: a second call, or a call on a lock whose fd is already closed, does nothing."""
+    if lock.fd < 0:
+        return
+    fd, lock.fd = lock.fd, -1
     try:
-        fcntl.flock(lock.fd, fcntl.LOCK_UN)
+        filelock.unlock(fd)
+    except OSError:
+        pass  # already unlocked or closed; the close below still runs
     finally:
-        os.close(lock.fd)
+        os.close(fd)
 
 
 def _run_status(run_dir: Path) -> str | None:
@@ -83,11 +87,9 @@ def lock_status(run_dir: Path) -> str:
         return "stale" if run_status == "running" else "free"
     fd = os.open(str(path), os.O_RDWR)
     try:
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
+        if not filelock.try_lock(fd):
             return "live"
-        fcntl.flock(fd, fcntl.LOCK_UN)
+        filelock.unlock(fd)
         return "stale" if run_status == "running" else "free"
     finally:
         os.close(fd)
