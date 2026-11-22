@@ -278,8 +278,8 @@ hooks:
 def load_workflow(repo: Path, cfg: Config, name: str) -> Workflow
     """Lookup .factory/config/workflows, then factory/workflows; apply plugins; validate."""
 def validate_workflow(wf: Workflow, cfg: Config) -> list[Problem]
-    """duplicate stage and task ids, needs on unknown or cyclic stages and tasks, a task with both or neither of skill
-    and cmd, unknown check names, unknown goto targets, a quorum larger than the stage's tasks, overlapping parallel
+    """duplicate stage and task ids, needs on unknown or cyclic stages and tasks, a task that does not set exactly one of skill,
+    cmd or run (a run task is a plugin task, phase 1b; the phase 1a code checks skill and cmd only), unknown check names, unknown goto targets, a quorum larger than the stage's tasks, overlapping parallel
     write scopes, shared_files owners that are not tasks. Schema and skill names are checked by load_workflow."""
 def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]   # validated like static tasks
     """artifact is a JSON array with one task object per item. Each item must match the workflow schema's task form,
