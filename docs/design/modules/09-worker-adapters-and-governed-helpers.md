@@ -151,6 +151,23 @@ class WorkerAdapter(Protocol):
     def stop(self, handle: WorkerHandle) -> None
 
 @dataclass
+class Capabilities:
+    subagents: Literal["native", "none"]          # native: the harness can start helpers; none: the engine expands split hints
+    usage: bool                                   # True when the adapter reports token counts
+
+@dataclass
+class HarnessConfig:                              # what resolve_harness (3) returns
+    command: str                                  # the binary to run
+    model: str | None                             # None when unset: no model flag is sent
+    args: list[str]                               # extra arguments, in order
+    env: dict[str, str]                           # the minimal environment, ${...} resolved at call time
+
+@dataclass
+class WorkerHandle:                               # opaque to callers: pass it back to wait and stop
+    task_id: str; attempt: int
+    data: dict                                    # adapter state: a real adapter keeps its process group, the fake its script position
+
+@dataclass
 class TaskContext:
     run_id: str; task_id: str; stage: str; attempt: int
     skill: SkillRef; request: Request

@@ -56,7 +56,7 @@ A skipped worktree is not an error: its run is still archived, the run's `worktr
 
 **What ends up in the repo**
 
-Only the deliverables, through the pull request: product code, tests, ADRs in `docs/adr/`, and research reports when the doc sink points inside the repo. Run state, logs and summaries stay in the factory home, and `history.jsonl` keeps one line per run with request, result, pull request, tokens and timestamps.
+Only the deliverables, through the pull request: product code, tests, ADRs in `docs/adr/`, and research reports when the doc sink points inside the repo. Run state, logs and summaries stay in the factory home, and `history.jsonl` keeps one line per run: its id, repo key, final status and end time (`HistoryRecord`, [module 6](06-engine-core.md)). The request, pull request and tokens stay in the run's own files or its archive.
 
 **Module contract: 17 Housekeeping**
 
