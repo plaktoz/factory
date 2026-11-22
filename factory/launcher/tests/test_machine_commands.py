@@ -125,3 +125,9 @@ def test_dashboard_default_port_is_8765(home, detached_child):
     _dashboard(["--detach"], home)
 
     assert detached_child == [8765]
+
+
+def test_schedule_at_needs_a_time_and_a_name(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "home"))
+    assert cli.main(["schedule", "at", "--json", "--", "python3"]) == 2
+    assert "config.invalid" in capsys.readouterr().out

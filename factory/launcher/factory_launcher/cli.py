@@ -138,13 +138,28 @@ def _watch(args, home: Path, *, sleep=time.sleep, rounds: int | None = None) -> 
 
 
 def _schedule(args, home: Path) -> int:
-    if args.action == "install":
+    if args.action == "at":
+        if not (args.at and args.name):
+            raise FactoryError("config.invalid", "schedule at needs --at and --name", hint="factory schedule at --at 2026-11-25T19:43 --name pilot -- <command>")
+        command = args.job[1:] if args.job[:1] == ["--"] else args.job
+        path = schedule_mod.install_once(args.name, schedule_mod.parse_at(args.at), command, home=home, cwd=Path.cwd())
+        _emit(True, "ok", f"installed {path}\nload it: {_load_hint(path)}", "", {"path": str(path), "load": _load_hint(path)}, args.json)
+    elif args.name:
+        removed = schedule_mod.remove_once(args.name)
+        _emit(True, "ok", "removed" if removed else "nothing to remove", "", {"removed": removed}, args.json)
+    elif args.action == "install":
         path = schedule_mod.install(args.every, home=home)
         _emit(True, "ok", f"installed {path}", "", {"path": str(path)}, args.json)
     else:
         removed = schedule_mod.remove(home=home)
         _emit(True, "ok", "removed" if removed else "nothing to remove", "", {"removed": removed}, args.json)
     return 0
+
+
+def _load_hint(path: Path) -> str:
+    if path.suffix == ".plist":
+        return f"launchctl bootstrap gui/$(id -u) {path}"
+    return f"systemctl --user enable --now {path.name}"
 
 
 def _dashboard(args, home: Path) -> int:
@@ -270,9 +285,12 @@ def _parser() -> argparse.ArgumentParser:
     w.add_argument("--repo", action="append", dest="repo", help="a repo to sync (repeatable)")
     w.add_argument("--json", action="store_true")
 
-    s = sub.add_parser("schedule", help="install or remove the OS scheduler entry for tick")
-    s.add_argument("action", choices=["install", "remove"])
+    s = sub.add_parser("schedule", help="install or remove the OS scheduler entry for tick, or run one command once")
+    s.add_argument("action", choices=["install", "remove", "at"])
     s.add_argument("--every", default="10m", help="interval, such as 10m")
+    s.add_argument("--at", help="at: the local time to run, such as 2026-11-25T19:43")
+    s.add_argument("--name", help="at: the job's name (lower-case, digits, hyphens). With remove, deletes that job")
+    s.add_argument("job", nargs="*", help="at: the command to run, after --")
     s.add_argument("--json", action="store_true")
 
     d = sub.add_parser("dashboard", help="start the dashboard server")
