@@ -137,6 +137,8 @@ The gate evidence has the same shape either way.
 - **Depends on:**
   - 3: `resolve_harness`, `mask`
   - 10: `resolve_skill`, which supplies the skill reference in the prompt
+  - 18: the shared types the contract uses (`CheckResult`, `HelperPolicy`, `McpServer`, `Request`, `RunSpec`) and the error catalogue
+  - Outside tool: `srt` (module 3 pins and checks it), which `CommandAdapter` runs commands under
 - **Writes:** `worker.log` only. Workers write their artifact, `progress.md` and the ledger into `$FACTORY_TASK_DIR`. The adapter returns token counts; 6B records them through 14.
 - **CLI it backs:** the harness checks and the sandbox canary in `doctor`.
 
