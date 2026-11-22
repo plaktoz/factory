@@ -51,8 +51,10 @@ These come from the ADRs. Read them when you judge the numbers.
 | Item | Value |
 | --- | --- |
 | Owner of the first draft | The repo owner (`plaktoz`) |
-| Pilot ticket 1 | [#88](https://github.com/plaktoz/factory/issues/88): give `merge.json` a checked format |
-| Pilot ticket 2 | [#89](https://github.com/plaktoz/factory/issues/89): test seven open module 17 cleanup criteria |
+| Pilot ticket 1 | [#86](https://github.com/plaktoz/factory/issues/86): `factory gc` frees worktrees by real GitHub pull request state (PR #96) |
+| Pilot ticket 2 | [#87](https://github.com/plaktoz/factory/issues/87): an engine crash stops a task after `max_interruptions` (PR #99) |
+
+Issues #88 and #89 were opened on 2026-11-22 as candidate tickets (task 42). The pilot did not use them. Both are still open spec issues.
 | Baseline ticket 1 | [PR #74](https://github.com/plaktoz/factory/pull/74), see the baseline record below |
 | Baseline ticket 2 | [PR #71](https://github.com/plaktoz/factory/pull/71), see the baseline record below |
 | Start day | 2026-11-22. Day 14 is 2026-12-06 |
@@ -74,4 +76,29 @@ Taken on 2026-11-22 from GitHub. Neither pull request links to an issue, so a de
 **Not similar in size.** The pilot's own rule asks for baseline tickets of similar size. PR #71 is about ten times PR #74 by changed lines, and it bundles four separate changes. Review time is also undefined for both: neither has an approval, so the measure "hours from opened to first approval" has no value to compare. Both were merged by the author without review.
 
 **Review time, as changed on 2026-11-22** (owner decision D2, ADR `2026-11-22-measure-review-time-as-open-to-merge.md`): the measure is now minutes from opening to merging, which has a value for both: #74 4.4 min, #71 171.4 min. The first-approval measure above is no longer used.
+
+## Pilot record
+
+Taken on 2026-11-22 from GitHub and the two pull requests' descriptions.
+
+| Measure | PR #96 (#86) | PR #99 (#87) |
+| --- | --- | --- |
+| Size | +146 / -4, 5 files | +190 / -8, 8 files |
+| Opened to merged (review time, D2) | 0.4 min (00:22:01 to 00:22:26 UTC) | 0.9 min (05:10:43 to 05:11:37 UTC) |
+| First approval | none: no review, no comment | none: no review, no comment |
+| Spec approval | none on the issue: the owner approved in chat, and #86 has only a closing comment | none on the issue: the owner approved in chat, and #87 has no comments |
+| Issue closed | by hand, 05:19 UTC, because the PR had no `Closes #86` | by the PR, `Closes #87` |
+| Defects, window ends 2026-12-06 | pending | pending |
+
+**Fresh-session findings** (the report in each PR, sorted by whether the finding was real):
+
+- **PR #96, two sessions.** Real and fixed: a task 34 paraphrase that contradicted its older text (`e8912db`), and a `--apply` output pasted as prose instead of raw JSON (`41b5f14`). Real and open: the empty `detail` case is untested. Noise or judgment, not changed: the wording of criterion 3b ("removes nothing" holds for worktrees only), the stub's `gh` error text, the test's `sys.path` import, and the absence of commit evidence on the issue's boxes.
+- **PR #99, one session.** Real and open: the test for the `high` half of the two-task case would pass even if the loop never evaluated `high`; the status test does not check that the output names the task or the reason; the resume-time `config.invalid` when a workflow is edited after a crash is a design choice, recorded and not changed. Noise: the negative and non-integer refusal is the schema's job, and the test for it passes as intended.
+
+Count: PR #96 had 2 real findings, both fixed, and 1 real gap open. PR #99 had 3 real findings, none fixed. Noise: 4 on PR #96, 1 on PR #99.
+
+**Steps skipped or changed:**
+- Step 2 of "Run each pilot ticket" (approve the spec in a comment on the issue) was done in chat for both tickets. The issues carry no approval comment.
+- The pilot was run as pull requests merged by their author within a minute of opening, with no review. Both baselines were the same.
+- The pilot table named #88 and #89 until this fix, while task 18 named #86 and #87.
 
