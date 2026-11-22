@@ -95,7 +95,11 @@ flowchart LR
   rule --> c["Model: no flag sent,<br/>observed model recorded"]
 ```
 
-Machine settings (worktree root, tool paths, desktop notifications) come from the per-machine file. Repo settings come from `factory.yaml`. Environment variables (`FACTORY_WORKTREE_ROOT`) and CLI flags override both.
+Machine settings (worktree root, tool paths, desktop notifications) come from the per-machine file. Repo settings come from `factory.yaml`. The one environment override built is `FACTORY_WORKTREE_ROOT`, which replaces `worktree_root`. No CLI flag changes config yet; the precedence the criterion below asks for is not built.
+
+**Defaults.** These are the values a key takes when its file does not set it. Machine: `max_workers: 6`. Repo: `concurrency: 4`, `infra_wait_hours: 6`, `serialize_overlapping_runs: false`. Any other key has no default and is off until its module reads it.
+
+**Missing files.** A missing `~/.factory/config.yaml` is the defaults above, not an error. A missing `.factory/config/factory.yaml` is a repo with no config: `load_config` still loads, with only the repo defaults, and `doctor` reports `repo-config` failed with the fix `factory init`.
 
 **One `Config`.** `load_config` returns one `Config` type ([section 18](../shared/18-shared-contracts.md)) with two parts. `.machine` holds the keys of the per-machine file, and `.repo` holds the keys of `factory.yaml`. With `repo=None`, `.repo` is `None` and only machine keys are available. `factory tick` and the other machine commands load it that way ([module 16](16-drivers.md)). There is no separate machine configuration type, loader or schema, so the precedence rule below applies in one place.
 
@@ -223,12 +227,17 @@ def validate(obj: dict, schema: str) -> None            # raises FactoryError("s
 def mask(text: str, secrets: Iterable[str]) -> str
 # kit.py
 def init_repo(repo: Path) -> InitReport                  # labels are added by drivers (16)
+# InitReport: created: list[Path] (files written), unchanged: list[Path] (files that already existed and were left alone)
+# UpgradeReport: replaced: Path | None (the kit folder swapped in), config_untouched: bool, problems: list[str]
 def upgrade(repo: Path, version: str) -> UpgradeReport   # fails with config.invalid and the old factory/ intact; see Upgrade
 def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]   # git, gh, credentials, repo-config only
 ```
 
 - **Run and test:** `pytest factory/engine/tests/config factory/engine/tests/kit`; `factory doctor --json`.
 - **Errors:** invalid YAML, unknown schema version, unset `${VAR:?}`, a literal secret in committed config, or an unsafe worktree path. All fail fast with file, line and fix.
+- **Snapshot copy interrupted.** `snapshot_kit` copies into `kits/<hash>.tmp` and renames it to `kits/<hash>` only when the copy is whole. A copy that dies leaves the `.tmp` folder, which the next snapshot removes first, and no `kits/<hash>` folder, so no run can start from half a kit.
+- **`cleanup_check` hangs.** It runs with a 300-second timeout. A timeout, a missing command or a command that cannot start is reported as "not safe to remove", and the worktree is kept.
+- **`doctor` exit.** It exits 0 when every check passes and 1 when any fails, and lists each check with its detail and fix. `--no-repo` runs the machine checks only.
 
 Acceptance criteria:
 
