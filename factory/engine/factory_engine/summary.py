@@ -75,8 +75,8 @@ def answered_decisions(run_dir: Path) -> list[tuple[str, str, dict, dict]]:
     return out
 
 
-def _what_changed(run: Run) -> str:
-    stats = diff_stats(run.worktree, run.pr.base if run.pr else None)
+def _what_changed(run: Run, base: str | None) -> str:
+    stats = diff_stats(run.worktree, run.pr.base if run.pr else base)
     if stats is None:
         return "Not available: the run's worktree could not be read."
     if not stats:
@@ -199,8 +199,11 @@ def _merge(run_dir: Path) -> str:
     return "Auto-merge: every rule passed" if doc.get("auto") else f"Human review: {doc.get('reason', 'no reason recorded')}"
 
 
-def render_summary(run_dir: Path, usage: UsageReport) -> Path:
-    """Write `summary.md` from the run's state and artifacts, and return its path. Rendering twice gives the same text."""
+def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None) -> Path:
+    """Write `summary.md` from the run's state and artifacts, and return its path. Rendering twice gives the same text.
+
+    `base` is the repo's configured base branch. It is used for the file list until a pull request names its own base
+    (item 37: before the pull request exists, a repo whose base is not main had no file list)."""
     run = read_run(run_dir)
     approved_by = {stage: str(dec.get("by", "unknown")) for stage, _, _, dec in answered_decisions(run_dir)}
     head = f"Request: {run.request.source.ref} · Workflow: {run.workflow or 'none'} · Result: {run.status}"
@@ -210,7 +213,7 @@ def render_summary(run_dir: Path, usage: UsageReport) -> Path:
     title = f"# {run.run_id}: {run.request.title}\n{head}" + (f"\n{closes}" if closes else "")
     text = "\n\n".join([
         title,
-        f"## What changed\n{_what_changed(run)}",
+        f"## What changed\n{_what_changed(run, base)}",
         f"## Stages\n{_stages(run, approved_by)}",
         f"## Evidence\n{_evidence(run, run_dir)}",
         f"## Decisions and notes\n{_decisions_and_notes(run_dir)}",
