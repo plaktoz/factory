@@ -286,7 +286,13 @@ def expand_tasks_from(stage: Stage, artifact: Path) -> list[TaskSpec]   # valida
     and the list must pass the checks of a static stage (needs, cycles, overlapping scopes). With the stage's
     task_template, each item is {id, question} plus any task field it overrides."""
 def expand_helpers(task: TaskSpec, subagents: Literal["native", "none"]) -> list[TaskSpec]
-    """native: [task]; none or mode off: one sibling task per split hint."""
+    """native: [task]; none or mode off: one sibling task per split hint.
+
+    Each sibling is a copy of the task with `id` = `<task id>-<hint>`, `out` = the task's `out` with `-<hint>` before
+    the extension (`backend.json` -> `backend-api-code.json`; no extension -> `<out>-<hint>`), and every other field
+    (`skill`, `scope`, `deny`, `needs`, `model`, `retries`, `timeout_minutes`) copied from the parent. Its `helpers` is `{mode: off, max: 0, split_hints: []}` with the parent's timeout, so it does
+    not split again. A task with no split hints comes back unchanged, so a stage has the same shape with helpers off
+    as with them on."""
 # plugins.py
 def enable_plugin(repo: Path, cfg: Config, name: str) -> Workflow    # returns merged result to show
 def disable_plugin(repo: Path, name: str) -> None
