@@ -67,7 +67,7 @@ concurrency: 4                   # parallel workers for this repo; the machine-w
 repo_key: null                   # override, such as github.com/acme/report
 notify: {github_mention: author, desktop: true, webhook: null, remind_after_hours: 24}
 retention: {archive_after_days: 7, delete_archive_after_days: 90, keep_failed_days: 14,
-             worker_log_max_mb: 50, auto_gc: false}   # auto_gc: run the gc plan when an engine starts
+             worker_log_max_mb: 50, auto_gc: false}   # auto_gc is read by no code yet; housekeeping runs only by `factory gc` (module 17)
 infra_wait_hours: 6              # how long a run waits for GitHub or the network before it is blocked
 serialize_overlapping_runs: false   # true: a run whose files overlap an active run waits at its next stage (module 7)
 cleanup_check: ["scripts/compare-worktree"]   # optional, a command the repo provides (example name): run in a worktree that is not clean before removing it; exit 0 = safe to remove

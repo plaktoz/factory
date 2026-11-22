@@ -57,7 +57,7 @@ tick: {every_minutes: 10, stale_after_ticks: 3}
 What one tick does, in order:
 
 1. Takes a machine-wide tick lock. If the previous tick is still running, it exits at once and logs `tick_skipped`. The lock is an OS file lock on `tick.lock` in the factory home, so a tick that dies (a crash, a kill, a power cut) releases it at once and the next tick runs. Nothing is left to clean up.
-2. For each repo in `repos`, it syncs tagged GitHub issues and the markdown inbox, creating runs for new requests. A `last_sync` cursor in `$FACTORY_HOME/sync/<repo key>.json` limits the GitHub query to recently updated issues.
+2. For each repo in `repos`, it syncs tagged GitHub issues and the markdown inbox, creating runs for new requests. A `last_sync` cursor in `$FACTORY_HOME/sync/<repo key>.json` would limit the GitHub query to recently updated issues, but it is not built (see below).
 3. It checks the open pull requests of runs waiting on merge (`watch_pr`). The tick only reads them and starts an engine, because only the engine that holds a run's lock writes its state (see the table below):
    - merged: the engine finishes the run and cleans up
    - closed: the engine aborts the run
@@ -66,7 +66,7 @@ What one tick does, in order:
 5. It resumes runs whose engine has died: status running and no process holding the lock. A sleeping laptop is not a death; its engine still holds the lock and carries on when it wakes.
 6. It sends a reminder for each run that waits for a person, once `remind_after_hours` have passed since the last notice (module 11). A failed channel is reported and never stops the tick.
 7. Nothing. The tick does not run the housekeeping plan. `retention.auto_gc` is not read by any code yet, so housekeeping runs only when someone runs `factory gc` (module 17).
-8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds. `tick.json` is `{"last_tick": <ISO time>, "result": {started, resumed, skipped, reminded, repo_missing: [run id], synced: {repo path: [run id]}, errors: [text], skipped_tick: bool}}`, written by replacing a temporary file. `synced` is keyed by the repo's path, and `reminded` lists the runs step 6 sent a notice for.
+8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds. `tick.json` is `{"last_tick": <ISO time>, "result": {started, resumed, skipped, reminded, repo_missing: [run id], synced: {repo path: [run id]}, errors: [text], skipped_tick: bool}}`, written by replacing a temporary file. `synced` is keyed by the repo's path, and `reminded` lists the runs step 6 sent a notice for. A tick that finds the tick lock held writes no tick.json at all, so `skipped_tick` is never `true` in the file; it is set only in memory and the skipped tick is recorded by the `tick_skipped` log line.
 
 The per-repo sync cursor in step 2 (`$FACTORY_HOME/sync/<repo key>.json`) is not built. No code writes or reads it, so every sync queries all tagged issues. Until it is built, step 2 does not limit the query, and no file under `sync/` exists. The cursor's shape is not fixed by this file.
 
@@ -91,7 +91,7 @@ It then takes one action per run:
 | awaiting\_approval, merge review | free | Reads the pull request (`watch_pr`) and writes nothing; starts an engine when it is merged, closed or red, or when its checks turn green and the merge rules have not been checked with green CI yet; that engine ends the run, routes it, or checks the merge rules again (module 13) |
 | retrying | free | Starts an engine that repeats the failed operation; blocks the run once `infra_wait_hours` have passed |
 | blocked | free | Reminder only; it waits for you |
-| done, failed or aborted | free | Housekeeping candidate |
+| done, failed or aborted | free | A candidate for `factory gc`, which the tick does not run |
 
 Individual tasks are not the tick's concern. The engine that holds a run's lock tracks its tasks in `task.json`. Whether the engine is alive is answered by the OS lock, not by a timestamp.
 
@@ -348,7 +348,7 @@ Acceptance criteria:
   - 14: `start_attempt`, `finish_attempt`, `close_open_attempts`, `summarize`
   - 17: `cleanup_after_join`, `cleanup_after_merge`
   - 17A: `detect`, `run_step` (format once, after a task's worker has stopped)
-  - `rework` functions the engine calls that module 8 does not name: `route_conflict` (a merge conflict), `route_red_ci` (red CI on a pull request), `record_blocked` (a block) and `_reset_from` (the rework reset of a join). The rest of the engine's imports are named in the module that owns them.
+  - `rework` functions the engine calls that module 8 does not name: `route_conflict` (a merge conflict), `route_red_ci` (red CI on a pull request), `record_blocked` (a block), `block` (a stage blocked with a reason), `may_retry` (a task retry), `start_infra_wait` (an infra wait) and `_reset_from` (the rework reset of a join). The rest of the engine's imports are named in the module that owns them.
 - **Writes:** run and task state through 6A; every event in the catalogue above.
 - **CLI it backs:** `run`, `resume`, `stop`.
 
