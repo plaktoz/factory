@@ -4,13 +4,15 @@ This page takes you from nothing to a merged pull request, in three parts. In pa
 
 Every command and output below comes from a real run on 2026-11-21 and 2026-11-22 (macOS, Claude Code through a gateway). Times and run ids differ on your machine.
 
-Both parts need a GitHub repo you can push to. Make an empty private one, such as `you/factory-scratch`, and use it only for this page.
+Parts 1 and 2 need a GitHub repo you can push to. Make an empty private one, such as `you/factory-scratch`, and use it only for this page. Part 3 uses a copy of your own project.
 
 ## Before you start
 
 You need:
 
-- `git`, `gh` (logged in: `gh auth status`), Node (for `srt`, the sandbox) and `uv`.
+- `git`, `gh` (logged in: `gh auth status`) and `uv`.
+- Node 22.12 or newer, and the sandbox `srt` that runs on it: `npm install -g @anthropic-ai/sandbox-runtime@0.0.83`. `factory doctor` checks both and prints this command when `srt` is missing.
+- The Claude Code CLI (`claude`) on your `PATH`. The factory starts it for each worker task. Install it from Anthropic's Claude Code documentation, then check it with `claude --version`. The runs on this page used 2.1.330.
 - Python 3.10 or newer.
 - Credentials for Claude: `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`. A login session does not work in phase 1.
 - The factory source: a checkout of this repo. Set `FACTORY_SRC` to its path, for example `export FACTORY_SRC=~/src/factory`. Every `$FACTORY_SRC` below uses it.
@@ -116,7 +118,7 @@ The run goes through three stages:
 
 `factory status` shows each stage's state. Run it with `--json` for the stages of each run: the output is one object, and the runs are in `data.runs`. Without `--json` it prints only a count.
 
-The run takes about a minute. It ends at `awaiting_approval`, with a pull request open:
+The command prints nothing while the run works. It returns when the run stops. That takes about a minute here, and the run ends at `awaiting_approval` with a pull request open. These two lines are all it prints:
 
 ```text
 greet-with-an-exclamation-mark-zavus awaiting_approval
@@ -169,7 +171,7 @@ factory dashboard --detach --port 8765
 It prints a URL with a token, and the server keeps running after the command returns. Open the URL. The page is read-only and plain. From top to bottom it has:
 
 - **Counters.** Running, Needs you, Blocked, Conflict warnings and Done today.
-- **Needs you.** Runs that wait for a human, each with the command to run. It says `Nothing waiting.` when there is none. A run at `merge_review` shows here.
+- **Needs you.** Runs that wait for a human, each with the command to run. It says `Nothing waiting.` when there is none. A run waiting on its pull request shows here too. Its status is `awaiting_approval`, and its item is of kind `merge_review` (the word `factory inbox` prints in brackets). The two names are for the same stop.
 - **Runs.** One row per run: repo, title, stage and status. Click a row to see its files and events.
 - **Show JSON.** The raw state, from `/api/state.json`. The API needs the `X-Factory-Token` header, which the page sends for you. A request with the token only in the address gets `403`.
 
@@ -239,7 +241,7 @@ git push -q origin HEAD:main
 
 Commit and push, because a run reads `.factory/config/` from the committed base branch. A run you create before the commit keeps the old workflow.
 
-The `git add` names the two paths this step creates, so nothing else in the working tree is committed. `git pull --rebase` is needed because part 1's merge is on `main` now, and a push from before it is rejected with `fetch first`. If you use a base branch other than `main`, put its name in both places.
+`HEAD:main` means "push the commit I am on to the branch `main` on `origin`". It works from any branch, and `main` is where a run reads `.factory/config/`. The `git add` names the two paths this step creates, so nothing else in the working tree is committed. `git pull --rebase` is needed because part 1's merge is on `main` now, and a push from before it is rejected with `fetch first`. If you use a base branch other than `main`, put its name in both places.
 
 ### File the issue and run it
 
@@ -394,10 +396,16 @@ The real project is public, and its `AGENTS.md` asks for approval before any pus
 
 ## Clean up
 
+Do these in order. The run state and the schedule live outside your repo, so deleting the repo does not remove them.
+
 ```sh
-gh repo delete you/factory-scratch --yes   # asks for the delete_repo scope if you lack it
-rm -rf scratch
-factory abort <run>                        # for any run still open
-rm -rf factory-try                         # the copy from part 3
+factory abort <run>                        # for any run still open (factory status --json lists them)
+factory schedule remove                    # only if you ran `factory schedule install`
+kill <pid>                                 # the dashboard: the pid is in dashboard.json under the factory home
+gh auth refresh -h github.com -s delete_repo   # once, if gh lacks the delete_repo scope
+gh repo delete you/factory-scratch --yes
+rm -rf scratch factory-try                 # the scratch repo and the copy from part 3
 ```
+
+`factory schedule remove` prints `removed`, or `nothing to remove` when no schedule was installed. Use `kill <pid>`, not `pkill -f factory`, which can stop an unrelated process whose command line contains the word. The finished runs and their worktrees stay under the factory home (`~/.factory` by default); remove a worktree folder only after `git status` in it shows a clean tree.
 
