@@ -30,7 +30,7 @@ flowchart LR
     t3 --> t4["4. Start engines for ready runs"]
     t4 --> t5["5. Resume runs whose engine died (lock free)"]
     t5 --> t6["6. Send due reminders"]
-    t6 --> t7["7. Retry runs in retrying; housekeeping if on"]
+    t6 --> t7["7. Nothing: housekeeping is `factory gc` only"]
     t7 --> t8["8. Write last tick, then exit"]
   end
   t4 -->|starts| eng
@@ -65,10 +65,10 @@ What one tick does, in order:
 4. It starts a detached engine for every run that can proceed and has no live lock, including runs whose decision was answered while no engine was running.
 5. It resumes runs whose engine has died: status running and no process holding the lock. A sleeping laptop is not a death; its engine still holds the lock and carries on when it wakes.
 6. It sends a reminder for each run that waits for a person, once `remind_after_hours` have passed since the last notice (module 11). A failed channel is reported and never stops the tick.
-7. It runs the housekeeping plan when `retention.auto_gc` is on.
-8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds. `tick.json` is `{"last_tick": <ISO time>, "result": {started, resumed, skipped, repo_missing: [run id], synced: {repo key: [run id]}, errors: [text], skipped_tick: bool}}`, written by replacing a temporary file.
+7. Nothing. The tick does not run the housekeeping plan. `retention.auto_gc` is not read by any code yet, so housekeeping runs only when someone runs `factory gc` (module 17).
+8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds. `tick.json` is `{"last_tick": <ISO time>, "result": {started, resumed, skipped, reminded, repo_missing: [run id], synced: {repo path: [run id]}, errors: [text], skipped_tick: bool}}`, written by replacing a temporary file. `synced` is keyed by the repo's path, and `reminded` lists the runs step 6 sent a notice for.
 
-The per-repo sync cursor in step 2 (`$FACTORY_HOME/sync/<repo key>.json`) is specified but not built: no code writes or reads it yet, so every sync queries all tagged issues. Its shape is not fixed until it is built.
+The per-repo sync cursor in step 2 (`$FACTORY_HOME/sync/<repo key>.json`) is not built. No code writes or reads it, so every sync queries all tagged issues. Until it is built, step 2 does not limit the query, and no file under `sync/` exists. The cursor's shape is not fixed by this file.
 
 **How a tick finds and judges runs**
 
@@ -348,6 +348,7 @@ Acceptance criteria:
   - 14: `start_attempt`, `finish_attempt`, `close_open_attempts`, `summarize`
   - 17: `cleanup_after_join`, `cleanup_after_merge`
   - 17A: `detect`, `run_step` (format once, after a task's worker has stopped)
+  - `rework` functions the engine calls that module 8 does not name: `route_conflict` (a merge conflict), `route_red_ci` (red CI on a pull request), `record_blocked` (a block) and `_reset_from` (the rework reset of a join). The rest of the engine's imports are named in the module that owns them.
 - **Writes:** run and task state through 6A; every event in the catalogue above.
 - **CLI it backs:** `run`, `resume`, `stop`.
 
