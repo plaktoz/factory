@@ -257,6 +257,40 @@ class Engine:
             state.release(lock)
 
     def _pass(self, run_dir: Path, lock: Lock) -> TickResult:
+        result = self._pass_once(run_dir, lock)
+        self._tell_source(run_dir)
+        return result
+
+    def _tell_source(self, run_dir: Path) -> None:
+        """Tell a GitHub issue where its run is now (module 4, module 11). A stop or a block goes through `notify`,
+        which also sends the desktop and webhook channels; running, done and failed move the label. What was last
+        told is the `source_told` event, so a poll that finds nothing new says nothing. Never raises."""
+        run = state.read_run(run_dir)
+        if self.tracker is None or run.request.source.type != "github":
+            return
+        item = run.attention
+        stop = run.status in ("awaiting_approval", "blocked") and item is not None
+        label = {"running": "factory:running", "done": "factory:done", "failed": "factory:failed"}.get(run.status)
+        if stop:
+            key = f"{item.kind}:{item.stage}:{item.since}"
+        elif label is not None and (run.status != "done" or run.pr is not None):  # a comment sink set done itself
+            key = label
+        else:
+            return
+        told = [e.data.get("key") for e in state.read_events(run_dir) if e.type == "source_told"]
+        if told and told[-1] == key:
+            return
+        state.append_event(run_dir, "source_told", key=key)
+        if stop:
+            notify.notify(item, self.cfg, self.tracker)
+            return
+        body = f"Run `{run.run_id}` is {run.status}." + (f" Pull request: {run.pr.url}" if run.pr else "")
+        try:
+            self.tracker.set_status(run.request.source.ref, label, comment=body if run.status != "running" else None)
+        except Exception as e:  # noqa: BLE001  a tracker outage must not stop the run
+            state.append_event(run_dir, "source_tell_failed", status=label, error=str(e))
+
+    def _pass_once(self, run_dir: Path, lock: Lock) -> TickResult:
         run = state.read_run(run_dir)
         result = TickResult()
         if run.status == "awaiting_approval":
