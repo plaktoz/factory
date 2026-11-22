@@ -342,8 +342,9 @@ Acceptance criteria:
 # engine.py
 class Engine:
     def __init__(self, repo: Path, cfg: Config, *, workers: dict[str, WorkerAdapter],
-                 tracker: TrackerAdapter, prs: PullRequests, clock: Clock = SystemClock(),
-                 owner: str | None = None): ...
+                 tracker: TrackerAdapter, prs: PullRequests, command: WorkerAdapter | None = None,
+                 clock: Clock = SystemClock(), owner: str | None = None): ...
+        # `command` runs every `cmd`, `script` and `python` task; `None` means a CommandAdapter (module 9). `workers` runs the skill tasks.
     def run(self, run_ids: list[str] | None = None, *, poll_seconds: int = 5) -> EngineResult:
         """Drive runs until each is done, failed, aborted, blocked or awaiting a human. Holds each run's lock."""
     def tick(self, run_id: str) -> TickResult:
