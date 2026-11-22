@@ -336,7 +336,7 @@ def _gc(args, f) -> _Result:
     plan = api.gc(_repo_here(args), apply=args.apply)
     return _Result({"applied": args.apply,
                     "items": [{"kind": i.kind, "path": i.path, "run_id": i.run_id} for i in plan.items],
-                    "skipped": [{"path": s.path, "reason": s.reason} for s in plan.skipped]},
+                    "skipped": [{"path": s.path, "reason": s.reason, "detail": s.detail} for s in plan.skipped]},
                    message=("applied" if args.apply else "plan only") + f": {len(plan.items)} item(s)")
 
 

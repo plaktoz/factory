@@ -6,11 +6,15 @@ tests check the command's answer: the `--json` shape, the plan-only wording, and
 
 import json
 import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
 from factory_engine import cli
 from factory_engine.errors import EXIT_OK
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "housekeeping"))
 
 
 @pytest.fixture
@@ -50,3 +54,32 @@ def test_gc_json_lists_items_and_skipped_runs_as_lists(repo, capsys):
 
     assert doc["data"]["items"] == []
     assert doc["data"]["skipped"] == []
+
+
+def test_gc_json_says_why_a_worktree_was_skipped_when_gh_cannot_be_read(repo, capsys, monkeypatch):
+    """Issue 86: a `gh` failure keeps the worktree, and the --json output carries gh's own message."""
+    from factory_engine import api, gitops, state
+    from factory_engine.clock import SystemClock
+    from factory_engine.gh import GitHubPullRequests
+    from factory_engine.loadcfg import load_config
+    from factory_engine.types import PrRef
+    from housekeeping_helpers import days_ago, make_run, set_event_times
+
+    monkeypatch.setenv("FACTORY_WORKTREE_ROOT", str(repo.parent / "wt"))
+    subprocess.run(["git", "-C", str(repo), "commit", "-q", "--allow-empty", "-m", "init"], check=True)
+    cfg = load_config(repo)
+    wt = gitops.create_run_worktree(repo, cfg, "r1", base="main", detached=False)
+    ended = days_ago(SystemClock(), 8)
+    run_dir = make_run(state.factory_home(), repo, "r1", status="done", worktree=wt, ended=ended)
+    run = state.read_run(run_dir)
+    run.pr = PrRef(number=1, url="u", head="r1", base="main")
+    lock = state.acquire_lock(run_dir, "test"); state.write_run(run_dir, run, lock=lock); state.release(lock)
+    set_event_times(run_dir, ended)
+    no_auth = lambda args: subprocess.CompletedProcess(args, 1, "", "To get started with GitHub CLI, please run:  gh auth login")
+    monkeypatch.setattr(api, "default_prs", lambda repo, cfg: GitHubPullRequests(runner=no_auth))
+
+    _, doc = _gc(["--repo", str(repo), "--apply", "--json"], capsys)
+
+    assert wt.exists()
+    [s] = [s for s in doc["data"]["skipped"] if s["path"] == str(wt)]
+    assert s["reason"] == "pull request cannot be read" and "gh auth login" in s["detail"]
