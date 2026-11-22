@@ -239,6 +239,20 @@ hooks:
     run: {script: hooks/post_to_teams.py}  # side effect only, never blocks the run
 ```
 
+**Plugin manifest fields** (`plugin.schema.json`; the schema rejects any other key)
+
+| Field | Required | Meaning |
+| --- | --- | --- |
+| `name`, `version` | yes | The plugin's name and version string |
+| `applies_to` | yes | Workflow names it applies to, such as `bug-fix` |
+| `insert` | yes | `stage` (required) with `id` (required), `needs`, `tasks`, `join`, `gate`, `on_fail`, `on_conflict`, `approval` and `on_reject`, and `after` or `before` naming the stage it goes next to. No other key is allowed |
+| `requires` | no | `skills`: skill names that must be in `skills.lock` |
+| `when` | no | A condition on the run, checked when the inserted stage is reached (see below) |
+| `os` | no | Systems the plugin's scripts may run on: `linux`, `macos`, `windows` |
+| `hooks` | no | A list of `{on, run}`; `on` names events, `run` a `script` or `python` with its `args` |
+
+The schema does not yet take `blocking`, `add_task`, `add_gate` or `replace_skill`; those are phase 1b, as the hook points below say.
+
 **The contract a deterministic task follows**
 
 - **Inputs.** Environment variables `FACTORY_RUN_ID`, `FACTORY_STAGE`, `FACTORY_TASK_ID`, `FACTORY_WORKTREE` and `FACTORY_TASK_DIR`. A Python function also gets the same values as JSON on stdin.
@@ -269,7 +283,7 @@ hooks:
   - 3: `load_config`, `validate`
   - 8: `known_checks`
   - 10: `resolve_skill`, used to fail fast on unknown names
-  - 17A: `language_tasks`, which builds one test task for each detected language the run changed, for `tasks_from: languages` in verify (phase 1b)
+  - 17A: `language_tasks`, which builds one test task for each detected language the run changed. It is not used yet: no shipped workflow names the languages source, so `tasks_from: languages` needs its own wiring in phase 1b. Its signature is in 17A, which takes the worktree, the config, the step and the changed paths, not an artifact file.
 - **Writes:** nothing at run time; `plugins enable` records the reviewed hash in `$FACTORY_HOME/plugin-hashes.json`.
 - **CLI it backs:** `plugins enable`, `plugins disable`.
 

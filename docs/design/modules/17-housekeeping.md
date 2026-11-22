@@ -77,6 +77,19 @@ def cleanup_after_merge(repo: Path, cfg: Config, run: Run) -> None              
 
 Types that `plan` and `apply` take and return. Section 18 does not list them, so `housekeeping.py` is their source. Each list starts empty. `GcItem` defaults `run_id`, `cfg`, `repo`, `zip_path` and `ended` to None, `dirty` to False, `keep_bytes` to 0 and `check_unpushed` to True. `Skipped.detail` defaults to an empty string. In `GcReport`, `archived` holds run ids, and `removed`, `deleted` and `trimmed` hold path strings.
 
+What the `GcItem` fields hold:
+- `kind` and `path`: the kind names what is removed, and `path` is that item's folder, file or worktree.
+- `run_id`: the run the item belongs to, or None for a kit snapshot that no run owns.
+- `cfg`: the run's repo config, read at plan time, or None when the repo is gone.
+- `repo`: the recorded repo path, or None when it is gone. A worktree's branch is deleted from this repo.
+- `dirty`: a worktree that is not clean at plan time. `apply` decides from `cleanup_check`.
+- `zip_path`: for `archive`, the zip's final path. For `archive_delete`, the zip to delete.
+- `ended`: for `archive`, the run's end time as text, written to `history.jsonl`.
+- `keep_bytes`: for `worker_log`, the number of newest bytes kept.
+- `check_unpushed`: True keeps the branch when it has commits no remote has. False is set for a run whose pull request merged.
+
+`Skipped.reason` is a short text from a fixed set in the code: `pull request open`, `pull request cannot be read`, `not clean; kept until it is due or removed by hand`, `not clean, and no cleanup_check is set`, `joined task, not clean; the run is still active`, `an engine holds the run lock; not touched`, `the repo is gone; the worktree cannot be checked or removed`, `the recorded worktree is the repo itself; never removed`, and `its repo config is invalid; the worktrees are kept`. `Skipped.detail` carries the variable part, such as the check's output, the `gh` error, or the branch and commit count.
+
 ```python
 class GcItem:   kind: Literal["worktree", "archive", "archive_delete", "kit", "worker_log"]; path: Path; run_id: str | None; cfg: Config | None; repo: Path | None; dirty: bool; zip_path: Path | None; ended: str | None; keep_bytes: int; check_unpushed: bool
 class Skipped:  path: Path; run_id: str | None; reason: str; detail: str
@@ -96,7 +109,7 @@ class GcReport: removed: list[str]; archived: list[str]; deleted: list[str]; tri
   - A worktree that git cannot read counts as not clean.
   - Every period counts from the run's end, except `delete_archive_after_days`, which counts from the zip's modification time (when it was written).
   - A run whose `status` is `running` with no live lock is not ended, so `gc` does not archive it or remove its worktrees, however old its last event is. `lock_status` is read only for ended runs, to see whether an engine holds a lock.
-  - `apply` re-reads the lock and status of a run only before it archives it. It then takes the lock without waiting, and skips the run if it is no longer ended. The kit step re-reads every run folder's `kit_hash`. The worktree removal, the log cut and the zip delete do not re-read the lock or the status. So a run resumed after `plan` loses its worktrees, and its log is cut. A probe set a planned run to `running` between `plan` and `apply`, and its worktree was removed. This is a possible bug: it breaks the rule that an active run is never touched, which the tests check only for runs that are active at plan time.
+  - `apply` re-reads the lock and status of a run only before it archives it. It then takes the lock without waiting, and skips the run if it is no longer ended. The kit step re-reads every run folder's `kit_hash`. The worktree removal, the log cut and the zip delete do not re-read the lock or the status. So a run resumed after `plan` loses its worktrees, and its log is cut. A probe set a planned run to `running` between `plan` and `apply`, and its worktree was removed. This is a known defect: it breaks the rule above that an active run is never touched, which the tests check only for runs that are active at plan time. The fix is for `apply` to re-check the lock and status before each removal, which is a code change, not a spec change.
   - `gc` cuts a `worker.log` only for an ended run that is not yet due for archive. A running run's log is never cut. A log over the cap is cut to its newest `worker_log_max_mb` bytes. A run due for archive is archived as it is, without a cut.
   - `cleanup_check` runs with a timeout of 300 seconds. A command that is missing or cannot start counts as a failed check.
   - `apply` runs the items in this order: worktrees, archives, archive deletes, kits, log cuts. Then it runs `git worktree prune` in each repo that had a worktree or archive item.
