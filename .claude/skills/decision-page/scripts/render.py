@@ -14,6 +14,8 @@ from pathlib import Path
 MECHANISM = ("script", "function", "module", "adapter", "schema", "json", "yaml", "api", "endpoint", "flag", "class",
              "dataclass", "runner", "hook", "regex", "parser", "argparse", "refactor")
 # "commit" is not on the list: in a repo it is something the user does, not how the tool works inside.
+# The stop triggers in AGENTS.md (Working rules). A card that meets none of them is decided by the session, not asked.
+TRIGGERS = ("reopens-decision", "changes-scope", "costly-to-reverse", "no-clear-winner")
 INTERNAL_ID = re.compile(r"\b(?:[A-Z]{1,2}\d{1,2}[A-Z]?|module \d+[A-Z]?)\b")
 
 def fail(msg):
@@ -46,6 +48,10 @@ def validate(doc):
             text(d, "context", i)
             warn(f"{i}: old shape (one 'context'); write 'question', 'today', 'after' and 'preview' instead")
         else:
+            if d.get("trigger") not in TRIGGERS:
+                fail(f"{i}: 'trigger' is {d.get('trigger')!r}, not one of {', '.join(TRIGGERS)}; "
+                     "a choice with no stop trigger is not asked: decide it at the recommendation and log it in docs/decisions.md")
+            text(d, "trigger_detail", i)
             for k in ("question", "today", "after", "preview"): text(d, k, i)
             if not d["question"].rstrip().endswith("?"): fail(f"{i}: 'question' must be a question the user would ask")
             for k in ("question", "today", "after"):

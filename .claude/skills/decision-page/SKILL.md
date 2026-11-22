@@ -13,7 +13,7 @@ The page (`<name>.json` and the `<name>.html` rendered from it) is created in **
 
 ## Steps
 
-1. **Triage first.** Work through every finding yourself. Fix what a check can settle (run it, show the output). Apply the recommended option yourself, and log it as "decided at recommendation, reversible", unless the choice reopens a recorded decision or an ADR, changes scope or phase, costs a lot to reverse, or has no option that is clearly better. A finding the spec already answers is a build task, not a card. If a finding needs a machine or login you do not have, make it a task. Keep for the page only what is left. Done when each finding is fixed with evidence, applied at the recommendation, made a task or listed as a decision. If nothing is left, do not build a page.
+1. **Triage first.** Work through every finding yourself. Fix what a check can settle (run it, show the output). A bug fix or record upkeep is a commit, not a card. Apply the recommended option yourself and add one line to `docs/decisions.md`, unless the choice meets a **stop trigger** in `AGENTS.md` (Working rules). A finding the spec already answers is a build task, not a card. If a finding needs a machine or login you do not have, make it a task. Keep for the page only the stop triggers, at most one page a day. Done when each finding is fixed with evidence, logged in `docs/decisions.md`, made a task, or listed as a card with its `trigger`. If nothing is left, do not build a page.
 2. **Check facts before writing options.** A fact in a card (a tool, a flag, a file, what a run does) is looked up by running something (`--help`, a probe, a test run), not remembered or read off the source. Done when every factual claim has a command behind it, and a claim you only read in code says so on the card.
 3. **Write `decisions.json`** to the schema below, in `.scratch/<name>.json` (create the folder if it is missing). Never write the page under `docs/`: it would be tracked, and the ADR is the record.
 4. **Read it as an outsider.** For each option, answer from its `see` and `asks` alone: what changes for someone who has never seen the codebase? If you cannot, rewrite the card. Done when every option passes.
@@ -23,11 +23,11 @@ The page (`<name>.json` and the `<name>.html` rendered from it) is created in **
 8. **Close each decision the moment it is answered.** Each line of the pasted prompt names a decision and an option id. For every line, in this order and before moving to the next line or the next piece of work:
    1. **Apply** the option to the spec or code, and keep related sections consistent.
    2. **Backfill the ADR** (below). One ADR per decision, written now.
-   3. **Create the task** (below). One task per decision, created now, even when the work is already done.
+   3. **Record it in the task list** (below): a Log line now, and an item only when work is left.
    4. **Commit** the ADR and the task entry, following the trailer rules in `AGENTS.md` (`Agent-Run:`, and `Decision: <adr id>` because the commit writes a decision). Do not push unless asked.
 
    A line marked `NOT SURE` is not made yet. Answer the question, and do not apply the option. Preserve it anyway: write the ADR with `status: proposed` (the options, what each costs, the user's question and your answer, no `Decision` yet) and create a task that says it waits on the user. That card is not closed, so the page stays. When the user decides, finish the same ADR (`status: accepted`, add the Decision and Why) in place and update its task.
-9. **Remove the page only when every card is closed.** A card is closed when all of these are true, each checked by looking, not remembered: the option is applied (or, for `NOT SURE`, answered and waiting with a `proposed` ADR); `docs/adr/<date>-<slug>.md` exists and names the decision id and the option id; `docs/tasks.md` has the task and names that ADR file; both are committed (`git status` shows nothing for them); and `python3 -I scripts/docs-check/records.py .` prints `0 problem(s)`. If any card fails a check, fix it, and keep the page. If any card is still `NOT SURE`, keep the page. Then `rm .scratch/<name>.json .scratch/<name>.html` (plain `rm`: they are untracked). Report each decision with its ADR and task, then the removal. Done when `.scratch/<name>.*` is gone and nothing in the repo points at it as the only copy.
+9. **Remove the page only when every card is closed.** A card is closed when all of these are true, each checked by looking, not remembered: the option is applied (or, for `NOT SURE`, answered and waiting with a `proposed` ADR); `docs/adr/<date>-<slug>.md` exists and names the decision id and the option id; `docs/tasks.md` names that ADR file (in a Log line, and in an item if work is left); both are committed (`git status` shows nothing for them); and `python3 -I scripts/docs-check/records.py .` prints `0 problem(s)`. If any card fails a check, fix it, and keep the page. If any card is still `NOT SURE`, keep the page. Then `rm .scratch/<name>.json .scratch/<name>.html` (plain `rm`: they are untracked). Report each decision with its ADR and task, then the removal. Done when `.scratch/<name>.*` is gone and nothing in the repo points at it as the only copy.
 
 ## ADR backfill
 
@@ -43,9 +43,9 @@ Look at two or three recent files in `docs/adr/` (for example `2026-11-20-which-
 
 The follow-up task goes in **`docs/tasks.md`**, which is where this project keeps its durable state. Do not invent another list.
 
-- Add a numbered item to the "Not done" list (style of the existing items), and a dated line in the Log. The ADR file name must appear in `docs/tasks.md` (`records.py` fails otherwise).
+- Add a dated line in the Log, and a numbered item to the "Not done" list when work is left. The ADR file name must appear in `docs/tasks.md` or `docs/tasks-archive.md` (`records.py` fails otherwise).
 - The item says: the owner's decision and date, the ADR file name, the option chosen; what to change, in files and functions; how to check it (the test, or the command); and what is not built yet.
-- If the option is already applied in the same turn, the item is a `[x]` with the evidence (test name, commit, command output) and the Log line says so. If it is not built, it is `[ ]` and says "not built". If the decision needs no build work, the item says so in one line; do not skip the item.
+- If the option is already applied in the same turn, or needs no build work, skip the numbered item: the Log line names the ADR file and the evidence (test name, commit, command output). If work is left, the item is `[ ]` and says "not built".
 
 ## Schema
 
@@ -57,6 +57,8 @@ The follow-up task goes in **`docs/tasks.md`**, which is where this project keep
   "storage_key": "unique-per-page",
   "decisions": [{
     "id": "D1", "title": "Short noun phrase", "ref": "Where it lands (module, section)",
+    "trigger": "reopens-decision | changes-scope | costly-to-reverse | no-clear-winner",
+    "trigger_detail": "One sentence: which decision it reopens, what scope moves, what is costly to undo, or why no option wins.",
     "question": "The question the user would ask, in their words?",
     "today": "What the user sees or does now, with one real fact from their project.",
     "after": "What the user would see or do after the recommended option.",
@@ -73,7 +75,7 @@ The follow-up task goes in **`docs/tasks.md`**, which is where this project keep
 }
 ```
 
-Rules the renderer enforces: unique ids; exactly one recommended option per decision; 2 to 4 options; at least one pro and one con each; every text field non-empty; `question` ends with `?`; `see` holds no builder word (script, module, schema, JSON, flag, function and the like); `question`, `today` and `after` name no id such as `D1` or `module 8` that is not a card on the page. "Not sure" is added to every card by the page. A page in the old shape (one `context`, no `see` or `asks`) still renders, with a warning, so answered pages stay readable.
+Rules the renderer enforces (tests: `scripts/test_render.py`): each card has a `trigger` from the four stop triggers and a non-empty `trigger_detail`, shown on the page as "Asked because"; unique ids; exactly one recommended option per decision; 2 to 4 options; at least one pro and one con each; every text field non-empty; `question` ends with `?`; `see` holds no builder word (script, module, schema, JSON, flag, function and the like); `question`, `today` and `after` name no id such as `D1` or `module 8` that is not a card on the page. "Not sure" is added to every card by the page. A page in the old shape (one `context`, no `see` or `asks`) still renders, with a warning, so answered pages stay readable.
 
 ## Writing decisions
 
