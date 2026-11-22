@@ -43,3 +43,15 @@ def test_fetch_pairs_the_merged_prs_with_the_open_issue_numbers(monkeypatch):
     answers = {"pr": [pr(1, "x (#2)")], "issue": [{"number": 2}, {"number": 9}]}
     monkeypatch.setattr(issue_close, "_gh", lambda args, cwd: answers[args[0]])
     assert issue_close.fetch(".") == ([pr(1, "x (#2)")], {2, 9})
+
+
+def test_a_record_with_no_title_is_not_an_error():
+    assert open_issue_problems([{"number": 7, "mergedAt": "2026-11-22T01:00:00Z"}], {1}) == []
+
+
+def test_a_full_list_is_reported_as_skipped_because_it_may_have_been_cut_short(monkeypatch):
+    full = [pr(n, "x") for n in range(issue_close.LIMIT)]
+    monkeypatch.setattr(issue_close, "_gh", lambda args, cwd: full if args[0] == "pr" else [])
+    assert issue_close.fetch(".") is None
+    monkeypatch.setattr(issue_close, "_gh", lambda args, cwd: [] if args[0] == "pr" else [{"number": n} for n in range(issue_close.LIMIT)])
+    assert issue_close.fetch(".") is None
