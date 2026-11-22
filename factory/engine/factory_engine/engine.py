@@ -522,6 +522,30 @@ class Engine:
         state.write_task(run_dir, ts, lock=lock)
         state.append_event(run_dir, "task_created", task_id=spec.id, stage=stage.id, skipped=True)
 
+    def _was_skipped(self, run_dir: Path, task_id: str) -> bool:
+        """A skipped task is `done` with no worktree (`_skip_task`), so it never made a branch. Every task that ran has one."""
+        ts = state.read_task(run_dir, task_id) if (run_dir / "tasks" / task_id / "task.json").is_file() else None
+        return ts is not None and ts.status == "done" and ts.worktree is None
+
+    def _base_branches(self, run: Run, run_dir: Path, stage: Stage, spec: TaskSpec) -> list[str]:
+        """The branches a task starts from (module 7): its dependencies' branches, or the run branch when it has none.
+        A dependency that was skipped made no branch, so the branches it would have built on stand in for it."""
+        by_id = {s.id: s for s in self._specs(stage, run_dir)}
+        out: list[str] = []
+        for n in spec.needs:
+            found = ([f"{run.run_id}--{n}"] if not self._was_skipped(run_dir, n)
+                     else self._base_branches(run, run_dir, stage, by_id[n]) if n in by_id and by_id[n].needs else [])
+            out += [b for b in found if b not in out]
+        return out or [self._run_ref(run)]
+
+    @staticmethod
+    def _run_ref(run: Run) -> str:
+        """What a task with no dependency starts from: the run branch, or for a read-only run (detached, module 7) the
+        commit the run worktree is at, since no branch named after the run exists until delivery."""
+        if run.branch:
+            return run.run_id
+        return gitops.git(run.worktree, "rev-parse", "HEAD").stdout.strip()
+
     def _task_state(self, run_dir: Path, lock: Lock, stage: Stage, spec: TaskSpec) -> TaskState:
         if (run_dir / "tasks" / spec.id / "task.json").is_file():
             return state.read_task(run_dir, spec.id)
@@ -539,10 +563,9 @@ class Engine:
             worktree = state.task_dir(run_dir, spec.id) / "work"  # triage has no repo (module 4)
             worktree.mkdir(parents=True, exist_ok=True)
         else:
-            worktree = ts.worktree or gitops.create_task_worktree(
-                self.repo, self.cfg, run.run_id, spec.id,
-                base_branches=[f"{run.run_id}--{n}" for n in spec.needs] or [run.run_id])
-            ts.task_base = f"{run.run_id}--{spec.needs[0]}" if spec.needs else run.run_id
+            bases = self._base_branches(run, run_dir, stage, spec)
+            worktree = ts.worktree or gitops.create_task_worktree(self.repo, self.cfg, run.run_id, spec.id, base_branches=bases)
+            ts.task_base = bases[0]
         ts.worktree = worktree
         harness = self._harness_of(spec)
         attempt = usage_mod.start_attempt(run_dir, run, spec.id, stage=stage.id, harness=harness, model_requested=spec.model)
@@ -723,7 +746,7 @@ class Engine:
     def _join_and_gate(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, result: TickResult) -> TickResult:
         specs = self._specs(stage, run_dir)
         branches = [TaskBranch(s.id, f"{run.run_id}--{s.id}", state.read_task(run_dir, s.id).task_base or run.run_id)
-                    for s in specs]
+                    for s in specs if not self._was_skipped(run_dir, s.id)]
         pre_join = gitops.git(run.worktree, "rev-parse", "HEAD").stdout.strip()
         join = gitops.join(run.worktree, branches, regenerate=wf.regenerate_at_join, join_cmd=wf.join_cmd)
         if not join.ok:
