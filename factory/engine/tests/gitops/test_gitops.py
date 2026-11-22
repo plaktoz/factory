@@ -377,6 +377,25 @@ def test_snapshot_is_made_from_committed_content_and_shared_by_equal_content(rep
     assert [p.name for p in (home / "kits").iterdir()] == [h1]  # one folder for the same content
 
 
+def test_an_interrupted_snapshot_copy_leaves_no_kit_folder_and_the_next_one_succeeds(repo, tmp_path, monkeypatch):
+    """Module 3, Run snapshot: the copy goes into kits/<hash>.tmp and is renamed only when whole."""
+    commit_kit(repo)
+    home = tmp_path / "home"
+    real = gitops.Path.rename
+
+    def dies(self, target):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(gitops.Path, "rename", dies)
+    with pytest.raises(KeyboardInterrupt):
+        gitops.snapshot_kit(repo, "HEAD", home)
+    assert [p.name for p in (home / "kits").iterdir() if not p.name.endswith(".tmp")] == []  # no half kit
+    monkeypatch.setattr(gitops.Path, "rename", real)
+    h = gitops.snapshot_kit(repo, "HEAD", home)
+    assert (home / "kits" / h / "factory" / "workflows" / "bug-fix.yaml").is_file()
+    assert [p.name for p in (home / "kits").iterdir()] == [h]  # the leftover .tmp was removed first
+
+
 def test_snapshot_is_unchanged_when_the_main_checkout_is_edited_afterwards(repo, tmp_path):
     commit_kit(repo)
     home = tmp_path / "home"

@@ -95,7 +95,7 @@ flowchart LR
   rule --> c["Model: no flag sent,<br/>observed model recorded"]
 ```
 
-Machine settings (worktree root, tool paths, desktop notifications) come from the per-machine file. Repo settings come from `factory.yaml`. The one environment override built is `FACTORY_WORKTREE_ROOT`, which replaces `worktree_root`. No CLI flag changes config yet; the precedence the criterion below asks for is not built.
+Machine settings (worktree root, tool paths) come from the per-machine file. Notification settings (`notify`, including desktop) come from `factory.yaml`. Repo settings come from `factory.yaml`. The one environment override built is `FACTORY_WORKTREE_ROOT`, which replaces `worktree_root`. No CLI flag changes config yet; the precedence the criterion below asks for is not built.
 
 **Defaults.** These are the values a key takes when its file does not set it. Machine: `max_workers: 6`. Repo: `concurrency: 4`, `infra_wait_hours: 6`, `serialize_overlapping_runs: false`. Any other key has no default and is off until its module reads it.
 
@@ -210,7 +210,7 @@ Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is 
 
 **Module contract: 3 Kit and configuration**
 
-- **Depends on:** nothing (foundation). `doctor` here checks only what this module owns: `git`, `gh`, credentials and `factory.yaml`. The checks of 9 (harness binaries, the sandbox canary, the probe worker), 10 (the skills lock and pack size) and 17A (toolchains) are added by the driver's `api.doctor` ([module 16](16-drivers.md)), because those modules depend on 3 and 3 may not import them. Today `api.doctor` adds the 10 checks (`skills-lock`, `practice-packs`) and the 17A checks; the 9 checks (canary, probe, harness binaries) are not wired in yet, and their criteria stay unticked.
+- **Depends on:** 18 (shared types and schemas). `doctor` here checks only what this module owns: `git`, `gh`, credentials and `factory.yaml`. The checks of 9 (harness binaries, the sandbox canary, the probe worker), 10 (the skills lock and pack size) and 17A (toolchains) are added by the driver's `api.doctor` ([module 16](16-drivers.md)), because those modules depend on 3 and 3 may not import them. Today `api.doctor` adds the 10 checks (`skills-lock`, `practice-packs`) and the 17A checks; the 9 checks (canary, probe, harness binaries) are not wired in yet, and their criteria stay unticked.
 - **Writes:** `factory/`, `.factory/config/*`, `.factory/.gitignore`, `~/.factory/config.yaml`, the env file.
 - **CLI it backs:** `init`, `upgrade`, `doctor`, `config init`.
 
@@ -218,7 +218,7 @@ Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is 
 # config.py
 def load_config(repo: Path | None, *, env: Mapping[str, str] = os.environ) -> Config
     """Merge defaults, machine file and repo file; machine keys from the machine file,
-    repo keys from the repo file; env vars and flags override. Validates against schema.
+    repo keys from the repo file; the one environment override built is FACTORY_WORKTREE_ROOT (precedence is open, see criteria). Validates against schema.
     Returns Config(machine=..., repo=...); repo is None when the repo argument is None."""
 def resolve_harness(cfg: Config, harness: str, *, env: Mapping[str, str] = os.environ) -> HarnessConfig
     """command, model (None when unset), args and the minimal env with ${...} resolved at call time."""
@@ -257,6 +257,11 @@ Acceptance criteria:
 - [x] `upgrade` refuses to replace the folder it copies from and changes nothing. (test: factory/engine/tests/kit/test_kit.py::test_upgrade_refuses_to_replace_the_folder_it_copies_from; fails on the old code)
 - [x] A config the new schema refuses is reported after the kit is replaced, and `.factory/config/` is untouched. (test: factory/engine/tests/kit/test_kit.py::test_a_config_the_new_schema_refuses_is_reported_after_the_kit_is_replaced, ::test_upgrade_reports_a_config_the_new_schema_refuses)
 - [x] `cleanup_check` must be a list of strings, never a shell string; anything else fails with `config.invalid` and the fix. (test: factory/engine/tests/config/test_config.py::test_cleanup_check_must_be_a_list_of_strings, ::test_load_config_refuses_a_bad_repo_file)
+- [x] A process that dies between moving `factory/` aside and putting the new kit in place leaves no `factory/`; the next `upgrade` installs the new kit and removes `factory.old/`, and does not report "run factory init first". (test: factory/engine/tests/kit/test_kit.py::test_upgrade_after_a_crash_between_the_swap_steps_installs_the_new_kit_and_keeps_the_old_one_until_then)
+- [x] A repo with no `factory.yaml` loads with the repo defaults, and no `~/.factory/config.yaml` loads with the machine defaults. (test: factory/engine/tests/config/test_config.py::test_a_missing_machine_file_and_a_missing_repo_file_load_with_the_defaults)
+- [x] `FACTORY_WORKTREE_ROOT` replaces `worktree_root` from the machine file. (test: factory/engine/tests/config/test_config.py::test_factory_worktree_root_replaces_the_machine_worktree_root)
+- [x] An interrupted snapshot copy leaves no `kits/<hash>` folder, and the next snapshot removes the leftover `.tmp` and succeeds. (test: factory/engine/tests/gitops/test_gitops.py::test_an_interrupted_snapshot_copy_leaves_no_kit_folder_and_the_next_one_succeeds)
+- [x] `doctor` exits 1 when any check fails and 0 when all pass. (test: factory/engine/tests/kit/test_kit.py::test_doctor_in_the_cli_exits_1_when_a_check_fails_and_0_when_all_pass)
 - [x] A repo file with no `cleanup_check` and no model loads, and `resolve_harness` returns no model. (test: factory/engine/tests/config/test_config.py::test_repo_without_cleanup_check_or_model_loads_and_resolves_no_model)
 
 ## Decisions
