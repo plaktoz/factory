@@ -14,15 +14,20 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    MAX_BEHIND merges behind it.
 4. A PR that docs/tasks.md calls open or blocked (the same item says "not merged", "open and
    not merged" or "blocked") must not already be merged on origin/main.
-5. Every ADR dated TRACKED_FROM or later is named by file name in docs/tasks.md (Log or task), so
-   the session that records a decision also updates the task list.
+5. Every ADR dated TRACKED_FROM or later is named by file name in docs/tasks.md or
+   docs/tasks-archive.md (Log or task), so the session that records a decision also updates the task list.
 6. docs/reviews/ is retired (last commit 746ec67): the folder must not exist, and
    docs/tasks.md must not name it. ADRs may still cite it; they are not edited.
+7. The Log in docs/tasks.md has at most LOG_CAP entries; older ones move to docs/tasks-archive.md,
+   so tasks.md stays live state a session can read whole.
+8. Each entry line of docs/decisions.md has the form "- YYYY-MM-DD `slug`: ... Undo: ...", so every
+   choice made at the recommendation can be found and reversed.
 """
 import json, re, subprocess, sys
 from pathlib import Path
 
 MAX_BEHIND = 3
+LOG_CAP = 12
 TRACKED_FROM = "2026-11-16"  # the 33 ADRs backfilled on 2026-11-14 and 15 are exempt
 root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 problems = []
@@ -95,9 +100,23 @@ for item in re.split(r"\n(?=\d+\. |\*\*)", tasks):
         if n in merged_prs:
             problems.append(f"tasks.md: PR #{n} is called open or blocked but is merged on origin/main: {head[:80]!r}")
 
+archive_path = root / "docs/tasks-archive.md"
+archive = archive_path.read_text(encoding="utf-8") if archive_path.exists() else ""
 for adr in sorted((root / "docs/adr").glob("*.md")):
-    if adr.name[:10] >= TRACKED_FROM and adr.name not in tasks:
+    if adr.name[:10] >= TRACKED_FROM and adr.name not in tasks and adr.name not in archive:
         problems.append(f"tasks.md does not name {adr.name}; a decision is not carried through until the task list says so")
+
+log = tasks.split("\n## Log", 1)[1] if "\n## Log" in tasks else ""
+entries = len(re.findall(r"^- 20\d\d-\d\d-\d\d", log, re.M))
+if entries > LOG_CAP:
+    problems.append(f"tasks.md: the Log has {entries} entries (max {LOG_CAP}); move the oldest to docs/tasks-archive.md")
+
+decisions_path = root / "docs/decisions.md"
+if decisions_path.exists():
+    for n, line in enumerate(decisions_path.read_text(encoding="utf-8").split("\n"), 1):
+        if re.match(r"- \d{4}-\d\d-\d\d ", line):
+            if not re.match(r"- \d{4}-\d\d-\d\d `[a-z0-9][a-z0-9-]*`: .+ Undo: .+", line):
+                problems.append(f"decisions.md:{n}: write '- YYYY-MM-DD `slug`: what was chosen, over what. Undo: how'")
 
 RETIRED = "docs/reviews"
 if (root / RETIRED).exists():

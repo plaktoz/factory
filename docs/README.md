@@ -8,6 +8,8 @@
 | `setup/` | Step-by-step setup for a piece of work the owner runs by hand, such as [the spec workflow pilot](setup/spec-workflow-pilot.md). |
 | `tutorial.md` | A first run in a new project: install, `init`, `add`, `run`. |
 | `tasks.md` | The task list and its state. Read "Resume here" to continue the work from the file alone. |
+| `tasks-archive.md` | Closed items, finished sections and older Log entries moved from `tasks.md`, unchanged. History only. |
+| `decisions.md` | Reversible choices a session made at the recommendation, one line each, with how to undo it. Skim it to veto. |
 | `approvals.md` | Standing owner approvals and whether each was carried through to every doc and task. |
 | `research/` | Primary-source notes, such as CLI flags and output formats. |
 
