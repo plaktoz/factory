@@ -151,8 +151,10 @@ def test_an_open_attempt_is_not_counted_in_a_report(tmp_path):
 def test_a_bad_exit_value_is_refused(tmp_path):
     run_dir, run = make(tmp_path)
     n = usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
+    before = ((run_dir / "tasks" / "backend" / "usage.jsonl").read_bytes(), len(state.read_events(run_dir)))
     with pytest.raises(FactoryError, match="not one of"):
         usage.finish_attempt(run_dir, "backend", n, exit="maybe", input_tokens=None, output_tokens=None, models=[])
+    assert ((run_dir / "tasks" / "backend" / "usage.jsonl").read_bytes(), len(state.read_events(run_dir))) == before
 
 
 def test_a_started_record_is_schema_valid(tmp_path):
@@ -273,3 +275,14 @@ def test_factory_usage_json_carries_the_total(tmp_path, capsys, monkeypatch):
     cli.main(["usage", "--repo", str(tmp_path / "report"), "--json"])
     doc = json.loads(capsys.readouterr().out)
     assert doc["data"]["total"]["attempts"] == 1 and doc["data"]["total"]["total_tokens"] == 10
+
+
+def test_an_attempt_belongs_to_the_day_in_its_own_offset_for_since(tmp_path):
+    """Module 14: the day is the one in the attempt's `start`, as written with its own offset, not the UTC day."""
+    run_dir, run = make(tmp_path)
+    n = usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
+    usage.finish_attempt(run_dir, "backend", n, exit="ok", input_tokens=1, output_tokens=1, models=["m"])
+    set_times(run_dir, n, "2021-01-01T00:30:00+08:00", "2021-01-01T00:40:00+08:00")  # 2020-12-31 in UTC
+    assert usage.summarize([run_dir], since=date(2021, 1, 1)).by_day["2021-01-01"].attempts == 1
+    assert "2020-12-31" not in usage.summarize([run_dir]).by_day
+    assert usage.summarize([run_dir], since=date(2021, 1, 2)).total.attempts == 0
