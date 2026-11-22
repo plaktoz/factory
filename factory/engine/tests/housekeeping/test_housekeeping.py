@@ -619,3 +619,99 @@ def test_api_gc_asks_the_pull_request_client_so_a_merged_pr_frees_the_worktree(h
     prs.human_merge(pr)
     api.gc(repo, apply=True)
     assert not wt.exists(), "a merged pull request frees it"
+
+
+# --- issue 86: gc reads the real GitHub client, one `gh pr view` per due run, and keeps what it cannot check ---
+
+def _gh_stub(states, calls, *, fail=None):
+    """A `gh` runner: replies to `pr view <n>` with states[n]; a number not in `states` is a deleted pull request."""
+    import subprocess
+
+    def run(args):
+        calls.append(list(args))
+        if fail:
+            return subprocess.CompletedProcess(args, 1, "", fail)
+        number = int(args[2])
+        if number not in states:
+            return subprocess.CompletedProcess(args, 1, "", "GraphQL: Could not resolve to a PullRequest with the number "
+                                                            f"of {number}. (repository.pullRequest)")
+        return subprocess.CompletedProcess(args, 0, json.dumps({"state": states[number], "statusCheckRollup": []}), "")
+    return run
+
+
+def _three_runs(home, repo, cfg, clock, tmp_path, names=("open", "merged", "closed")):
+    """One ended run past retention per name, each with its own fake-created pull request (numbers 1, 2, 3)."""
+    from factory_engine.fake_prs import FakePullRequests
+    maker = FakePullRequests()
+    wts = {}
+    for name in names:
+        wts[name] = worktree_for(cfg, repo, name)
+        run_dir = make_run(home, repo, name, status="done", worktree=wts[name], ended=days_ago(clock, 8))
+        open_pr_for(run_dir, wts[name], maker, tmp_path, days_ago(clock, 8))
+    return wts
+
+
+def test_gc_asks_github_once_per_due_run_and_frees_only_the_merged_and_closed(home, repo, cfg, clock, tmp_path):
+    from factory_engine.gh import GitHubPullRequests
+    wts = _three_runs(home, repo, cfg, clock, tmp_path)
+    calls = []
+    prs = GitHubPullRequests(runner=_gh_stub({1: "OPEN", 2: "MERGED", 3: "CLOSED"}, calls))
+
+    p = plan(home, cfg, now=clock.now(), prs=prs)
+    report = apply(p)
+
+    assert sorted(i.run_id for i in items_of(p, "worktree")) == ["closed", "merged"]
+    assert wts["open"].exists() and not wts["merged"].exists() and not wts["closed"].exists()
+    assert [c[:2] for c in calls] == [["pr", "view"]] * 3 and sorted(c[2] for c in calls) == ["1", "2", "3"]
+    assert [s.reason for s in report.skipped if s.run_id == "open"] == ["pull request open"]
+
+
+def test_gc_does_not_ask_github_about_a_run_that_is_not_due(home, repo, cfg, clock, tmp_path):
+    from factory_engine.fake_prs import FakePullRequests
+    from factory_engine.gh import GitHubPullRequests
+    wt = worktree_for(cfg, repo, "young")
+    run_dir = make_run(home, repo, "young", status="done", worktree=wt, ended=days_ago(clock, 1))
+    open_pr_for(run_dir, wt, FakePullRequests(), tmp_path, days_ago(clock, 1))
+    calls = []
+
+    apply(plan(home, cfg, now=clock.now(), prs=GitHubPullRequests(runner=_gh_stub({1: "MERGED"}, calls))))
+
+    assert calls == [] and wt.exists()
+
+
+def test_gc_removes_nothing_and_says_why_when_gh_cannot_reach_github(home, repo, cfg, clock, tmp_path):
+    from factory_engine.gh import GitHubPullRequests
+    wts = _three_runs(home, repo, cfg, clock, tmp_path)
+    prs = GitHubPullRequests(runner=_gh_stub({}, [], fail="To get started with GitHub CLI, please run:  gh auth login"))
+
+    report = apply(plan(home, cfg, now=clock.now(), prs=prs))
+
+    assert all(w.exists() for w in wts.values()) and report.removed == []
+    held = {s.run_id: s for s in report.skipped if s.run_id in wts}
+    assert set(held) == set(wts)
+    assert all(s.reason == "pull request cannot be read" and "gh auth login" in s.detail for s in held.values())
+
+
+def test_a_deleted_pull_request_keeps_its_worktree_and_is_reported_not_treated_as_closed(home, repo, cfg, clock, tmp_path):
+    from factory_engine.gh import GitHubPullRequests
+    wts = _three_runs(home, repo, cfg, clock, tmp_path, names=("gone",))
+    prs = GitHubPullRequests(runner=_gh_stub({}, []))
+
+    report = apply(plan(home, cfg, now=clock.now(), prs=prs))
+
+    assert wts["gone"].exists() and branch_exists(repo, "gone") and report.removed == []
+    [s] = [s for s in report.skipped if s.run_id == "gone"]
+    assert s.reason == "pull request cannot be read" and "Could not resolve to a PullRequest" in s.detail
+
+
+def test_a_deleted_pull_request_in_the_fake_is_kept_the_same_way(home, repo, cfg, clock, tmp_path):
+    from factory_engine.fake_prs import FakePullRequests
+    prs = FakePullRequests()
+    wt = worktree_for(cfg, repo, "gone")
+    run_dir = make_run(home, repo, "gone", status="done", worktree=wt, ended=days_ago(clock, 8))
+    open_pr_for(run_dir, wt, prs, tmp_path, days_ago(clock, 8))
+    del prs.prs[1]
+
+    report = apply(plan(home, cfg, now=clock.now(), prs=prs))
+
+    assert wt.exists() and any(s.run_id == "gone" and s.reason == "pull request cannot be read" for s in report.skipped)
