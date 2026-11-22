@@ -237,5 +237,5 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 
 | Rule | Why | Not chosen | Id |
 | --- | --- | --- | --- |
-| Freeze the 20 shared types now, with the shapes proposed in the readiness review, in this section. | Types that cross modules are where parallel builds fail. Fixing them first costs less than reconciling later. | `freeze-core`: freeze only the types already listed, and let each module define the rest. | `2026-11-14-freeze-shared-types` (R1) |
+| Freeze the 20 shared types now (the body counts 21 with `ErrorKind`, which the ADR did not list), with the shapes proposed in the readiness review, in this section. | Types that cross modules are where parallel builds fail. Fixing them first costs less than reconciling later. | `freeze-core`: freeze only the types already listed, and let each module define the rest. | `2026-11-14-freeze-shared-types` (R1) |
 | Commands in gates and `join_cmd` are lists of strings. A string fails at load with `config.invalid`. | Nine examples are cheap to fix now. A list keeps one meaning for the frozen type. | `split-string` (hidden shlex rule); `string-is-shell` (breaks Windows, opens injection). | `2026-11-14-commands-are-lists-only` (Q3) |
