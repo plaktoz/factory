@@ -98,7 +98,7 @@ factory add "Greet with an exclamation mark" --type chore --no-run
 created run greet-with-an-exclamation-mark-6v61l
 ```
 
-`--no-run` creates the run and starts nothing. `factory status` lists it.
+`--no-run` creates the run and starts nothing. `factory status --json` lists it (without `--json`, `status` prints only a count).
 
 ### 5. Run it
 
@@ -132,7 +132,7 @@ greet-with-an-exclamation-mark-zavus [merge_review] Pull request #4 waits for re
 This stop is the merge policy at work. A `chore` is not in the `auto` list in `.factory/config/merge-policy.yaml`, so a person reviews and merges it. Open the pull request, read the diff (it changes `src/hello.py` and the assertion in `scripts/check`), and merge it on GitHub, or from the terminal:
 
 ```sh
-gh pr merge 4 --merge
+gh pr merge <pr-number> --merge   # the number of the pull request the run opened
 ```
 
 The run does not notice the merge by itself. A scheduled `tick` does, and you can run one by hand:
@@ -145,7 +145,7 @@ factory tick
 started 1, resumed 0
 ```
 
-`factory status` now shows the run as `done`. To run `tick` for you every few minutes, use `factory schedule install`.
+`factory status --json` now shows the run as `done`. To run `tick` for you every few minutes, use `factory schedule install`.
 
 **The pull request body.** Its `What changed` section reads `Not available: the run's worktree could not be read` when your base branch is not the repo's default branch. Your branch from step 2 is the default, so you will see the file list.
 
@@ -173,7 +173,7 @@ It prints a URL with a token, and the server keeps running after the command ret
 - **Runs.** One row per run: repo, title, stage and status. Click a row to see its files and events.
 - **Show JSON.** The raw state, from `/api/state.json`. The API needs the `X-Factory-Token` header, which the page sends for you. A request with the token only in the address gets `403`.
 
-The page refreshes every 5 seconds. A warning at the top says `no tick has been recorded yet` until a `tick` runs. If you lose the URL, the token is in `$FACTORY_HOME/dashboard.json`. To stop the server, read its pid from `dashboard.json` (the `pid` field) and run `kill <pid>`. Do not use `pkill -f`: it matches any process whose command line names the server, such as a scan of its source file.
+The page refreshes every 5 seconds. A warning at the top says `no tick has been recorded yet` until a `tick` runs. If you lose the URL, the token is in `dashboard.json` under the factory home: `$FACTORY_HOME` if you set it, otherwise `~/.factory`. To stop the server, read its pid from `dashboard.json` (the `pid` field) and run `kill <pid>`. Do not use `pkill -f`: it matches any process whose command line names the server, such as a scan of its source file.
 
 ## Part 2. Fix a GitHub issue
 
@@ -257,10 +257,12 @@ factory sync
 1 new run(s)
 ```
 
-If it says `0 new run(s)` a moment after you file the issue, run it again: GitHub's issue list can lag by a few seconds. The same issue never makes a second run, so run it only once per issue. Then run the new run:
+The message does not print the run id. `factory sync --json` lists it under `data.created`.
+
+If it says `0 new run(s)` a moment after you file the issue, wait a few seconds and run it again: GitHub's issue list can lag. An issue that already has a run is reported under `data.duplicates` and not started again, so `sync` is safe to repeat. Then run the new run, with the id you found:
 
 ```sh
-factory run greet-returns-hello-for-an-empty-name-lpchj
+factory run <run-id>
 ```
 
 The run goes through `reproduce`, `fix` and `verify`, and stops at the merge review in about a minute and a half. In the real run the `reproduce` task wrote `tests/test_hello.py` with a failing test for the empty name, and the `fix` task changed `src/hello.py`:
