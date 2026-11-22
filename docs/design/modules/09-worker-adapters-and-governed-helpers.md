@@ -151,6 +151,23 @@ class WorkerAdapter(Protocol):
     def stop(self, handle: WorkerHandle) -> None
 
 @dataclass
+class Capabilities:
+    subagents: Literal["native", "none"]          # native: the harness can start helpers; none: the engine expands split hints
+    usage: bool                                   # True when the adapter reports token counts
+
+@dataclass
+class HarnessConfig:                              # what resolve_harness (3) returns
+    command: str                                  # the binary to run
+    model: str | None                             # None when unset: no model flag is sent
+    args: list[str]                               # extra arguments, in order
+    env: dict[str, str]                           # the minimal environment, ${...} resolved at call time
+
+@dataclass
+class WorkerHandle:                               # opaque to callers: pass it back to wait and stop
+    task_id: str; attempt: int
+    data: dict                                    # adapter state: a real adapter keeps its process group, the fake its script position
+
+@dataclass
 class TaskContext:
     run_id: str; task_id: str; stage: str; attempt: int
     skill: SkillRef; request: Request
@@ -350,5 +367,5 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | For Codex workers only, Codex runs with its own sandbox off (`-s danger-full-access`) so `srt` is the only layer, and the settings add a `trustd` Mach grant. Both are recorded in D7 as residual risk. | Both changes were shown to be required. They apply to Codex only, and writing the risk into D7 keeps it visible and reversible. | `reject-keep-codex-out` (no Codex workers); `accept-sandbox-only-probe-trustd` (hold the grant until a probe runs, which blocks Codex on macOS). | 2026-11-15-codex-sandbox-residual-risk-accepted (D1) |
 | A Claude worker runs with `--output-format stream-json --verbose`. The adapter writes each event to `worker.log` as plain text. Raw events never reach the log. | Most of a run is Claude tasks. Tokens and models still come from the stream's `result` line. The cost is a bigger capture file and one text renderer. | `keep-final-only` (`--output-format json`): a hung task looks the same as a working one until its time limit. | 2026-11-21-a-running-claude-task-streams-its-log (owner decision D3, 2026-11-21) |
 | While a worker runs, the wait loop copies each complete new line of its output into `worker.log` about once a second, masked. The end-of-attempt write stays. | A person could not tell a working task from a stuck one, and the live view was empty. A partial line is held back because `mask` cannot match a split secret. | `command-adapter-only` (leaves the longest, model-driven workers empty); `leave-as-is-and-fix-the-spec` (the log appears only at the end). | 2026-11-17-worker-log-is-written-while-the-task-runs (owner decision 2026-11-18) |
-| A `cmd`, `script` or `python` task runs through `CommandAdapter` under `srt`. A skill task runs through the worker for its harness. The engine picks the adapter per task. | Before this, every task went to the one registered worker, so `rules` and the verify `cmd` tasks went to Claude. Module 9 already said deterministic tasks use `CommandAdapter`. | Not recorded in the ADR. Sending every task to the registered worker was the old behavior. | 2026-11-17-cmd-tasks-run-through-command-adapter (owner decision 2026-11-17) |
+| A `cmd`, `script` or `python` task runs through `CommandAdapter` under `srt`. A skill task runs through the worker for its harness. The engine picks the adapter per task. | Before this, every task went to the one registered worker, so `rules` and the verify `cmd` tasks went to Claude. Module 9 already said deterministic tasks use `CommandAdapter`. | Send every task to the registered worker (the old behavior). | 2026-11-17-cmd-tasks-run-through-command-adapter (owner decision 2026-11-17) |
 | The prompt's output instruction gives the absolute path of the task folder for the artifact, `progress.md` and the ledger. It still says the folder is `$FACTORY_TASK_DIR`. | A worker with no Bash cannot expand `$FACTORY_TASK_DIR`, so it never wrote its artifact and the run blocked. A real call with the absolute path wrote its file. | `engine-runs-the-tests` (the engine writes the artifact); `grant-bash` (widens the sandbox). | 2026-11-21-the-prompt-names-the-real-task-folder (owner decision, option 1, 2026-11-21) |

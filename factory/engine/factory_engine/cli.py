@@ -140,7 +140,7 @@ def _upgrade(args, f) -> _Result:
 
 def _doctor(args, f) -> _Result:
     repo = None if args.no_repo else _repo_here(args)
-    checks = kit.doctor(repo, as_scheduler=args.as_scheduler)
+    checks = api.doctor(repo, as_scheduler=args.as_scheduler)
     failed = [c for c in checks if not c.ok]
     return _Result({"checks": [asdict(c) for c in checks]}, code=EXIT_FAILED if failed else EXIT_OK,
                    message=f"{len(checks) - len(failed)} of {len(checks)} checks passed",

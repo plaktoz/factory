@@ -207,14 +207,96 @@ def test_doctor_reports_a_repo_with_no_init(tmp_path):
     assert not by_name(kit.doctor(r))["repo-config"].ok
 
 
-def test_doctor_reports_a_missing_toolchain_tool_for_a_repo(repo, fake_kit, monkeypatch, tmp_path):
-    """Module 17A: `factory doctor` reports a tool a detected profile needs, before any run, through the same doctor
-    the CLI calls. The repo needs a valid factory.yaml (the profile lookup reads its config) and a go.mod."""
-    from factory_engine import kit
+def _go_repo_with_no_tools(repo, monkeypatch, tmp_path):
     cfg = repo / ".factory" / "config"
     cfg.mkdir(parents=True)
     (cfg / "factory.yaml").write_text("base_branch: main\ntracker: github\nharness: claude\n")
     (repo / "go.mod").write_text("module x\n")
     monkeypatch.setenv("PATH", str(tmp_path))  # no tools on PATH
-    tool_checks = [r for r in kit.doctor(repo) if r.name.startswith("toolchain:")]
-    assert any(r.name == "toolchain:go:golangci-lint" and not r.ok for r in tool_checks), tool_checks
+
+
+def test_the_driver_adds_the_toolchain_checks_to_modules_3s_doctor(repo, fake_kit, monkeypatch, tmp_path):
+    """Module 17A: `factory doctor` reports a tool a detected profile needs, before any run. The driver (module 16)
+    composes it: module 3 cannot, because 17A depends on 3."""
+    from factory_engine import api
+    _go_repo_with_no_tools(repo, monkeypatch, tmp_path)
+    checks = api.doctor(repo)
+    assert any(r.name == "toolchain:go:golangci-lint" and not r.ok for r in checks), checks
+    assert [r.name for r in checks if not r.name.startswith("toolchain:") and r.name not in ("skills-lock", "practice-packs")] == [r.name for r in kit.doctor(repo)]
+
+
+def test_the_driver_adds_module_10s_lock_and_pack_checks(repo, fake_kit, monkeypatch, tmp_path):
+    """Module 10: `factory doctor` reports an uninstalled locked skill and a pack over its line limit."""
+    from factory_engine import api, skills
+    _go_repo_with_no_tools(repo, monkeypatch, tmp_path)
+    monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "home"))
+    by = {r.name: r for r in api.doctor(repo)}
+    assert by["skills-lock"].ok and by["practice-packs"].ok
+    (repo / "factory").mkdir()
+    (repo / "factory" / "skills.lock").write_text("sources: {ex: {repo: /nowhere, ref: abc}}\n")
+    kit_root = tmp_path / "pk"
+    big = kit_root / "skills" / "own" / "practices" / "java"
+    big.mkdir(parents=True)
+    (big / "SKILL.md").write_text("---\nname: x\ndescription: y\n---\n" + "line\n" * 200)
+    monkeypatch.setattr(skills, "KIT", kit_root)
+    by = {r.name: r for r in api.doctor(repo)}
+    assert not by["skills-lock"].ok and "not installed" in by["skills-lock"].detail
+    assert not by["practice-packs"].ok and "java is" in by["practice-packs"].detail
+
+
+def test_modules_3_doctor_reports_only_its_own_checks(repo, fake_kit, monkeypatch, tmp_path):
+    _go_repo_with_no_tools(repo, monkeypatch, tmp_path)
+    assert {r.name for r in kit.doctor(repo)} == {"git", "gh", "credentials", "repo-config"}
+
+
+# --- a failed upgrade ---
+
+def test_a_failed_copy_leaves_the_old_kit_whole_and_no_scratch_folder(repo, fake_kit, monkeypatch):
+    kit.init_repo(repo)
+    (repo / "factory" / "stale.txt").write_text("old kit file")
+    real, calls = kit.shutil.copytree, []
+
+    def dies_halfway(src, dst, *a, **kw):
+        if calls:  # copytree calls itself for each folder: only the outer call is the one that fails
+            return real(src, dst, *a, **kw)
+        calls.append(dst)
+        real(src, dst, *a, **kw)
+        (Path(dst) / "half.txt").write_text("partial")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(kit.shutil, "copytree", dies_halfway)
+    with pytest.raises(FactoryError) as e:
+        kit.upgrade(repo, "0.2.0")
+    assert e.value.code == "config.invalid" and "disk full" in e.value.message and e.value.hint
+    assert (repo / "factory" / "stale.txt").read_text() == "old kit file"
+    assert not (repo / "factory" / "half.txt").exists()
+    assert sorted(p.name for p in repo.iterdir() if p.name.startswith("factory")) == ["factory"]
+
+
+def test_upgrade_refuses_to_replace_the_folder_it_copies_from(repo, fake_kit):
+    kit.init_repo(repo)
+    kit.use_kit_source(repo / "factory")
+    before = snapshot_tree(repo / "factory")
+    with pytest.raises(FactoryError, match="replace"):
+        kit.upgrade(repo, "0.2.0")
+    assert snapshot_tree(repo / "factory") == before
+
+
+def test_a_config_the_new_schema_refuses_is_reported_after_the_kit_is_replaced(repo, fake_kit):
+    """The failure path of a bad config: the kit is already replaced and the config untouched, so the fix is to edit
+    the config and run upgrade again."""
+    kit.init_repo(repo)
+    (repo / ".factory" / "config" / "factory.yaml").write_text("base_branch: main\ntracker: svn\nharness: claude\n")
+    (fake_kit / "workflows" / "chore.yaml").write_text("name: chore\n")
+    report = kit.upgrade(repo, "0.2.0")
+    assert report.problems and (repo / "factory" / "workflows" / "chore.yaml").is_file()
+
+
+def test_a_scratch_folder_left_by_a_dead_process_is_cleared_by_the_next_upgrade(repo, fake_kit):
+    kit.init_repo(repo)
+    for name in ("factory.new", "factory.old"):
+        (repo / name).mkdir()
+        (repo / name / "leftover.txt").write_text("from a process that died")
+    kit.upgrade(repo, "0.2.0")
+    assert sorted(p.name for p in repo.iterdir() if p.name.startswith("factory")) == ["factory"]
+    assert (repo / "factory" / "AGENTS.md").is_file()

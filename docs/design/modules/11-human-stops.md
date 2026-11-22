@@ -212,4 +212,4 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 
 | Rule | Why | Not chosen | Id |
 | --- | --- | --- | --- |
-| There is one decision file per stage and visit: `decisions/<stage>.<n>.yaml`. | The owner chose this on 2026-11-14. The answer is the record's. No other reason is recorded. | Not recorded in the ADR. | 2026-11-14-one-decision-file-per-stage-and-visit (D4) |
+| There is one decision file per stage and visit: `decisions/<stage>.<n>.yaml`. | An approved decision file is locked, and a loop back needs a fresh approval. One file per visit keeps the full history with no unlock rule. The audit trail matters more than short paths. | Rework resets the stage and reopens its decision automatically. It overwrites the earlier answer, so history would live only in events. | 2026-11-14-one-decision-file-per-stage-and-visit (D4) |

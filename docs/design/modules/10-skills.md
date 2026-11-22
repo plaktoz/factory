@@ -71,7 +71,7 @@ def practice_packs(languages: list[str], stage: str, repo: Path, cfg: Config) ->
 
 - [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (not ticked: practice_packs is tested with a language list the test passes in, but no production code calls it, so no task ever gets a pack from its files)
 - [x] A team override in `.factory/config/overrides/practices/` is used in place of, or merged with, the shipped pack. (test: factory/engine/tests/skills/test_skills.py::test_a_team_override_replaces_the_shipped_pack, ::test_a_team_override_can_be_merged_over_the_shipped_pack)
-- [ ] A pack over `max_lines` is reported by `factory doctor`. (not ticked: oversized_packs is tested (test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable) but no code calls it, so factory doctor never reports a pack over its limit)
+- [x] A pack over `max_lines` is reported by `factory doctor`. (test: factory/engine/tests/skills/test_skills.py::test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable, factory/engine/tests/kit/test_kit.py::test_the_driver_adds_module_10s_lock_and_pack_checks)
 
 **Module contract: 10 Skills**
 
@@ -111,5 +111,5 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 
 | Rule | Why | Not chosen | Id |
 | --- | --- | --- | --- |
-| The factory writes its own headless skill for every stage. Upstream skills are reference only. | The owner chose this on 2026-11-14. The answer is the record's. No other reason is recorded. | Not recorded in the ADR. | 2026-11-14-factory-writes-its-own-stage-skills (D9) |
+| The factory writes its own headless skill for every stage. Upstream skills are reference only. | The upstream skills are interactive: `grill-me` interviews a human, `code-review` asks for a fixed point and starts its own subagents, `research` starts a background agent. Skills decide pass or fail inputs, which the spec says the factory owns. Own skills are predictable, their outputs match the schemas, and there are no license questions. | Wrap upstream skills in a thin prompt layer (behavior shifts with upstream and is hard to gate on). Own skills for gated stages and upstream for creative ones (two behaviors to debug). | 2026-11-14-factory-writes-its-own-stage-skills (D9) |
 | The implement skill tells the worker it cannot run commands, and that the verify stage runs the tests. | The worker has no shell (`bash=[]`), so the old instruction to run the tests could not be followed. The ADR file is empty; this row is built from commit `ac3c9f5` and `docs/tasks-archive.md`. | `let-worker-run-tests` (give the worker a way to run tests): not built, and it needs its own ADR. | 2026-11-21-tell-the-worker-not-to-run-the-tests (owner decision D3, `fix-the-words`, 2026-11-21) |

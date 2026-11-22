@@ -142,7 +142,7 @@ The dashboard derives one more, `stale`, when a run's status is `running` but no
   request.json     the normalized request (JSON)
   run.json         current state (JSON), with the paths block, rewritten atomically
   events.jsonl     append-only history (JSON Lines), including a run_snapshot event after each change [snapshot-event]
-  lock             pid, host and heartbeat of the owning engine
+  lock             owner, pid and heartbeat of the owning engine
   decisions/       <stage>.<n>.yaml decision file and <stage>.<n>.html decision page, one pair per visit to a stage
   merge.json       result of the merge policy
   summary.md       the final run summary
@@ -210,7 +210,7 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 
 **Lock and recovery**
 
-- One engine owns a run at a time. It takes a non-blocking OS file lock on the run's `lock` file (`flock` on macOS and Linux) and holds it until the process exits. `lock` also records its pid and host, and its heartbeat, refreshed every 10 seconds, for display.
+- One engine owns a run at a time. It takes a non-blocking OS file lock on the run's `lock` file (`flock` on macOS and Linux) and holds it until the process exits. `lock` also records its owner, its pid and its heartbeat, refreshed every 10 seconds, for display.
 - Another engine, or a `resume`, that cannot take the lock refuses the run. A crash releases the lock at once; a sleeping or paused process keeps it, so no second engine can start on a run whose first engine is only asleep. `factory resume` continues a run whose lock is free.
 - Each worker runs in its own process group, recorded in `task.json`. Before a new attempt starts, any recorded group that is still alive is killed, so a worker left over from a crashed engine cannot keep editing the worktree.
 - Write-ahead: an attempt's usage record is written before the worker starts. On takeover, open attempts are closed as `interrupted` and their tasks resume from the last checkpoint as new attempts. Before a new attempt after a crash, timeout or kill, the engine resets the task worktree to the last checkpoint commit (`git reset --hard`, then `git clean -fd` that leaves the git-excluded shims alone), so no half-written edit survives. Edits since the checkpoint are lost, at most `checkpoint_every_minutes` of work; the engine first saves the discarded diff as `tasks/<task>/discarded-<n>.patch` for troubleshooting.
@@ -288,6 +288,19 @@ class RunScanner:                                                  # change-awar
         Runs whose repo_path no longer exists are flagged repo_missing."""
 
 def history_append(home: Path, record: HistoryRecord) -> None
+
+@dataclass
+class Lock:                                   # returned by acquire_lock; pass it to write_run, write_task, heartbeat, release
+    path: Path                                # <run dir>/lock
+    fd: int                                   # the open descriptor that holds the OS lock; closing it releases the lock
+    owner: str                                # who took it, as given to acquire_lock
+    pid: int                                  # os.getpid() of the holder
+
+@dataclass
+class HistoryRecord:                          # one line of <home>/history.jsonl per archived run, written by gc (17); history_append adds schema_version
+    run_id: str; repo_key: str
+    status: str                               # the run's final status
+    ended: str                                # ISO time the run ended; "" when unknown
 ```
 
 - **Run and test:** `pytest factory/engine/tests/state`, including a multiprocess test with two writers on events and a scanner test over 500 fixture runs.
@@ -378,8 +391,8 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 
 | Rule | Why | Not chosen | Id |
 | --- | --- | --- | --- |
-| Reset the task worktree to the last checkpoint after a crash. The discarded diff is saved first. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-crash-recovery-resets-to-last-checkpoint (D12) |
-| The run lock is an OS file lock held for the process lifetime. The heartbeat is for display only. Leftover worker process groups are killed before a new attempt. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-run-lock-is-an-os-file-lock (D1) |
+| Reset the task worktree to the last checkpoint after a crash. The discarded diff is saved first. | Deterministic, with no half-written files. Shorter checkpoint intervals limit the loss of up to one interval of work. | Keep the worktree as it is and tell the worker through `progress.md`. The worker may build on a half-finished edit. | 2026-11-14-crash-recovery-resets-to-last-checkpoint (D12) |
+| The run lock is an OS file lock held for the process lifetime. The heartbeat is for display only. Leftover worker process groups are killed before a new attempt. | A crash releases an OS lock and a sleeping process keeps it, so a laptop that sleeps is not taken for a dead engine. Takeover is atomic. The lock removes the race instead of detecting it. | Keep heartbeat locks and add a fencing token checked on every write. The old engine's workers would still edit the worktree, and every write path gets more logic. | 2026-11-14-run-lock-is-an-os-file-lock (D1) |
 | The engine writes a `run_snapshot` event after each change. A rebuild replays only the last one. | One snapshot event is the smallest change that meets 6A as written, and it was measured at 1.8 KB per snapshot, about 356 KiB for 200 changes. No size limit is set. | Fields on every event. A `run.json.bak` copy. | 2026-11-15-rebuild-run-from-last-snapshot (E1) |
 | After the pull request opens, the run waits as `awaiting_approval` at a merge review. It ends `done` only when GitHub merges it. Closed aborts it. Red CI routes it back and pushes the fix to the same pull request, opening no second one. | Keeps every status write in the engine, under the lock. | Done at open, with `tick` polling. `tick` acting on the run. | 2026-11-20-run-state-while-the-pull-request-is-open (D1) |
-| Restart with `progress.md`. Harness session resume is not used in phase 1. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-restart-from-progress-md (D14) |
+| Restart with `progress.md`. Harness session resume is not used in phase 1. | It is the same path as crash recovery and works on any harness, so phase 1 keeps one recovery path. Accepted cost: the worker's session context is lost. | Resume the harness session with the note appended. It differs per harness, and helper sessions and sandboxes complicate it. | 2026-11-14-restart-from-progress-md (D14) |
