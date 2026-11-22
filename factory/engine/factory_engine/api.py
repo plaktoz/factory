@@ -15,7 +15,7 @@ import sys
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
-from . import decisions, housekeeping, intake, state
+from . import decisions, housekeeping, intake, kit, state
 from . import notes as notes_store
 from . import usage as usage_mod
 from .adapters.tracker.base import TrackerAdapter
@@ -32,7 +32,7 @@ from .intake import SyncReport
 from .loadcfg import load_config
 from .notes import NoteRef
 from .prs import PullRequests
-from .types import RunRef, Source
+from .types import CheckResult, RunRef, Source
 from .usage import UsageReport
 
 
@@ -194,6 +194,19 @@ def gc(repo, *, apply=False) -> GcPlan:
     if apply:
         housekeeping.apply(plan)
     return plan
+
+
+def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]:
+    """Module 3's checks, then the toolchain checks of 17A for a repo whose settings load. Module 3 cannot call 17A
+    itself, because 17A depends on 3, so this driver composes them."""
+    checks = kit.doctor(repo, as_scheduler=as_scheduler)
+    if repo is not None and all(c.ok for c in checks if c.name == "repo-config") and any(c.name == "repo-config" for c in checks):
+        from .toolchains import doctor_checks
+        try:
+            checks.extend(doctor_checks(repo, load_config(repo)))
+        except FactoryError as e:
+            checks.append(CheckResult("toolchains", False, e.message, e.hint))
+    return checks
 
 
 def run_engine_env(run_id: str, *, home: Path, env: Mapping[str, str]) -> dict[str, str]:
