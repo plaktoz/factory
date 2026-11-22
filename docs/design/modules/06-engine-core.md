@@ -56,7 +56,7 @@ tick: {every_minutes: 10, stale_after_ticks: 3}
 
 What one tick does, in order:
 
-1. Takes a machine-wide tick lock. If the previous tick is still running, it exits at once and logs `tick_skipped`.
+1. Takes a machine-wide tick lock. If the previous tick is still running, it exits at once and logs `tick_skipped`. The lock is an OS file lock on `tick.lock` in the factory home, so a tick that dies (a crash, a kill, a power cut) releases it at once and the next tick runs. Nothing is left to clean up.
 2. For each repo in `repos`, it syncs tagged GitHub issues and the markdown inbox, creating runs for new requests. A `last_sync` cursor in `$FACTORY_HOME/sync/<repo key>.json` limits the GitHub query to recently updated issues.
 3. It checks the open pull requests of runs waiting on merge (`watch_pr`). The tick only reads them and starts an engine, because only the engine that holds a run's lock writes its state (see the table below):
    - merged: the engine finishes the run and cleans up
