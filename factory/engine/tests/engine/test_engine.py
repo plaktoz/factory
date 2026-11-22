@@ -262,14 +262,89 @@ def test_a_task_starts_when_its_needs_are_done_while_a_slower_task_is_still_runn
 
 def test_a_task_whose_when_does_not_hold_is_skipped_and_the_stage_still_finishes(new_run, repo, cfg, tracker, prs, clock):
     tasks = ("      - {id: a, cmd: [/usr/bin/true], when: {confidence_below: 0.5}, out: a.json}\n"
-             "      - {id: b, cmd: [/usr/bin/true], out: b.json}")
-    run_dir, worker, t = _run_blocking(new_run, repo, cfg, tracker, prs, clock, tasks, ["b"], 2)
-    assert _wait_until(lambda: "b" in worker.running)        # triage says confidence 1.0, so `a` is skipped
+             "      - {id: b, cmd: [/usr/bin/true], out: b.json}\n"
+             "      - {id: d, cmd: [/usr/bin/true], needs: [a], out: d.json}")
+    run_dir, worker, t = _run_blocking(new_run, repo, cfg, tracker, prs, clock, tasks, ["b", "d"], 2)
+    assert _wait_until(lambda: {"b", "d"} <= set(worker.running))   # triage says confidence 1.0, so `a` is skipped
+    for n in ("b", "d"):
+        worker.release(n)
+    t.join(60)
+    assert not t.is_alive()
+    assert sorted(c.task_id for c in worker.inner.started if c.task_id in ("a", "b", "d")) == ["b", "d"]
+    assert state.read_task(run_dir, "a").status == "done"
+    assert state.read_task(run_dir, "d").task_base == "bump-q1w2e"      # `a` made no branch, so `d` starts from the run
+    assert "stage_done" in [e.type for e in state.read_events(run_dir) if e.data.get("stage") == "work"]
+
+
+def test_a_task_after_a_skipped_task_starts_from_the_skipped_tasks_own_dependency(new_run, repo, cfg, tracker, prs, clock):
+    tasks = ("      - {id: r, cmd: [/usr/bin/true], out: r.json}\n"
+             "      - {id: a, cmd: [/usr/bin/true], needs: [r], when: {confidence_below: 0.5}, out: a.json}\n"
+             "      - {id: d, cmd: [/usr/bin/true], needs: [a], out: d.json}")
+    run_dir, worker, t = _run_blocking(new_run, repo, cfg, tracker, prs, clock, tasks, ["r", "d"], 2)
+    assert _wait_until(lambda: "r" in worker.running)
+    worker.release("r")
+    assert _wait_until(lambda: "d" in worker.running)             # `a` is skipped once `r` is done; `d` follows it
+    worker.release("d")
+    t.join(60)
+    assert not t.is_alive()
+    assert state.read_task(run_dir, "d").task_base == "bump-q1w2e--r"
+    assert "stage_done" in [e.type for e in state.read_events(run_dir) if e.data.get("stage") == "work"]
+
+
+READ_ONLY_CHORE = """name: chore
+type: chore
+sink: doc
+policy: {write: false, deny_paths: []}
+defaults: {retries: 2, timeout_minutes: 30, checkpoint_every_minutes: 10, max_restarts: 3}
+stages:
+  - id: one
+    tasks:
+      - {id: a, cmd: [/usr/bin/true], out: a.json}
+  - id: two
+    tasks:
+      - {id: b, cmd: [/usr/bin/true], out: report.md}
+"""
+
+
+def test_a_read_only_run_starts_its_tasks_from_the_run_commit_in_two_stages(new_run, repo, cfg, tracker, prs, clock):
+    import threading
+    from blocking_worker import BlockingWorker
+    from factory_engine.adapters.worker.fake import FakeWorkerAdapter, ok
+    from factory_engine.engine import Engine
+    from gitutil import run as git
+
+    # The kit is read from main's commit when a run starts (module 3), so the workflow is committed before new_run.
+    wf = repo / ".factory" / "config" / "workflows"
+    wf.mkdir(parents=True, exist_ok=True)
+    (wf / "chore.yaml").write_text(READ_ONLY_CHORE)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "read-only chore workflow")
+    git(repo, "push", "-q", "origin", "main")
+
+    run_dir = new_run()
+    work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
+    script = {"rules": [ok(work("rules", "triage.json"))], "a": [ok(work("a", "a.json"))], "b": [ok(work("b", "report.md"))]}
+    writes = {"rules": {"triage.json": TRIAGE_CHORE}, "a": {"a.json": "{}"}, "b": {"report.md": "# report\n"}}
+    worker = BlockingWorker(FakeWorkerAdapter(script, writes=writes))
+    eng = Engine(repo, cfg, workers={"fake": worker}, command=worker, tracker=tracker, prs=prs, clock=clock)
+    worker.release("rules")
+    t = threading.Thread(target=lambda: eng.run(["bump-q1w2e"]), daemon=True)
+    t.start()
+    assert _wait_until(lambda: "a" in worker.running)
+    worker.release("a")
+    assert _wait_until(lambda: "b" in worker.running)
     worker.release("b")
     t.join(60)
     assert not t.is_alive()
-    assert [c.task_id for c in worker.inner.started if c.task_id in ("a", "b")] == ["b"]
-    assert state.read_task(run_dir, "a").status == "done"
+    # Stage `one` joined `a` onto the run commit, so `b` (stage two) starts from the commit after that join, not `bump-q1w2e`.
+    base_of_b = state.read_task(run_dir, "b").task_base
+    assert base_of_b is not None and len(base_of_b) == 40          # a commit: no branch named after the run exists
+    assert base_of_b in git(state.read_run(run_dir).worktree, "rev-list", "HEAD")
+    assert [e.data.get("stage") for e in state.read_events(run_dir) if e.type == "stage_done"] == ["triage", "one", "two"]
+    # The doc sink commits the report to a new branch and opens its pull request (module 13), so the run waits at merge review.
+    run = state.read_run(run_dir)
+    assert run.status == "awaiting_approval" and run.pr is not None and run.pr.head == "bump-q1w2e"
+    assert "pr_opened" in [e.type for e in state.read_events(run_dir)]
 
 
 def test_a_task_with_a_helper_maximum_of_two_reserves_three_slots(new_run, repo, cfg, tracker, prs, clock):
