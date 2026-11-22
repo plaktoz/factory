@@ -81,8 +81,8 @@ def test_the_parser_reads_the_whole_spec():
     # green_check_done (owner decision D1, ADR 2026-11-21-auto-merge-is-checked-at-open-and-at-green).
     # 152 since 2026-11-22: module 16 lists api.doctor, which composes module 3's doctor with 10 and 17A.
     # 153 since 2026-11-22: module 11 lists notify.remind, which the tick calls for a run that waits for a person.
-    # 154 since 2026-11-22: module 17A lists format_changed_files (D8), and language_tasks takes the changed paths (D5).
-    assert len(SIGS) == 154, f"{len(SIGS)} signatures parsed, expected 154: the parser regressed, or a spec signature was removed or added"
+    # 155 since 2026-11-22: module 17A lists format_changed_files (D8), language_tasks takes the changed paths (D5), and module 16 lists install_once (`factory schedule at`, PR #135).
+    assert len(SIGS) == 155, f"{len(SIGS)} signatures parsed, expected 155: the parser regressed, or a spec signature was removed or added"
     assert all(s.file for s in SIGS), "a signature has no module file; add a `# file.py` comment to its block"
 
 
