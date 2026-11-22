@@ -34,8 +34,6 @@ def isolated(tmp_path, monkeypatch):
 
 @pytest.fixture
 def repo(tmp_path) -> Path:
-    bare = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
     src = tmp_path / "repo"
     subprocess.run(["git", "init", "-q", "-b", "main", str(src)], check=True)
     (src / "services").mkdir()
@@ -43,8 +41,11 @@ def repo(tmp_path) -> Path:
     shutil.copytree(KIT, src / "factory", ignore=shutil.ignore_patterns(".venv", "__pycache__", "tests", "engine", "dashboard"))
     git(src, "add", "-A")
     git(src, "commit", "-q", "-m", "init")
+    # A bare clone and a fetch give origin/main without a push: the managed pre-push scan costs ~20 s per push.
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(src), str(bare)], check=True)
     git(src, "remote", "add", "origin", str(bare))
-    git(src, "push", "-q", "origin", "main")
+    git(src, "fetch", "-q", "origin")
     return src
 
 
