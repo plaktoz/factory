@@ -146,6 +146,10 @@
           "type": "integer",
           "minimum": 0
         },
+        "max_interruptions": {
+          "type": "integer",
+          "minimum": 0
+        },
         "model": {
           "type": "string"
         },

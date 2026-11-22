@@ -31,7 +31,6 @@ from .workflow import expand_helpers
 
 TRIAGE = "_triage"
 NO_TEST_RESULTS = "no-test-results"  # the skip name of the T1 block, which is not a gate in the workflow
-DEFAULT_MAX_INTERRUPTIONS = 3
 POLL_SECONDS = 0.05  # how often the main thread looks at running workers; a restart waits for the next checkpoint
 # Run statuses that end a run, and those where the engine waits for a person or for infrastructure.
 ENDED: frozenset[str] = frozenset({"done", "failed", "aborted"})
@@ -711,12 +710,24 @@ class Engine:
             ts = state.read_task(run_dir, task_id)
             self._reset_to_checkpoint(run_dir, ts, task_id)
             interruptions = sum(1 for r in usage_mod.read_usage(run_dir, task_id) if r.exit == "interrupted")
-            ts.status = "failed" if interruptions > DEFAULT_MAX_INTERRUPTIONS else "interrupted"
+            ts.status = "failed" if interruptions >= self._max_interruptions(run, run_dir, ts) else "interrupted"
             state.write_task(run_dir, ts, lock=lock)
             state.append_event(run_dir, "task_interrupted", task_id=task_id, attempt=ts.attempt)
         run.status = "running"
         state.write_run(run_dir, run, lock=lock)
         state.append_event(run_dir, "run_resumed")
+
+    def _max_interruptions(self, run: Run, run_dir: Path, ts: TaskState) -> int:
+        """The task's own `max_interruptions` (module 8). Only the task's stage is expanded, because a later stage's
+        `tasks_from` artifact may not exist yet."""
+        wf = self._load(run.workflow or TRIAGE)
+        stage = next((s for s in wf.stages if s.id == ts.stage), None)
+        specs = [] if stage is None else self._specs(stage, run_dir)
+        spec = next((s for s in specs if s.id == ts.task_id), None)
+        if spec is None:
+            raise FactoryError("config.invalid", f"task {ts.task_id} is not in stage {ts.stage} of the workflow",
+                               hint="restore the workflow file the run started with, or abort the run")
+        return spec.max_interruptions
 
     # ---- join, gates, routing --------------------------------------------------------------------------------------
 
