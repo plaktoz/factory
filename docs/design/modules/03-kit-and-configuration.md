@@ -12,7 +12,7 @@ factory/                    the kit: replaced whole on update, never edited
   skills.lock               pinned upstream skills and allowlist
   requirements.lock         pinned Python dependencies of the engine
   skills/own/               original skills: verify, critique, gates
-  schemas/                  request, run, task, usage, event, decision, feedback, merge, triage, plugin, packet,
+  schemas/                  request, run, task, usage, event, decision, feedback, triage, plugin, packet,
                             stage-report, test-report, source-notes, review-findings,
                             factory-config (factory.yaml), merge-policy
                             (12 are written in wave 0. `stage-report`, `test-report`, `source-notes` and `review-findings` had no fields in the
