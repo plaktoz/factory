@@ -119,6 +119,8 @@ def test_acquire_succeeds_right_after_the_holder_is_killed(tmp_path):
     release(lock)
 
 
+@pytest.mark.skipif(sys.platform == "win32",
+                    reason="SIGSTOP and SIGCONT do not exist on Windows; the killed-holder test covers the kernel lock")
 def test_a_stopped_process_keeps_its_lock_past_the_old_limit(tmp_path):
     """Acceptance: SIGSTOP keeps the lock (the lock is not a heartbeat timeout); lock_status reports live."""
     d = tmp_path / "run"
@@ -152,6 +154,44 @@ def test_heartbeat_is_display_only(tmp_path):
     info = json.loads((d / "lock").read_text())
     assert info["owner"] == "engine-1" and info["pid"] == os.getpid()
     release(lock)
+
+
+def test_release_twice_does_not_raise_and_frees_the_lock(tmp_path):
+    """Issue 103: a second release, or one on a closed fd, does nothing on every platform."""
+    d = tmp_path / "run"
+    lock = acquire_lock(d, "e")
+    release(lock)
+    release(lock)
+    assert lock_status(d) == "free"
+    release(acquire_lock(d, "e2"))  # the lock can be taken again
+
+
+def test_the_lock_works_under_a_folder_with_a_space_in_its_name(tmp_path):
+    """Issue 103: a Windows user path often has a space, e.g. C:\\Users\\Jane Doe."""
+    d = tmp_path / "Jane Doe" / "run"
+    lock = acquire_lock(d, "e")
+    try:
+        assert lock_status(d) == "live"
+        with pytest.raises(FactoryError) as e:
+            acquire_lock(d, "other")
+        assert e.value.code == "state.locked"
+    finally:
+        release(lock)
+
+
+def test_the_lock_file_stays_readable_by_another_process_while_the_lock_is_held(tmp_path):
+    """Issue 103: a Windows byte-range lock is mandatory. It must not cover the heartbeat JSON a reader opens."""
+    d = tmp_path / "run"
+    lock = acquire_lock(d, "engine-1")
+    try:
+        heartbeat(lock)
+        proc = subprocess.run([sys.executable, "-c", textwrap.dedent(f"""
+            import json
+            print(json.loads(open({str(d / 'lock')!r}).read())['owner'])
+        """)], capture_output=True, text=True, timeout=60)
+        assert proc.stdout.strip() == "engine-1", proc.stderr
+    finally:
+        release(lock)
 
 
 def test_lock_status_free_stale_and_live(tmp_path):
