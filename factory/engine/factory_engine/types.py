@@ -293,6 +293,9 @@ class Defaults:
     max_restarts: int
 
 
+DEFAULT_MAX_INTERRUPTIONS = 3  # module 8: a task's Nth engine-crash interruption fails it, so the default fails on the 3rd
+
+
 @dataclass
 class TaskSpec:
     id: str
@@ -308,6 +311,7 @@ class TaskSpec:
     retries: int
     model: str | None
     when: dict | None
+    max_interruptions: int = DEFAULT_MAX_INTERRUPTIONS
 
 
 @dataclass

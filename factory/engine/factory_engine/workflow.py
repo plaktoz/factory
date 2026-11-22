@@ -20,7 +20,7 @@ from . import skills
 from .config import Config
 from .errors import FactoryError
 from .skills import resolve_skill
-from .types import (Defaults, GateSpec, HelperPolicy, OnFail, Policy, Problem, Stage, TaskSpec, Workflow)
+from .types import (DEFAULT_MAX_INTERRUPTIONS, Defaults, GateSpec, HelperPolicy, OnFail, Policy, Problem, Stage, TaskSpec, Workflow)
 from .validate import SCHEMA_DIR
 from .yamlio import FactoryLoader, load_yaml
 
@@ -363,6 +363,7 @@ def _parse_task(t: dict, defaults: Defaults) -> TaskSpec:
         retries=t.get("retries", default_retries),
         model=t.get("model"),
         when=t.get("when"),
+        max_interruptions=t.get("max_interruptions", DEFAULT_MAX_INTERRUPTIONS),
     )
 
 

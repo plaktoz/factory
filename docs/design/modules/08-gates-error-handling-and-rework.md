@@ -13,7 +13,7 @@ The engine sorts every failure into one class, and each class has a fixed respon
 | Merge conflict at join | Two task branches change the same lines | Abort the merge, route to `on_conflict.goto` | `on_conflict.max` |
 | Human rework | You answer rework at an approval | Route to `on_reject.goto` with your notes as feedback | None |
 | Human reject | You answer reject | Run aborted | None |
-| Engine crash | Process killed, machine asleep | On the next start, open attempts become interrupted and resume | Does not use retries; `max_interruptions` per task (default 3), then the task is failed |
+| Engine crash | Process killed, machine asleep | On the next start, open attempts become interrupted and resume | Does not use retries; `max_interruptions` per task (a task key, an integer of 0 or more, default 3). A task fails when its `interrupted` attempts reach the value, so with the default the 3rd interruption fails it and two still resume. `0` fails it at the first crash |
 
 **Rework, step by step** (verify fails in a bug-fix run)
 
@@ -92,7 +92,7 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 Acceptance criteria:
 
-- [ ] Each failure type in the class table maps to exactly one handling type. (not ticked: the engine crash row (interrupted attempts) has no test here, and the human rework and reject rows are routed by `route` on a fake Outcome until module 11 lands)
+- [ ] Each failure type in the class table maps to exactly one handling type. (not ticked: the human rework and reject rows are routed by `route` on a fake Outcome, and no test drives a real module 11 answer through the engine. The engine crash row is tested: `factory/engine/tests/engine/test_max_interruptions.py`, which simulates the engine's death mid-attempt and resumes it, and `test_kill_the_engine_mid_task_then_resume`, which kills a real child engine process and resumes it once)
 - [ ] A `cmd` gate runs under `srt`; its exit code decides pass or fail, and a missing binary is a task error. (not ticked: no test runs under `srt`, because the gate tests replace the runner with a stub, so the real `CommandAdapter` (merged in module 9) is not exercised through a gate; the exit-code and missing-binary parts are asserted by `factory/engine/tests/gates/test_gates.py::test_a_cmd_gate_passes_on_exit_0_and_fails_on_any_other_exit` and `::test_a_missing_gate_binary_is_a_task_error_not_a_failed_gate`)
 - [x] A verify stage whose tasks report 0 test cases blocks the run with a reason naming the missing JUnit files, and opens no pull request. (test: factory/engine/tests/engine/test_verify_report.py::test_a_verify_stage_with_no_test_cases_blocks_the_run_and_names_the_missing_junit_files; decision T1, 2026-11-17)
 - [x] `factory skip <run> --gate no-test-results` passes the T1 block, logs `gate_skipped` and stops auto-merge; on any other block it is refused and the run stays blocked. (test: factory/engine/tests/engine/test_t1_skip.py::test_a_skip_passes_the_zero_test_block_for_a_repo_with_no_tests; ::test_the_t1_skip_is_refused_when_the_run_is_blocked_by_anything_else; ADR 2026-11-17-t1-skip-is-a-named-block-skip)
