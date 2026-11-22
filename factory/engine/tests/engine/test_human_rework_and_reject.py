@@ -84,7 +84,8 @@ def test_a_rework_answer_sends_the_run_back_to_on_reject_and_asks_again(waiting)
     assert _stage(run, "root-cause").visit == 2       # the target stage starts a new visit
     assert _stage(run, "fix").status == "pending"     # the stages after it start again, with no task yet
     assert run.loops == {"propose->root-cause:human": 1}
-    assert [e.type for e in state.read_events(run_dir) if e.type == "decision_requested"][-1:] == ["decision_requested"]
+    asked = [e for e in state.read_events(run_dir) if e.type == "decision_requested" and e.data.get("stage") == "propose"]
+    assert len(asked) == 2                            # the first ask, then a second one for the new visit
 
 
 def test_a_reject_answer_aborts_the_run_and_no_later_stage_runs(waiting):
@@ -94,4 +95,5 @@ def test_a_reject_answer_aborts_the_run_and_no_later_stage_runs(waiting):
     run = state.read_run(run_dir)
     assert run.status == "aborted" and result.runs["bump-q1w2e"] == "aborted"
     assert _stage(run, "fix") is None
-    assert [e.type for e in state.read_events(run_dir) if e.type == "run_aborted"]
+    aborted = [e.data for e in state.read_events(run_dir) if e.type == "run_aborted"]
+    assert aborted == [{"reason": "rejected by a person"}]
