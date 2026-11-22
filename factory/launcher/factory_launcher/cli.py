@@ -245,9 +245,8 @@ def _config_init(args, home: Path) -> int:
 
 
 def _doctor(args, home: Path) -> int:
-    from factory_engine import kit
     repo = None if args.no_repo else find_repo(args.repo, None, home)
-    checks = kit.doctor(repo, as_scheduler=args.as_scheduler)
+    checks = api.doctor(repo, as_scheduler=args.as_scheduler)
     failed = [c for c in checks if not c.ok]
     data = {"checks": [{"name": c.name, "ok": c.ok, "detail": c.detail, "hint": c.hint} for c in checks]}
     _emit(not failed, "ok" if not failed else "failed", f"{len(checks) - len(failed)} of {len(checks)} checks passed",

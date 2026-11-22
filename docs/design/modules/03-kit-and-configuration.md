@@ -187,19 +187,26 @@ Housekeeping deletes a snapshot when no unarchived run uses it.
 
 **Upgrade**
 
-`factory upgrade <version>` replaces `factory/`, regenerates the skill shims and validates `.factory/config/` against the new schemas. It does not need to wait for active runs: they keep their own snapshots, and new runs use the upgraded kit.
+`factory upgrade <version>` replaces `factory/` and validates `.factory/config/` against the new schemas. It does not need to wait for active runs: they keep their own snapshots, and new runs use the upgraded kit. It generates no shims: the engine generates them in each worktree when a run starts ([module 10](10-skills.md)).
+
+How it fails:
+
+- **The copy fails** (a full disk, a permission error): the new kit is built in `factory.new/` beside `factory/`, and `factory/` is swapped only after the copy is whole. On a failure `factory/` is exactly as it was, `factory.new/` is removed, and `upgrade` fails with `config.invalid`, naming the folder and the cause. Run it again after fixing the cause. A leftover `factory.new/` or `factory.old/` from a process that died is removed at the start of the next run.
+- **The kit source is the folder being replaced** (`factory/` of this repo, which is the kit's own source): `upgrade` refuses with `config.invalid` and changes nothing.
+- **The config fails the new schema:** the kit is already replaced. `upgrade` leaves `.factory/config/` as it was and exits with `config.invalid`, naming each file and the fix. The fix is to edit the config and run `upgrade` again; running it again is safe, because a second run replaces the same kit.
+- **Not initialised:** a repo with no `factory/` folder fails with `config.invalid` and the hint to run `factory init`.
 
 **OS rules**
 
 Phase 1 supports macOS and Linux. Windows (Task Scheduler install, `.bat` and `.ps1` handling, retrying atomic replaces, Windows path rules) is phase 2. The code already uses `pathlib` and argument lists, so nothing blocks it.
 
-Python 3.10 or later, `pathlib` for paths, `subprocess` with argument lists, and no shell scripts in the kit's engine. Commands that workflows call, such as `scripts/repro-fails.sh`, belong to the repo; a repo on Windows supplies its own. The external tools are `git`, `gh` when the tracker is GitHub, and `srt` (`@anthropic-ai/sandbox-runtime`, which needs Node 22.12 or later; the factory itself runs on Node 26, tested on 26.13.0) for the sandbox around commands ([module 9](09-worker-adapters-and-governed-helpers.md)). `factory doctor` checks each. Python dependencies (PyYAML, jsonschema) are pinned in `factory/requirements.lock`. The launcher builds one virtual environment per distinct lock hash under `$FACTORY_HOME/venvs/` on first use and runs the repo's engine from it, so repos on different kit versions never share packages. *Phase 1b: in phase 1a the launcher builds no venv and the kit has no `requirements.lock`; see the run snapshot rules in the Layout section.*
+Python 3.10 or later, `pathlib` for paths, `subprocess` with argument lists, and no shell scripts in the kit's engine. Commands that workflows call, such as `scripts/repro-fails.sh`, belong to the repo; a repo on Windows supplies its own. The external tools are `git`, `gh` when the tracker is GitHub, and `srt` (`@anthropic-ai/sandbox-runtime`, which needs Node 22.12 or later; the factory itself runs on Node 26, tested on 26.13.0) for the sandbox around commands ([module 9](09-worker-adapters-and-governed-helpers.md)). `factory doctor` checks `git` and `gh` itself and the rest through the driver (see Module contract). Python dependencies (PyYAML, jsonschema) are pinned in `factory/requirements.lock`. The launcher builds one virtual environment per distinct lock hash under `$FACTORY_HOME/venvs/` on first use and runs the repo's engine from it, so repos on different kit versions never share packages. *Phase 1b: in phase 1a the launcher builds no venv and the kit has no `requirements.lock`; see the run snapshot rules in the Layout section.*
 
 Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is out of scope. `factory doctor` starts a probe worker with CLI flags that keep your own plugins, hooks and MCP servers out, and fails if one appears ([module 9](09-worker-adapters-and-governed-helpers.md)). Before the phase 1a pilot, `factory doctor` must pass its canary on Linux.
 
 **Module contract: 3 Kit and configuration**
 
-- **Depends on:** nothing (foundation).
+- **Depends on:** nothing (foundation). `doctor` here checks only what this module owns: `git`, `gh`, credentials and `factory.yaml`. The checks of 9 (harness binaries, the sandbox canary, the probe worker), 10 (the skills lock and pack size) and 17A (toolchains) are added by the driver's `api.doctor` ([module 16](16-drivers.md)), because those modules depend on 3 and 3 may not import them. Today `api.doctor` adds only the 17A checks; the 9 and 10 checks are not wired in yet, and their criteria stay unticked.
 - **Writes:** `factory/`, `.factory/config/*`, `.factory/.gitignore`, `~/.factory/config.yaml`, the env file.
 - **CLI it backs:** `init`, `upgrade`, `doctor`, `config init`.
 
@@ -216,8 +223,8 @@ def validate(obj: dict, schema: str) -> None            # raises FactoryError("s
 def mask(text: str, secrets: Iterable[str]) -> str
 # kit.py
 def init_repo(repo: Path) -> InitReport                  # labels are added by drivers (16)
-def upgrade(repo: Path, version: str) -> UpgradeReport
-def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]
+def upgrade(repo: Path, version: str) -> UpgradeReport   # fails with config.invalid and the old factory/ intact; see Upgrade
+def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult]   # git, gh, credentials, repo-config only
 ```
 
 - **Run and test:** `pytest factory/engine/tests/config factory/engine/tests/kit`; `factory doctor --json`.
@@ -236,6 +243,10 @@ Acceptance criteria:
 - [x] `upgrade` never touches `.factory/config/`, and a run created before it keeps using its own kit snapshot. (test: factory/engine/tests/kit/test_kit.py::test_upgrade_replaces_the_kit_and_never_touches_config, ::test_upgrade_leaves_a_runs_kit_snapshot_and_its_kit_hash_alone)
 - [x] A run's snapshot is made from the base branch's committed content, shared by runs with the same content, and unchanged when `factory/workflows/` or `.factory/config/` is edited in the main checkout afterwards. (test: factory/engine/tests/gitops/test_gitops.py::test_snapshot_is_made_from_committed_content_and_shared_by_equal_content, ::test_snapshot_is_unchanged_when_the_main_checkout_is_edited_afterwards)
 - [x] `doctor --as-scheduler` runs every check in an empty environment. (test: factory/engine/tests/kit/test_kit.py::test_doctor_as_scheduler_runs_every_check_the_normal_run_runs, ::test_doctor_as_scheduler_runs_in_an_empty_environment)
+- [x] `doctor` in module 3 imports no module that depends on 3, and reports only `git`, `gh`, `credentials` and `repo-config`; the driver's `api.doctor` adds the 17A toolchain checks. (test: factory/engine/tests/kit/test_kit.py::test_modules_3_doctor_reports_only_its_own_checks, ::test_the_driver_adds_the_toolchain_checks_to_modules_3s_doctor)
+- [x] A copy that fails halfway leaves the old `factory/` whole and no scratch folder, and fails with `config.invalid` and a hint. (test: factory/engine/tests/kit/test_kit.py::test_a_failed_copy_leaves_the_old_kit_whole_and_no_scratch_folder, ::test_a_scratch_folder_left_by_a_dead_process_is_cleared_by_the_next_upgrade; the first fails on the old rmtree-then-copy code)
+- [x] `upgrade` refuses to replace the folder it copies from and changes nothing. (test: factory/engine/tests/kit/test_kit.py::test_upgrade_refuses_to_replace_the_folder_it_copies_from; fails on the old code)
+- [x] A config the new schema refuses is reported after the kit is replaced, and `.factory/config/` is untouched. (test: factory/engine/tests/kit/test_kit.py::test_a_config_the_new_schema_refuses_is_reported_after_the_kit_is_replaced, ::test_upgrade_reports_a_config_the_new_schema_refuses)
 - [x] `cleanup_check` must be a list of strings, never a shell string; anything else fails with `config.invalid` and the fix. (test: factory/engine/tests/config/test_config.py::test_cleanup_check_must_be_a_list_of_strings, ::test_load_config_refuses_a_bad_repo_file)
 - [x] A repo file with no `cleanup_check` and no model loads, and `resolve_harness` returns no model. (test: factory/engine/tests/config/test_config.py::test_repo_without_cleanup_check_or_model_loads_and_resolves_no_model)
 
