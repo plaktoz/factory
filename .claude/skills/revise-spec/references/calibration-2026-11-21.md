@@ -17,6 +17,9 @@ These are the recorded results, not a target. Module 17 was labelled "strong" fr
 | `docs/design/modules/14-token-tracking.md` | 1 | 4 | 3 | 3 | 3 | needs-changes |
 | | 2 | 4 | 3 | 3 | 3 | needs-changes |
 | | 3 | 4 | 4 | 4 | 3 | needs-changes |
+| | 4 | 4 | 3 | 4 | 3 | needs-changes |
+| `docs/design/modules/05-workflows-and-plugins.md` | 4 | 4 | 3 | 3 | 4 | needs-changes |
+| `docs/design/modules/17-housekeeping.md` | 4 | 4 | 3 | 4 | 3 | needs-changes |
 
 No design file reached `ready`. The recommendation did not change between runs for any of them, but individual scores moved by one point (module 5, Failure and Buildability, 4 to 3).
 
@@ -32,6 +35,8 @@ Gaps the scorers found and that were checked against the file:
 
 - Module 5, L49 says `validate_workflow` does not check skill names, but the L255 docstring says it does. The license example (L203 to L217) uses `goto: fix` for `chore`, and the chore workflow has no `fix` stage. The "Depends on" list omits 17A.
 - Module 17, L10 says a worktree goes when its PR is merged or closed, but L65 says `gc` has no PR state. `GcPlan` and `GcReport` have no fields in this file or in section 18, and the timeout for `cleanup_check` is not given.
+
+**Run 4 (task 33, 2026-11-22, one pass of fixes, then one re-score).** After the pass, each file was scored once by an independent scorer that read only `SKILL.md` and the file. I set my own scores first and had module 14 as `ready` and module 17 Buildability as 4; the scorers disagreed and I checked each finding against the file and the code. Module 14: Soundness 3 and Buildability 3. The Soundness finding is real: L49 says a task with no `usage.jsonl` gives an empty list, and L50 said it was recorded as `null` with a warning. The code (`_read`) returns an empty list and writes no warning, so L50 was corrected after the score. Its Buildability gaps are not fixed: how `start_attempt` knows a line was already reported, how an attempt number is read from a torn line, the JSON shape of `total`, how tests fix the clock, and no criterion for minutes, offset days or the invalid-exit error. Module 17: Soundness 3 and Buildability 3. Real findings: L53 against L112 (the apply-time lock, now worded as a known defect at L112 but still contradicting L53); L17 against L124 (orphans listed by `factory gc`, which the CLI does not do); how `plan` finds orphans is not stated, and `Orphan.reason` has no value list. One scorer claim was wrong: the L162 row's line numbers are not stale. Module 6's `auto_gc` line (L68) contradicts module 17 L55; module 6 is not in this task's scope. Module 5's independent scorer returned Soundness 3 and Failure 3, Buildability 4, and it is the row in the table. Its Soundness finding was right: this file said `language_tasks` takes an artifact file, which 17A's signature does not, and that sentence was corrected. Its Failure findings stand, and they are left open: the file does not say what happens when `srt` is missing for a plugin task, when `plugin-hashes.json` is unreadable, or when `requires.skills` names a skill not in `skills.lock`. Two of those need owner decisions, so they are not in the one pass. No file reached `ready`. The module 14 and 17 numbers were set by the scorers, and the module 14 file was edited once after its score (L50), so its score describes the file before that edit.
 
 ## ADRs
 
