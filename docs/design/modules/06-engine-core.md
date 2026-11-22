@@ -233,7 +233,7 @@ flowchart LR
   run --> tick["next tick recomputes<br/>heartbeat and signals"]
 ```
 
-**Open, not decided here** (Unspecified): the fields and schema of a `run_snapshot`; how it is stored (inline in the event or by reference); whether it is written before or after `run.json`; what a rebuild does when `events.jsonl` has no `run_snapshot`; whether readers of `events.jsonl` (the dashboard, `read_events`) skip snapshots; and whether `events.jsonl` needs a size limit.
+**What the code does** (`write_run`, `rebuild_run` and `read_events` in `state.py`; tests in `tests/state/test_state.py`): the `run_snapshot` event holds the whole run document under the key `run`, inline in the event, and is appended after `run.json` is written. A rebuild with no `run_snapshot` in `events.jsonl` fails with `config.invalid`. `read_events` returns snapshots with the other events, so a reader that wants one kind of event filters by type, as the dashboard and `summary.py` do. `events.jsonl` has no size limit: across 16 local runs a snapshot averaged 1,440 bytes (largest 2,431) and the largest log was 32,720 bytes.
 
 **Event catalogue** (`events.jsonl`)
 
@@ -247,7 +247,7 @@ flowchart LR
 | Delivery and cleanup | `pr_opened`, `merge_evaluated`, `merge_blocked`, `merged`, `sink_written`, `archived` |
 | Snapshot | `run_snapshot` [snapshot-event] |
 
-`run_snapshot` is written after each change to a run and carries the whole run. It is the only event that does: the other events record what happened, and a rebuild uses the last `run_snapshot`, not the other events. Its payload (field names, schema and storage format) is Unspecified; see **Run rebuild** above.
+`run_snapshot` is written after each change to a run and carries the whole run. It is the only event that does: the other events record what happened, and a rebuild uses the last `run_snapshot`, not the other events. Its payload is the whole run document under the key `run`; see **Run rebuild** above.
 
 Module 6 is built as two parts with separate contracts. 6A, the state store, is a foundation every module uses. 6B, the engine loop, is the integrator that composes the others.
 
@@ -380,6 +380,6 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | --- | --- | --- | --- |
 | Reset the task worktree to the last checkpoint after a crash. The discarded diff is saved first. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-crash-recovery-resets-to-last-checkpoint (D12) |
 | The run lock is an OS file lock held for the process lifetime. The heartbeat is for display only. Leftover worker process groups are killed before a new attempt. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-run-lock-is-an-os-file-lock (D1) |
-| The engine writes a `run_snapshot` event after each change. A rebuild replays only the last one. | One snapshot event is the smallest change that meets 6A as written, and it was measured at 1.8 KB per snapshot, about 356 KiB for 200 changes. The body leaves the size limit open. | Fields on every event. A `run.json.bak` copy. | 2026-11-15-rebuild-run-from-last-snapshot (E1) |
+| The engine writes a `run_snapshot` event after each change. A rebuild replays only the last one. | One snapshot event is the smallest change that meets 6A as written, and it was measured at 1.8 KB per snapshot, about 356 KiB for 200 changes. No size limit is set. | Fields on every event. A `run.json.bak` copy. | 2026-11-15-rebuild-run-from-last-snapshot (E1) |
 | After the pull request opens, the run waits as `awaiting_approval` at a merge review. It ends `done` only when GitHub merges it. Closed aborts it. Red CI routes it back and pushes the fix to the same pull request, opening no second one. | Keeps every status write in the engine, under the lock. | Done at open, with `tick` polling. `tick` acting on the run. | 2026-11-20-run-state-while-the-pull-request-is-open (D1) |
 | Restart with `progress.md`. Harness session resume is not used in phase 1. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-restart-from-progress-md (D14) |
