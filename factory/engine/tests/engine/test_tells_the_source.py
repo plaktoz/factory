@@ -91,3 +91,26 @@ def test_a_cli_request_is_never_sent_to_the_tracker(new_run, engine, tracker):
     eng.run(["bump-q1w2e"])
     assert state.read_run(run_dir).attention is not None
     assert tracker.statuses == []
+
+
+def test_a_tell_that_failed_is_tried_again_on_the_next_pass(new_run, engine, tracker, monkeypatch):
+    from factory_engine import notify
+    monkeypatch.setattr(notify.time, "sleep", lambda s: None)
+    run_dir = new_run(_request("github"))
+    script, writes = chore_script(run_dir)
+    eng, _ = engine(script, writes)
+    _approve_implement(eng)
+    real = tracker.set_status
+
+    def down(*a, **k):
+        raise OSError("gh is down")
+
+    tracker.set_status = down
+    eng.run(["bump-q1w2e"])                      # the run reaches its stop; neither label could be written
+    assert tracker.statuses == [] and state.read_run(run_dir).status == "awaiting_approval"
+    tracker.set_status = real
+    eng.run(["bump-q1w2e"])                      # GitHub is back: the stop is told now, and once
+    assert _labels(tracker) == ["factory:needs-human"]
+    assert "@alice" in tracker.statuses[0].comment
+    eng.run(["bump-q1w2e"])
+    assert _labels(tracker) == ["factory:needs-human"]

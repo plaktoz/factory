@@ -19,7 +19,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
-from factory_engine import api, decisions, delivery, filelock, state
+from factory_engine import api, decisions, delivery, filelock, notify, state
 from factory_engine.clock import SystemClock
 from factory_engine.config import Config
 from factory_engine.errors import FactoryError
@@ -43,6 +43,7 @@ class TickReport:
     started: list[str] = field(default_factory=list)
     resumed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    reminded: list[str] = field(default_factory=list)
     repo_missing: list[str] = field(default_factory=list)
     synced: dict[str, list[str]] = field(default_factory=dict)
     errors: list[str] = field(default_factory=list)
@@ -142,13 +143,35 @@ def _default_prs(repo: Path) -> PullRequests:
     return api.default_prs(repo, load_config(repo))
 
 
+def _default_tracker(repo: Path):
+    return api.default_tracker(repo, load_config(repo))
+
+
+def _remind(ref: state.RunRef, now: datetime, tracker_for: Callable, report: TickReport) -> None:
+    """A run that waits for a person has no engine, so the tick reminds them when a reminder is due (module 11). A
+    failed channel is reported and never stops the tick."""
+    try:
+        sent = notify.remind(ref.run_dir, load_config(ref.repo), tracker_for(ref.repo), now=now.isoformat())
+    except FactoryError as e:
+        report.errors.append(f"{ref.run_id}: {e.code}: {e.message}")
+        return
+    if sent is None:
+        return
+    report.reminded.append(ref.run_id)
+    for channel, why in sent.failed.items():
+        report.errors.append(f"{ref.run_id}: could not tell {channel}: {why}")
+
+
 def tick(cfg: Config, *, repos: list[Path], home: Path | None = None, spawn: Callable | None = None,
-         now: datetime | None = None, prs_for: Callable[[Path], PullRequests] | None = None) -> TickReport:
+         now: datetime | None = None, prs_for: Callable[[Path], PullRequests] | None = None,
+         tracker_for: Callable[[Path], object] | None = None) -> TickReport:
     """One pass. `cfg` is load_config(None): the machine part only. Each repo's own settings come from load_config(repo)
     where a step reads them (sync does). Takes the machine tick lock; a held lock returns at once with skipped_tick."""
     home = home or state.factory_home()
     spawn = spawn or api.spawn_engine
     prs_for = prs_for or _default_prs
+    tracker_for = tracker_for or _default_tracker
+    when = now or SystemClock().now()
     report = TickReport()
     lock = _take_tick_lock(home)
     if lock is None:
@@ -168,13 +191,16 @@ def tick(cfg: Config, *, repos: list[Path], home: Path | None = None, spawn: Cal
                 report.repo_missing.append(ref.run_id)
                 continue
             if action == NOTHING:
+                if repo_exists and status in ("awaiting_approval", "blocked") and lock_state == "free":
+                    _remind(ref, when, tracker_for, report)
                 continue
             try:
                 _start_or_resume(ref, action, report, spawn)
             except FactoryError as e:
                 report.errors.append(f"{ref.run_id}: {e.code}: {e.message}")
-        _write_tick_json(home, report, now or SystemClock().now())
-        _log(home, "tick", started=report.started, resumed=report.resumed, skipped=report.skipped)
+        _write_tick_json(home, report, when)
+        _log(home, "tick", started=report.started, resumed=report.resumed, skipped=report.skipped,
+             reminded=report.reminded)
         return report
     finally:
         _release_tick_lock(lock)

@@ -88,9 +88,10 @@ def _link(item: AttentionItem, cfg: Config) -> str:
     return f"{base}/runs/{item.run_id}"
 
 
-def _comment(item: AttentionItem, cfg: Config, author: str | None) -> str:
+def _comment(item: AttentionItem, cfg: Config, author: str | None, *, reminder: bool = False) -> str:
     mention = f"@{author} " if author and _notify_cfg(cfg).get("github_mention", "author") == "author" else ""
-    lines = [f"{mention}Run `{item.run_id}` needs you: {item.summary}", "", f"Dashboard: {_link(item, cfg)}"]
+    first = f"Reminder: run `{item.run_id}` still needs you" if reminder else f"Run `{item.run_id}` needs you"
+    lines = [f"{mention}{first}: {item.summary}", "", f"Dashboard: {_link(item, cfg)}"]
     if item.page is not None:
         lines.append(f"Decision page: `{item.page}`")
         lines.append(f"Decision file: `{Path(item.page).with_suffix('.yaml')}`")
@@ -139,8 +140,9 @@ def _post(url: str, payload: dict) -> None:
             raise OSError(f"webhook answered {resp.status}")
 
 
-def notify(item: AttentionItem, cfg: Config, tracker: TrackerAdapter) -> NotifyReport:
-    """Tell the source, the desktop and the webhook. Each channel is tried three times. Never raises."""
+def notify(item: AttentionItem, cfg: Config, tracker: TrackerAdapter, *, reminder: bool = False) -> NotifyReport:
+    """Tell the source, the desktop and the webhook. Each channel is tried three times. Never raises.
+    `reminder` words the notice as a reminder; the caller decides when one is due (`due_reminders`)."""
     report = NotifyReport()
     settings = _notify_cfg(cfg)
     run_dir = _run_dir(item.run_id)
@@ -160,12 +162,13 @@ def notify(item: AttentionItem, cfg: Config, tracker: TrackerAdapter) -> NotifyR
             if src.files:
                 channel("front_matter", lambda: _front_matter(Path(src.files[0]), "needs-human", item.summary))
         elif src.type == "github":
-            channel("tracker", lambda: tracker.set_status(src.ref, status, comment=_comment(item, cfg, src.author)))
+            channel("tracker", lambda: tracker.set_status(src.ref, status, comment=_comment(item, cfg, src.author, reminder=reminder)))
     if settings.get("desktop"):
-        channel("desktop", lambda: _desktop(f"Factory: {item.run_id}", item.summary))
+        channel("desktop", lambda: _desktop(f"Factory: {item.run_id}", f"Reminder: {item.summary}" if reminder else item.summary))
     if settings.get("webhook"):
         payload = {"run_id": item.run_id, "kind": item.kind, "stage": item.stage, "summary": item.summary,
-                   "link": _link(item, cfg), "command": item.command}
+                   "link": _link(item, cfg), "command": item.command,
+                   "reminder": reminder}
         channel("webhook", lambda: _post(settings["webhook"], payload))
 
     if run_dir is not None and run_dir.is_dir():
@@ -202,6 +205,18 @@ def due_reminders(items: list[AttentionItem], cfg: Config, *, now: str) -> list[
         if current - last >= limit:
             due.append(item)
     return due
+
+
+def remind(run_dir: Path, cfg: Config, tracker: TrackerAdapter, *, now: str) -> NotifyReport | None:
+    """Remind a person of a run that waits for them, if `remind_after_hours` have passed since the last notice. The
+    tick calls this for a parked run, because no engine runs while a run waits. None when nothing is due."""
+    run = _read_run_quietly(run_dir)
+    if run is None or run.status not in ("awaiting_approval", "blocked"):
+        return None
+    item = run.attention
+    if item is None or item.kind == "request_changed" or not due_reminders([item], cfg, now=now):
+        return None
+    return notify(item, cfg, tracker, reminder=True)
 
 
 def _when(text: str) -> datetime:

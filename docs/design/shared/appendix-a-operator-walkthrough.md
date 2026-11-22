@@ -53,6 +53,7 @@ This is the sequence from a clean machine to a merged fix, using a repo called `
 15. **Delivery and cleanup.**
     - **Pull request:** opened with `summary.md` as its body and `Closes #42`.
     - **Merge:** a small chore with an explicit type auto-merges. Anything else waits for your review on GitHub.
+    - **While it works:** the issue's label follows the run (`factory:running`, `factory:needs-human` when it waits for you, `factory:blocked`), with one comment at each stop and a reminder each day while it still waits.
     - **After merge:** the run is done, the issue is closed and labelled `factory:done`, and the worktree and branches are removed. A worktree that is not clean is removed only when the repo's `cleanup_check` passes; otherwise `factory gc` reports it and leaves it.
     - **Later:** `factory gc` archives the run folder after the retention period.
 
