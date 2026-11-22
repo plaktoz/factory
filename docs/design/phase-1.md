@@ -167,7 +167,7 @@ One word per idea, used the same way in the engine, the workflows, the CLI, the 
 | Scorecard | An advisory result from the `revise-spec` skill: a 1 to 5 score per dimension and a recommendation (`ready`, `needs-changes`, `rework`). Not a gate or an approval. | review, approval |
 | Human stop | Any point where the run waits for you: an approval, a decision, a blocked run, a merge review. | pause |
 | Approval | A human stop with the options approve, rework and reject. | review (review is a stage) |
-| Decision | Your answer at a human stop, recorded in `decisions/<stage>.<n>.yaml`, where n counts the visits to that stage. | ADR (written after approval) |
+| Decision | Your answer at a human stop, recorded in `decisions/<stage>.<n>.yaml`, where n counts the visits to that stage. | `Decisions` row in the spec, written after approval (a `proposed` ADR while it waits) |
 | Attention item | The dashboard entry for a human stop. Listed under Needs you. | alert |
 | Checkpoint | A safe point with a WIP commit and `progress.md`. Restarts resume from here. | save |
 | Note | A steering message you queue for a task, delivered at the next checkpoint. | comment |

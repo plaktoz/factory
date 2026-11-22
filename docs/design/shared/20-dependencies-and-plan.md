@@ -168,6 +168,8 @@ No new dependency and no import cycle appear. `snapshot_kit` sits in 7, which 4 
 - **Waves 1 to 3.** Each team builds one module to its contract and passes its own acceptance criteria against upstream fakes. A module is done when its criteria pass and its public functions match the contract signatures, which a contract test in `tests/contracts` checks.
 - **Wave 4.** Drivers compose everything, then the integration tests below run.
 
+The pilot starts in phase 1a with one chore or bug-fix issue and a human merge. Feature work follows in 1b.
+
 **Integration tests** (owned by 16, run after wave 4)
 
 - [ ] Bug-fix end to end with fakes, driven only through the CLI: issue, run, triage, approval through `factory decide`, one rework from verify, PR, human merge, cleanup.
@@ -181,3 +183,12 @@ No new dependency and no import cycle appear. `snapshot_kit` sits in 7, which 4 
 - [ ] Stop an engine with SIGSTOP past the old 60-second limit while ticks run: no second engine starts. Kill it with SIGKILL: the next tick resumes it and any left-over worker is ended.
 - [ ] Edit `factory/workflows/` in the main checkout while a run is active: the run keeps using its snapshot.
 - [ ] Fail the GitHub stub for longer than one tick: the run is `retrying`, recovers when the stub does, and is blocked only after `infra_wait_hours`.
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Build phase 1a, the walking skeleton, first. Phase 1b adds the rest. | The owner's reason is not recorded. | No other option is recorded. | `2026-11-14-phase-1a-walking-skeleton-first` (D10) |
+| The pilot starts in phase 1a with one chore or bug-fix issue and a human merge. Feature work follows in 1b. | The riskiest assumptions are the repo constraints, and a chore tests them cheaply. | `after-1b`: wait for phase 1b and start with a feature task. | `2026-11-14-pilot-starts-in-phase-1a` (P3) |

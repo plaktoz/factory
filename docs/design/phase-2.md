@@ -94,7 +94,7 @@ Decided before the review ([phase 1 decisions](shared/21-decisions-and-sources.m
 
 ## P2-4 Pilot repo: plaktoz/test-adapters
 
-Moved into phase 1 on 2026-11-14. The pilot starts in phase 1a with one `factory`-labelled chore or bug-fix issue and a human merge (decision P3); feature work follows in 1b. Nothing here is built in phase 2. The decisions are the ADRs [pilot starts in phase 1a](../adr/2026-11-14-pilot-starts-in-phase-1a.md), [checkpoint commits stay local](../adr/2026-11-14-checkpoint-commits-stay-local.md), [cleanup runs the repo comparison first](../adr/2026-11-14-cleanup-runs-repo-comparison-first.md) and [record the model the harness reports](../adr/2026-11-14-record-the-model-the-harness-reports.md).
+Moved into phase 1 on 2026-11-14. The pilot starts in phase 1a with one `factory`-labelled chore or bug-fix issue and a human merge (decision P3); feature work follows in 1b. Nothing here is built in phase 2. The decisions are the ADRs pilot starts in phase 1a, checkpoint commits stay local, cleanup runs the repo comparison first and record the model the harness reports.
 
 Repo: https://github.com/plaktoz/test-adapters. Python, standard library only at runtime, GitHub Issues as the tracker, one check command (`scripts/check`). Its open tasks (T13 to T20) are jest feature work, which needs the phase 1b feature workflow.
 
@@ -326,7 +326,7 @@ Rules that apply to all three entries:
 
 **What landed on `main` (PRs #39 and #40, kept by the owner, wave 3 decision D3).** These change the phase 1 kit in one place: it now ships `factory/workflows/reviewer-eval.yaml`.
 
-- **ADR** [`2026-11-15-reviewer-eval-outside-bug-fix.md`](../adr/2026-11-15-reviewer-eval-outside-bug-fix.md): the eval stays out of `bug-fix.yaml`, for cost, fixture and recurring-run reasons, and names `reviewer-eval` as the alternative.
+- **ADR** `2026-11-15-reviewer-eval-outside-bug-fix`: the eval stays out of `bug-fix.yaml`, for cost, fixture and recurring-run reasons, and names `reviewer-eval` as the alternative.
 - **Workflow** `factory/workflows/reviewer-eval.yaml`: one `review` stage with the same `standards` task and `no-blocking-findings` gate as `bug-fix`. Nothing triggers it: the engine has no trigger field, and triage maps no request type to it.
 - **Runner** `scripts/evals/reviewers/run_trial.py`: reads its skill, output name, model, timeout and gate from that workflow.
 - **Test** `factory/engine/tests/workflow/test_reviewer_eval.py`: keeps the eval's task and gate equal to `bug-fix`'s, and fails if the runner hard-codes a setting.
@@ -442,7 +442,7 @@ flowchart TD
 
 - A gate is a `GateSpec` with a `check` or a `cmd` ([section 18](shared/18-shared-contracts.md)), so a new deterministic check needs no new gate kind.
 - Every module has a fake, so a new layer can be tested without a model.
-- The ADRs in `docs/adr/` record why each rule exists, so the review does not reopen a settled decision without a new ADR.
+- The `Decisions` tables in the specs record why each rule exists, so the review does not reopen a settled decision without a new `proposed` ADR.
 
 **Where to look (candidates, not findings).** This list is a starting point from reading the module titles. It has not been assessed, and some items may already be covered.
 
@@ -477,3 +477,11 @@ flowchart TD
 - Whether the review runs once, or on a schedule as the workflows grow. Unspecified.
 - Who owns the finding (the owner, or a review agent with the owner's decision on each proposal). Unspecified.
 - Whether a layer that blocks is allowed to be switched off per repo. Unspecified; D12 shows the cost of that kind of switch.
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| The Codex worker adapter is out of phase 1 and tracked here. Phase 1 keeps the adapter contract, the `harness` and `routing` keys and the `harnesses` map. | The owner said phase 2 is not needed now and phase 1 comes first. | No option list was written; it was a statement. | `2026-11-14-codex-moves-to-phase-2` (owner statement 2026-11-14) |

@@ -10,7 +10,7 @@ The engine owns the run lifecycle, the state files, the scheduler, the lock on e
 2. `factory run` starts an engine process. It takes the lock on each run it drives, schedules tasks, runs gates, joins and moves stages.
 3. At a human stop, the run waits as `awaiting_approval` or `blocked`; while GitHub or the network is down it waits as `retrying`. When every run it drives is done or waiting on a human, the engine process exits.
 4. An answer (dashboard, CLI, chat or file edit) restarts an engine on that run, which continues where it stopped ([module 11](11-human-stops.md)).
-5. Delivery opens the pull request or writes the sink and writes `summary.md`. A run with a pull request then waits as `awaiting_approval` at its merge review, and ends `done` when GitHub merges the pull request or `aborted` when it is closed; red CI sends it back through the last stage's `on_fail` edge ([ADR](../../adr/2026-11-20-run-state-while-the-pull-request-is-open.md)). A run with any other sink ends `done` at once. A run can also end `failed`.
+5. Delivery opens the pull request or writes the sink and writes `summary.md`. A run with a pull request then waits as `awaiting_approval` at its merge review, and ends `done` when GitHub merges the pull request or `aborted` when it is closed; red CI sends it back through the last stage's `on_fail` edge, with the failing check output as feedback. Red CI pushes the fix to the open pull request; it opens no second pull request. A run with any other sink ends `done` at once. A run can also end `failed`.
 
 **Scheduled ticks**
 
@@ -206,7 +206,7 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 **Scheduler**
 
 - Starts tasks whose `needs` are done, up to `concurrency`. A task with a helper maximum of 2 reserves 3 slots.
-- Kills a task at its timeout and records the cause. Restarts a task at a checkpoint when a note is queued, up to `max_restarts`.
+- Kills a task at its timeout and records the cause. Restarts a task at a checkpoint when a note is queued, up to `max_restarts`. The new attempt gets `progress.md`; resuming the harness's own session is not used in phase 1.
 
 **Lock and recovery**
 
@@ -217,7 +217,7 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 
 **Run rebuild**
 
-Decision E1, option `[snapshot-event]` (ADR [rebuild-run-from-last-snapshot](../../adr/2026-11-15-rebuild-run-from-last-snapshot.md); the event catalogue named no fields, so a run could not be rebuilt from it).
+Decision E1, option `[snapshot-event]` (the event catalogue named no fields, so a run could not be rebuilt from it).
 
 - After each change to a run, the engine writes one `run_snapshot` event to `events.jsonl`. It carries the whole run.
 - `recover --rebuild`, and the read of an unreadable `run.json`, replay only the last `run_snapshot`. They do not read the other events to rebuild.
@@ -371,3 +371,15 @@ Acceptance criteria:
 - [x] After a person answers a human stop, a new engine continues the run where it stopped; with no answer it stays parked. (test: factory/engine/tests/engine/test_engine.py::test_an_answered_approval_stop_lets_a_new_engine_continue_the_run_to_done, ::test_an_unanswered_approval_stop_stays_parked_when_an_engine_starts, ::test_an_answered_triage_stop_continues_with_the_chosen_workflow)
 - [x] Kill the engine mid-task, then `resume`: only unfinished tasks run, the cut-off attempt is `interrupted`, and the task worktree is back at its last checkpoint with the discarded diff saved. (test: factory/engine/tests/engine/test_engine.py::test_kill_the_engine_mid_task_then_resume)
 - [x] After each join, conflict signals are written to `run.json`. (test: factory/engine/tests/engine/test_engine.py::test_after_each_join_conflict_signals_are_written_to_run_json)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Reset the task worktree to the last checkpoint after a crash. The discarded diff is saved first. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-crash-recovery-resets-to-last-checkpoint (D12) |
+| The run lock is an OS file lock held for the process lifetime. The heartbeat is for display only. Leftover worker process groups are killed before a new attempt. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-run-lock-is-an-os-file-lock (D1) |
+| The engine writes a `run_snapshot` event after each change. A rebuild replays only the last one. | One snapshot event is the smallest change that meets 6A as written, and it was measured at 1.8 KB per snapshot, about 356 KiB for 200 changes. The body leaves the size limit open. | Fields on every event. A `run.json.bak` copy. | 2026-11-15-rebuild-run-from-last-snapshot (E1) |
+| After the pull request opens, the run waits as `awaiting_approval` at a merge review. It ends `done` only when GitHub merges it. Closed aborts it. Red CI routes it back and pushes the fix to the same pull request, opening no second one. | Keeps every status write in the engine, under the lock. | Done at open, with `tick` polling. `tick` acting on the run. | 2026-11-20-run-state-while-the-pull-request-is-open (D1) |
+| Restart with `progress.md`. Harness session resume is not used in phase 1. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-restart-from-progress-md (D14) |

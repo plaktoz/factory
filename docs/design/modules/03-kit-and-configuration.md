@@ -84,7 +84,7 @@ max_workers: 6                   # machine-wide cap on running workers, shared b
 
 | Repo rule | How the engine meets it |
 | --- | --- |
-| "No commit without a request" | Checkpoint commits stay on a local task branch that is never pushed, and only the join commit is pushed ([module 7](07-git-and-github-operations.md)). The owner accepts this by running `factory init` in the repo; the decision is in [checkpoint commits stay local](../../adr/2026-11-14-checkpoint-commits-stay-local.md) (P1). |
+| "No commit without a request" | Checkpoint commits stay on a local task branch that is never pushed, and only the join commit is pushed ([module 7](07-git-and-github-operations.md)). The owner accepts this by running `factory init` in the repo; the decision is P1, in [module 7](07-git-and-github-operations.md). |
 | "Remove a worktree only after comparing its files" | `cleanup_check` names the comparison. Unset: a worktree that is not clean is skipped and reported. Set: its exit code decides ([module 17](17-housekeeping.md)). |
 | "No model override" | The engine sends no model flag unless a model is set in config, and records the model the harness reports ([module 9](09-worker-adapters-and-governed-helpers.md), [module 14](14-token-tracking.md)). |
 
@@ -178,7 +178,7 @@ Each command reads `.factory-run.json` to find the run, then reads the run folde
 When a run is created, the factory copies `factory/` and `.factory/config/` from the base branch's committed content (`git archive`) into `$FACTORY_HOME/kits/<kit hash>/`. The hash covers the copied files, so runs created from the same content share one folder. From then on the run uses only its snapshot:
 
 - the engine, workflows, plugins, schemas, languages and `requirements.lock` all come from the snapshot, never from the repo's working tree, so a branch switch, a pull or an edit in the main checkout cannot change a running run;
-- the launcher finds a run's engine from `kit_hash` in `run.json`, and starts it from the snapshot with the virtual environment for that snapshot's `requirements.lock`. **Phase 1a (owner decision, 2026-11-21, [ADR](../../adr/2026-11-20-which-engine-serves-each-repo.md)):** the launcher starts the snapshot's engine, `kits/<kit hash>/factory/engine`, by setting `PYTHONPATH` to it, and runs it with the launcher's own Python. The venv for `requirements.lock` is phase 1b, so until then PyYAML and jsonschema come from the launcher's environment and repos on different kits do share packages;
+- the launcher finds a run's engine from `kit_hash` in `run.json`, and starts it from the snapshot with the virtual environment for that snapshot's `requirements.lock`. **Phase 1a (owner decision, 2026-11-21, which engine serves each repo):** the launcher starts the snapshot's engine, `kits/<kit hash>/factory/engine`, by setting `PYTHONPATH` to it, and runs it with the launcher's own Python. The venv for `requirements.lock` is phase 1b, so until then PyYAML and jsonschema come from the launcher's environment and repos on different kits do share packages;
 - plugin hashes are checked against `plugin-hashes.json` when the snapshot is made, so a plugin edited later never changes a run that already started;
 - commands that create runs (`add`, `sync`, and the sync step of `tick`) use the repo's committed kit; every later command uses the run's snapshot;
 - `factory run --kit working-tree` uses the working tree instead, for developing the kit itself, and records that in `run.json`.
@@ -193,7 +193,9 @@ Housekeeping deletes a snapshot when no unarchived run uses it.
 
 Phase 1 supports macOS and Linux. Windows (Task Scheduler install, `.bat` and `.ps1` handling, retrying atomic replaces, Windows path rules) is phase 2. The code already uses `pathlib` and argument lists, so nothing blocks it.
 
-Python 3.10 or later, `pathlib` for paths, `subprocess` with argument lists, and no shell scripts in the kit's engine. Commands that workflows call, such as `scripts/repro-fails.sh`, belong to the repo; a repo on Windows supplies its own. The external tools are `git`, `gh` when the tracker is GitHub, and `srt` (`@anthropic-ai/sandbox-runtime`, which needs Node 22.12 or later) for the sandbox around commands ([module 9](09-worker-adapters-and-governed-helpers.md)). `factory doctor` checks each. Python dependencies (PyYAML, jsonschema) are pinned in `factory/requirements.lock`. The launcher builds one virtual environment per distinct lock hash under `$FACTORY_HOME/venvs/` on first use and runs the repo's engine from it, so repos on different kit versions never share packages. *Phase 1b: in phase 1a the launcher builds no venv and the kit has no `requirements.lock`; see the run snapshot rules in the Layout section.*
+Python 3.10 or later, `pathlib` for paths, `subprocess` with argument lists, and no shell scripts in the kit's engine. Commands that workflows call, such as `scripts/repro-fails.sh`, belong to the repo; a repo on Windows supplies its own. The external tools are `git`, `gh` when the tracker is GitHub, and `srt` (`@anthropic-ai/sandbox-runtime`, which needs Node 22.12 or later; the factory itself runs on Node 26, tested on 26.13.0) for the sandbox around commands ([module 9](09-worker-adapters-and-governed-helpers.md)). `factory doctor` checks each. Python dependencies (PyYAML, jsonschema) are pinned in `factory/requirements.lock`. The launcher builds one virtual environment per distinct lock hash under `$FACTORY_HOME/venvs/` on first use and runs the repo's engine from it, so repos on different kit versions never share packages. *Phase 1b: in phase 1a the launcher builds no venv and the kit has no `requirements.lock`; see the run snapshot rules in the Layout section.*
+
+Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is out of scope. `factory doctor` starts a probe worker with CLI flags that keep your own plugins, hooks and MCP servers out, and fails if one appears ([module 9](09-worker-adapters-and-governed-helpers.md)). Before the phase 1a pilot, `factory doctor` must pass its canary on Linux.
 
 **Module contract: 3 Kit and configuration**
 
@@ -236,3 +238,16 @@ Acceptance criteria:
 - [x] `doctor --as-scheduler` runs every check in an empty environment. (test: factory/engine/tests/kit/test_kit.py::test_doctor_as_scheduler_runs_every_check_the_normal_run_runs, ::test_doctor_as_scheduler_runs_in_an_empty_environment)
 - [x] `cleanup_check` must be a list of strings, never a shell string; anything else fails with `config.invalid` and the fix. (test: factory/engine/tests/config/test_config.py::test_cleanup_check_must_be_a_list_of_strings, ::test_load_config_refuses_a_bad_repo_file)
 - [x] A repo file with no `cleanup_check` and no model loads, and `resolve_harness` returns no model. (test: factory/engine/tests/config/test_config.py::test_repo_without_cleanup_check_or_model_loads_and_resolves_no_model)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| One `Config` type with a machine part and a repo part. `tick` takes a `Config` loaded with `repo=None`. | No new type or loader. Precedence stays in one place. Matches module 3 as written. | A separate `MachineConfig` with its own loader and schema. | 2026-11-14-one-config-type (R2) |
+| CLI flags keep your plugins, hooks and MCP servers out of workers. A `doctor` probe worker checks it. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-personal-setup-kept-out-by-cli-flags (D8) |
+| Snapshot `factory/` and `.factory/config/` from the base branch when the run is created. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-snapshot-the-kit-per-run (D11) |
+| The factory's Node version is 26, tested on 26.13.0. The floor for `srt` stays at Node 22.12. Node 25 is not used. | `srt` ran on Node 26.13.0 with a settings file that validates. | Node 25. | 2026-11-14-node-26-is-the-factory-node |
+| macOS and Linux in phase 1. Windows in phase 2. | Not recorded in the ADR. | Not recorded in the ADR. | 2026-11-14-macos-and-linux-in-phase-1 (D6) |
+| OAuth login is out of scope; phase 1 uses a key or gateway token. `factory doctor` must pass the canary on Linux before the phase 1a pilot. | `doctor` makes an untested machine fail closed, so waiting costs nothing, and wave 0 needs neither. | Test both before wave 0. Declare phase 1a macOS only. | 2026-11-14-linux-and-oauth-testing (Q5) |

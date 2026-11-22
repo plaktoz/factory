@@ -43,7 +43,7 @@ An OS file watcher could replace polling later, but polling stays the default be
 - **Session token.** At start the server makes a random token, stores it with its pid and port in `$FACTORY_HOME/dashboard.json` (mode 0600; workers run as the same user, so the factory-home deny-read rule in [module 9](09-worker-adapters-and-governed-helpers.md) is what keeps them out, and the residual risk there applies), and `factory dashboard` prints and opens `http://127.0.0.1:8765/?token=...`. The page keeps the token in memory and sends it on every API call; the server refuses any `/api` or decision-page request without it. A new token is made at each start, so an old bookmark stops working.
 - A decision page served by the dashboard gets the token injected when it is served, never saved in the file on disk. Opened from disk, the page still shows the command and cannot submit.
 - It has no user accounts. Do not expose it beyond your machine without an authenticating proxy.
-- It reads only these files under `$FACTORY_HOME/runs/`: `request.json`, `run.json`, `task.json`, `events.jsonl`, `usage.jsonl`, `decisions/*.yaml`, `decisions/*.html`, `merge.json`, `summary.md` and `worker.log`. JSON and YAML are validated against their schemas and rejected if invalid.
+- It reads only these files under `$FACTORY_HOME/runs/`: `request.json`, `run.json`, `task.json`, `events.jsonl`, `usage.jsonl`, `decisions/*.yaml`, `decisions/*.html`, `merge.json`, `summary.md` and `worker.log`. JSON and YAML are validated against their schemas and rejected if invalid. Every reader of `events.jsonl`, the dashboard included, skips or ignores `run_snapshot` events; only the rebuild in module 6 reads them.
 - It never reads repos or worktrees.
 - A run is stale when `lock_status` reports stale, the same rule the tick uses. A heartbeat older than 2 minutes on a live lock shows as "not responding", for display only.
 - Finished runs older than `show_finished_days` (default 7) are hidden from the overview until housekeeping archives them.
@@ -102,3 +102,12 @@ Acceptance criteria:
 - [x] Run detail shows token totals by observed model, repo and day, and says so when none are recorded. (test: factory/launcher/tests/server/test_pages_and_writes.py::test_run_detail_returns_token_totals_by_model_repo_and_day, ::test_a_run_with_no_attempts_has_empty_usage_groups, ::test_the_page_renders_each_usage_group_and_the_empty_state; the page's rendering was also driven once in a headless browser against a real server, not as a repeatable UI test)
 - [x] A request with no token, a wrong token, a foreign `Host` or a foreign `Origin` is refused with HTTP 403 and changes nothing. (test: factory/launcher/tests/server/test_security.py::test_no_token_wrong_token_foreign_host_or_foreign_origin_is_403_and_changes_nothing)
 - [x] Scheduler health shows the last tick from `tick.json`, and warns after `stale_after_ticks` intervals without one. (test: factory/launcher/tests/server/test_api_state.py::test_scheduler_health_shows_the_last_tick_and_warns_when_it_is_stale)
+
+## Decisions
+
+A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded ADR in full, see `docs/adr/README.md`; the Id cell is the file name without `.md`.
+
+| Rule | Why | Not chosen | Id |
+| --- | --- | --- | --- |
+| Dashboard writes need a per-session token, a `Host` check and an `Origin` check. | The owner's reason is not recorded. | No other option is recorded. | `2026-11-14-dashboard-writes-need-token-host-and-origin` (D5) |
+| Phase 1a ships the plain HTML page with a usage view. The React bundle moves to phase 1b. | The pilot is read-only and the engine path matters more. React can follow in 1b without redoing the server. | `build-react-now` (no React source exists); `plain-page-for-good` (drop React from the spec). | `2026-11-15-dashboard-plain-page-in-phase-1a` (D2, owner decision 2026-11-15) |
