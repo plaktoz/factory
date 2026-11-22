@@ -347,7 +347,6 @@ Acceptance criteria:
   - 13: `render_summary`, `write_adr`, `open_pr`, `evaluate_merge`, `merge_or_request_review`, `watch_pr`, `write_sink`
   - 14: `start_attempt`, `finish_attempt`, `close_open_attempts`, `summarize`
   - 17: `cleanup_after_join`, `cleanup_after_merge`
-  - 17: `cleanup_after_join`, `cleanup_after_merge`
   - 17A: `detect`, `run_step` (format once, after a task's worker has stopped)
 - **Writes:** run and task state through 6A; every event in the catalogue above.
 - **CLI it backs:** `run`, `resume`, `stop`.
