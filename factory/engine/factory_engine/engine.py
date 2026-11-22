@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import (decisions, delivery, gates, gitops, housekeeping, notes, notify, rework, shims, skills, state, summary,
-               triage)
+               toolchains, triage)
 from . import usage as usage_mod
 from . import workflow as wf_mod
 from .adapters.worker.base import AttemptResult, HarnessConfig, TaskContext, WorkerAdapter
@@ -712,6 +712,8 @@ class Engine:
         outcome, ts, spec = job.outcome, job.ts, job.spec
         if outcome is None:  # the thread died without a result: treat it as a crash
             outcome = AttemptResult("failed", None, None, None, None, [], "crash")
+        elif outcome.exit == "ok" and outcome.artifact is not None:
+            outcome = self._format_after_worker(run_dir, job, outcome)
         ok = outcome.exit == "ok" and outcome.artifact is not None
         exit_ = "ok" if ok else "interrupted" if (outcome.exit == "killed" or job.restart_for_note) else "failed"
         usage_mod.finish_attempt(run_dir, spec.id, ts.attempt, exit=exit_, input_tokens=outcome.input_tokens,
@@ -726,6 +728,31 @@ class Engine:
             self._after_failed_attempt(run_dir, ts, spec, outcome)
         state.write_task(run_dir, ts, lock=lock)
         result.started.append(spec.id)
+
+    def _format_after_worker(self, run_dir: Path, job: "_Running", outcome: AttemptResult) -> AttemptResult:
+        """Module 17A, step 1: the worker has stopped, so format the task's changed files before the final commit. A skill
+        task only: a `cmd` task's files are what its command made. A formatter that exits non-zero fails the attempt as a
+        worker crash (retried from the checkpoint); a missing formatter is `binary_missing`, a stop for a person."""
+        ts, spec = job.ts, job.spec
+        if self._is_deterministic(spec) or ts.worktree is None or not (ts.worktree / ".git").exists():
+            return outcome
+        files = gitops.task_changed_files(ts.worktree, ts.task_base)
+        try:
+            steps = toolchains.format_changed_files(ts.worktree, self.cfg, files, log_dir=run_dir / "tasks" / spec.id)
+        except FactoryError as e:
+            state.append_event(run_dir, "task_format_failed", task_id=spec.id, error=e.message)
+            return AttemptResult("failed", None, None, outcome.input_tokens, outcome.output_tokens, outcome.models_observed,
+                                 "binary_missing")
+        bad = [r for r in steps if not r.ok]
+        if bad:
+            state.append_event(run_dir, "task_format_failed", task_id=spec.id, step=bad[0].step, exit_code=bad[0].exit_code,
+                               output_tail=bad[0].output_tail[-500:])
+            return AttemptResult("failed", bad[0].exit_code, None, outcome.input_tokens, outcome.output_tokens,
+                                 outcome.models_observed, "crash")
+        if steps:
+            state.append_event(run_dir, "task_formatted", task_id=spec.id,
+                               files=sorted({f for r in steps for f in r.files}))
+        return outcome
 
     def _checkpoint(self, ts: TaskState, spec: TaskSpec) -> None:
         """Commit the task worktree's changes as a checkpoint. A triage task has no repo, so it has none."""

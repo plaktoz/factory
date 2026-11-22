@@ -1,8 +1,8 @@
 """Language toolchains (module 17A): detect profiles, run their steps, gate lint, build verify tasks.
 
 A profile is a YAML file in factory/languages/ (or a repo override). Commands are argument lists, run with no shell,
-in the worktree, under the same sandbox as other deterministic tasks (module 9). The cache variables a tool needs
-are set by the adapter (module 9), not by the profile.
+in the worktree. The formatter and lint steps run with a plain subprocess, not under `srt`: the spec does not say they
+are sandboxed (open, see docs/tasks.md). The cache variables a tool needs are set by the adapter (module 9), not by the profile.
 """
 
 from __future__ import annotations
@@ -107,6 +107,17 @@ def detect(worktree: Path, cfg: Config) -> list[Toolchain]:
     return found
 
 
+def find_tool(worktree: Path, name: str) -> str | None:
+    """The program a profile command starts. `gradlew` is the repo's own wrapper script, not a tool on PATH (module 17A:
+    `gradlew` or `gradlew.bat`, chosen per OS), so it is looked for in the worktree first."""
+    from shutil import which
+    if name == "gradlew":
+        for wrapper in ("gradlew", "gradlew.bat"):
+            if (worktree / wrapper).is_file():
+                return str(worktree / wrapper)
+    return which(name)
+
+
 def run_step(tc: Toolchain, step: Literal["format", "format_check", "lint", "test", "build"],
              worktree: Path, *, files: list[str] | None = None, log: Path) -> StepResult:
     """Run one step of a toolchain in the worktree. A missing tool fails fast with its name (module 17A).
@@ -116,10 +127,11 @@ def run_step(tc: Toolchain, step: Literal["format", "format_check", "lint", "tes
     cmd = list(tc.commands.get(step) or [])
     if not cmd:
         return StepResult(step, 0, True, None, "", files or [])  # e.g. python build: nothing to run
-    from shutil import which
-    if which(cmd[0]) is None:
+    tool = find_tool(worktree, cmd[0])
+    if tool is None:
         raise FactoryError("config.invalid", f"{tc.name}: the tool {cmd[0]!r} for {step} is not installed",
                            hint=f"install {cmd[0]} before the run; factory doctor reports this too")
+    cmd[0] = tool
     args = cmd + ([f for f in (files or [])] if step in ("format", "lint") and files else [])
     # The environment is the minimal base; the cache variables for this task are set by the adapter (module 9),
     # which passes them in through the task's own environment, never through this step's signature.
@@ -128,6 +140,31 @@ def run_step(tc: Toolchain, step: Literal["format", "format_check", "lint", "tes
     log.write_text(r.stdout + r.stderr)
     tail = "\n".join((r.stdout + r.stderr).splitlines()[-200:])
     return StepResult(step, r.returncode, r.returncode == 0, None, tail, files or [])
+
+
+# Formatters that format a whole project and read a file name as something else (a Maven phase, a solution path).
+_WHOLE_PROJECT_FORMATTERS = frozenset({"mvn", "gradlew", "dotnet"})
+
+
+def format_changed_files(worktree: Path, cfg: Config, changed: list[str], *, log_dir: Path) -> list[StepResult]:
+    """Format a task's changed files once, after its worker has stopped (module 17A, step 1). Each detected profile
+    formats the changed files its `files` globs match; a profile with none does not run. A build-tool formatter runs
+    once with no file arguments. A formatter that exits non-zero is returned, not raised; a missing tool raises
+    `config.invalid` with its name (run_step)."""
+    present = [f for f in changed if (worktree / f).is_file()]
+    results: list[StepResult] = []
+    for tc in detect(worktree, cfg):
+        mine = [f for f in present if _matches(f, tc.files)]
+        if not mine or "format" not in tc.commands:
+            continue
+        whole = tc.commands["format"][0] in _WHOLE_PROJECT_FORMATTERS
+        results.append(run_step(tc, "format", worktree, files=None if whole else mine, log=log_dir / f"format-{tc.name}.log"))
+    return results
+
+
+def _matches(path: str, globs: list[str]) -> bool:
+    """`**/*.py` matches `a.py` as well as `sub/a.py`: fnmatch's `*` crosses `/`, but a `**/` prefix needs a folder."""
+    return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch(path, g.removeprefix("**/")) for g in globs)
 
 
 def _base_env() -> dict[str, str]:
@@ -175,13 +212,14 @@ def check_lint_clean(spec: GateSpec, ctx: GateContext) -> GateResult:
     return GateResult(passed=True, gate="lint-clean", code="ok", output_tail="", details={})
 
 
-def language_tasks(worktree: Path, cfg: Config, step: str) -> list[TaskSpec]:
-    """One task per detected language, for tasks_from: languages (module 17A, verify stage). Tasks run in parallel:
-    none depends on another."""
+def language_tasks(worktree: Path, cfg: Config, step: str, changed: list[str]) -> list[TaskSpec]:
+    """One task per detected language whose files the run changed, for tasks_from: languages (module 17A, verify stage;
+    owner decision D5, 2026-11-22). `changed` is the run's changed paths, relative to the worktree. Tasks run in
+    parallel: none depends on another."""
     from .types import HelperPolicy
     tasks = []
     for tc in detect(worktree, cfg):
-        if step not in tc.commands:
+        if step not in tc.commands or not any(_matches(f, tc.files) for f in changed):
             continue
         tasks.append(TaskSpec(id=f"{step}-{tc.name}", skill=None, cmd=tc.commands[step], run=None, scope=[],
                               deny=[], needs=[], helpers=HelperPolicy("off", 0, [], None), out=None,
@@ -198,7 +236,7 @@ def doctor_checks(worktree: Path, cfg: Config) -> list:
     for tc in detect(worktree, cfg):
         tools = sorted({cmd[0] for cmd in tc.commands.values() if cmd})
         for tool in tools:
-            ok = which(tool) is not None
+            ok = find_tool(worktree, tool) is not None
             out.append(CheckResult(f"toolchain:{tc.name}:{tool}", ok, "installed" if ok else f"{tool} is not on PATH",
                                    "" if ok else f"install {tool}; the {tc.name} profile needs it"))
     return out

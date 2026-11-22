@@ -373,6 +373,8 @@ class TickResult:   started: list[str]; finished: list[str]; gates: list[GateRes
                     routed_to: str | None; attention: AttentionItem | None
 ```
 
+`EngineResult.exit_code` is one code for every run the call drove, the first of these that holds: 4 if any run is blocked, 3 if any waits on a human, 1 if any failed, else 0 (the codes are in [section 18](../shared/18-shared-contracts.md)). A failed run next to a waiting one gives 3, so a script that must see every failure reads `runs` (owner decision D7, 2026-11-22).
+
 All collaborators are injected, so 6B is tested end to end with `FakeWorkerAdapter`, `FakeTracker`, `FakePullRequests` and `FakeClock` before the real adapters exist. The engine never spawns itself; drivers (16) start detached engines.
 
 - **Decisions taken while building (wave 3).** The spec did not settle these, so they are recorded here and are open to change by a new ADR.
@@ -398,6 +400,7 @@ Acceptance criteria:
 - [x] After a person answers a human stop, a new engine continues the run where it stopped; with no answer it stays parked. (test: factory/engine/tests/engine/test_engine.py::test_an_answered_approval_stop_lets_a_new_engine_continue_the_run_to_done, ::test_an_unanswered_approval_stop_stays_parked_when_an_engine_starts, ::test_an_answered_triage_stop_continues_with_the_chosen_workflow)
 - [x] Kill the engine mid-task, then `resume`: only unfinished tasks run, the cut-off attempt is `interrupted`, and the task worktree is back at its last checkpoint with the discarded diff saved. (test: factory/engine/tests/engine/test_engine.py::test_kill_the_engine_mid_task_then_resume)
 - [x] After each join, conflict signals are written to `run.json`. (test: factory/engine/tests/engine/test_engine.py::test_after_each_join_conflict_signals_are_written_to_run_json)
+- [x] One command that drives several runs exits 4 if any is blocked, else 3 if any waits on a human, else 1 if any failed, else 0. (test: factory/engine/tests/engine/test_engine.py::test_the_exit_code_for_several_runs_is_blocked_then_waiting_then_failed_then_success)
 
 ## Decisions
 
@@ -410,3 +413,4 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | The engine writes a `run_snapshot` event after each change. A rebuild replays only the last one. | One snapshot event is the smallest change that meets 6A as written, and it was measured at 1.8 KB per snapshot, about 356 KiB for 200 changes. No size limit is set. | Fields on every event. A `run.json.bak` copy. | 2026-11-15-rebuild-run-from-last-snapshot (E1) |
 | After the pull request opens, the run waits as `awaiting_approval` at a merge review. It ends `done` only when GitHub merges it. Closed aborts it. Red CI routes it back and pushes the fix to the same pull request, opening no second one. | Keeps every status write in the engine, under the lock. | Done at open, with `tick` polling. `tick` acting on the run. | 2026-11-20-run-state-while-the-pull-request-is-open (D1) |
 | Restart with `progress.md`. Harness session resume is not used in phase 1. | It is the same path as crash recovery and works on any harness, so phase 1 keeps one recovery path. Accepted cost: the worker's session context is lost. | Resume the harness session with the note appended. It differs per harness, and helper sessions and sandboxes complicate it. | 2026-11-14-restart-from-progress-md (D14) |
+| An engine call that drives several runs exits 4 if any is blocked, else 3 if any waits on a human, else 1 if any failed, else 0. | It is what the code does, so scripts that read it keep working, and a person waiting to approve is what can be acted on soonest. A failure behind a waiting run shows in the printed list. | Failures first, so a failed run always gives 1 (changes behavior scheduled runs may read, and a person waiting to approve would get exit 1). | 2026-11-22-owner-calls D7 document-as-built |

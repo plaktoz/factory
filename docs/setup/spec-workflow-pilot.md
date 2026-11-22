@@ -6,7 +6,7 @@ The pilot tests the spec steps from [issue #56](https://github.com/plaktoz/facto
 - `2026-11-21-spec-rules-live-in-agents-md-and-issue-form` (row in `docs/process.md`): the rules are in `AGENTS.md`, and each ticket's spec is its GitHub issue.
 - `2026-11-21-adversarial-check-is-a-fresh-session-by-hand` (row in `docs/process.md`): a fresh session checks the diff before the pull request.
 
-The ADRs leave steps 2 to 5 below undecided. Each of those steps has a default. Change a default in this file before the pilot starts, and record the change in task 18 of [`docs/tasks.md`](../tasks.md).
+The ADRs leave steps 2 to 5 below undecided. Each of those steps has a default. Change a default in this file before the pilot starts, and put the change in the pull request's task record for task 18 of [`docs/tasks.md`](../tasks.md) (AGENTS.md: a session does not edit that file).
 
 ## Setup
 
@@ -40,7 +40,7 @@ The ADRs leave steps 2 to 5 below undecided. Each of those steps has a default. 
 
 ## Decide
 
-Write a new ADR with `supersedes: [2026-11-21-spec-workflow-applies-by-hand-first]`. It chooses one of three options: keep the rules as a house rule, build them into a factory workflow, or drop them. Then update tasks 18 to 20 in [`docs/tasks.md`](../tasks.md).
+Write a new ADR with `supersedes: [2026-11-21-spec-workflow-applies-by-hand-first]`. It chooses one of three options: keep the rules as a house rule, build them into a factory workflow, or drop them. Then put the update to tasks 18 to 20 in the pull request's task record (AGENTS.md: a session does not edit [`docs/tasks.md`](../tasks.md)).
 
 ## Known limits
 

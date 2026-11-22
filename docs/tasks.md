@@ -1,6 +1,6 @@
 # Task list
 
-The durable state of the work. A new session continues from this file alone: read **Resume here**, then the first task that is not `[x]`. Update a task's marker in the same step that finishes it, with the evidence.
+The durable state of the work. A new session continues from this file alone: read **Resume here**, then the first task that is not `[x]`. Its marker and Log line are written in the pull request's `## Task record` and pasted in by the merger (Rules from the owner); a session does not edit this file.
 
 Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it was checked), `[-]` not done (say why).
 
@@ -68,7 +68,8 @@ Closed items, finished sections (A to E), the wave 3 notes and older Log entries
 - Keep the docs readable by people: a diagram or flow for each changed behavior.
 - After a review decision is made, apply it to the specs, then clean up the files.
 - Follow D1 to D14. D7 changed on 2026-11-14 to Claude Code's sandbox. Linux is a pre-pilot check and OAuth login is out of scope (phase 1 uses a key or gateway token).
-- Decisions: when a decision is answered, the session that records it writes the ADR, updates **Open owner decisions** and **Resume here**, and adds a Log entry that names the ADR file, in the same commit. `records.py` check 5 fails when an ADR dated 2026-11-16 or later is not named here.
+- Task record (owner decision D1, 2026-11-22): a session does not edit this file. Its pull request body ends with a `## Task record` section (the Log entry, the item changes, any issue closed by hand), and whoever merges the pull request pastes it here in one commit on `main`. The merger also moves the oldest Log entries to `tasks-archive.md`.
+- Decisions: when a decision is answered, the session that records it writes the `Decisions` row (and deletes the ADR), and puts the Log entry and any change to **Open owner decisions** or **Resume here** in its pull request's task record. The entry names the decision id; it names an ADR file only while that ADR is still `proposed`. `records.py` check 5 fails when an ADR dated 2026-11-16 or later is not named here.
 - Approvals: a standing owner approval is recorded in `docs/approvals.md`, not only in a PR comment or a decision page. The session that receives a decision carries it through to every doc and every task it creates, including tasks for another author, and ticks it in `approvals.md` when done.
 - Autonomy (owner, 2026-11-14): run every wave to the end with test evidence and no questions. A checkpoint is a commit, push and merge, done without asking. An issue gets at most 3 passes; after that it is recorded in the Log as blocked and the work goes on. The owner returns after the last wave to test by hand, using a tutorial that covers a new project, the dashboard, and fixing an issue in an existing project.
 

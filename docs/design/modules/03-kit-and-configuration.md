@@ -95,7 +95,7 @@ flowchart LR
   rule --> c["Model: no flag sent,<br/>observed model recorded"]
 ```
 
-Machine settings (worktree root, tool paths) come from the per-machine file. Notification settings (`notify`, including desktop) come from `factory.yaml`. Repo settings come from `factory.yaml`. The one environment override built is `FACTORY_WORKTREE_ROOT`, which replaces `worktree_root`. No CLI flag changes config yet; the precedence the criterion below asks for is not built.
+Machine settings (worktree root, tool paths) come from the per-machine file. Notification settings (`notify`, including desktop) come from `factory.yaml`. Repo settings come from `factory.yaml`. The one environment override built is `FACTORY_WORKTREE_ROOT`, which replaces `worktree_root`. No CLI flag changes config yet, and no other key has an environment override (owner decision D6, 2026-11-22: the broad precedence of flag, then environment variable, then file is not built, and a later request adds an override where one is needed).
 
 **Defaults.** These are the values a key takes when its file does not set it. Machine: `max_workers: 6`. Repo: `concurrency: 4`, `infra_wait_hours: 6`, `serialize_overlapping_runs: false`. Any other key has no default and is off until its module reads it.
 
@@ -218,7 +218,7 @@ Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is 
 # config.py
 def load_config(repo: Path | None, *, env: Mapping[str, str] = os.environ) -> Config
     """Merge defaults, machine file and repo file; machine keys from the machine file,
-    repo keys from the repo file; the one environment override built is FACTORY_WORKTREE_ROOT (precedence is open, see criteria). Validates against schema.
+    repo keys from the repo file; the one environment override built is FACTORY_WORKTREE_ROOT. Validates against schema.
     Returns Config(machine=..., repo=...); repo is None when the repo argument is None."""
 def resolve_harness(cfg: Config, harness: str, *, env: Mapping[str, str] = os.environ) -> HarnessConfig
     """command, model (None when unset), args and the minimal env with ${...} resolved at call time."""
@@ -243,7 +243,7 @@ Acceptance criteria:
 
 - [x] `${VAR}`, `${VAR:-default}` and `${VAR:?message}` resolve; an unset `:?` variable fails with the message. (test: factory/engine/tests/config/test_config.py::test_plain_reference_resolves, ::test_default_used_when_unset_or_empty, ::test_required_unset_fails_with_the_message)
 - [ ] A literal value under `env` in `.factory/config/` is refused; in the machine file it warns when readable by others. (not ticked: the repo-file half is tested (tests/config/test_config.py::test_literal_env_value_in_repo_config_is_refused) but the machine file has no permission warning: loadcfg.py and kit.py never check file mode)
-- [ ] Precedence: flag > env var > machine file (machine keys) or repo file (repo keys) > default. (not ticked: tests/config/test_config.py::test_precedence tests the pick() helper only; pick() has no caller, and load_config reads no flag or env layer except FACTORY_WORKTREE_ROOT)
+- [x] A setting comes from its file, or from its default when the file does not set it. `FACTORY_WORKTREE_ROOT` replaces `worktree_root` and is the only environment override; no flag changes a setting. (test: factory/engine/tests/config/test_config.py::test_factory_worktree_root_replaces_the_machine_worktree_root, ::test_a_missing_machine_file_and_a_missing_repo_file_load_with_the_defaults)
 - [x] `load_config(None)` returns a `Config` whose `.repo` is `None` and whose `.machine` keys are set; `load_config(repo)` sets both parts. (test: factory/engine/tests/config/test_config.py::test_load_config_none_has_machine_only, ::test_load_config_repo_sets_both_parts)
 - [x] Every YAML file is read by one safe loader that treats only `true` and `false` as booleans: `helpers: {mode: off}` loads as the string `off`, and a hook key `on:` loads as the string `on`. (test: factory/engine/tests/config/test_config.py::test_spec_examples_keep_off_and_on_as_strings)
 - [ ] `factory.yaml` and `merge-policy.yaml` are each validated against a schema in `factory/schemas/` at load (`factory-config` and `merge-policy`); a file that fails fails fast with `config.invalid`, the file and the fix. (not ticked: factory.yaml is schema-checked at load (tests/config/test_config.py::test_load_config_refuses_a_bad_repo_file) but load_config never validates merge-policy.yaml; only init_repo and upgrade do)
@@ -276,3 +276,4 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | The factory's Node version is 26, tested on 26.13.0. The floor for `srt` stays at Node 22.12. Node 25 is not used. | `srt` ran on Node 26.13.0 with a settings file that validates. | Node 25. | 2026-11-14-node-26-is-the-factory-node |
 | macOS and Linux in phase 1. Windows in phase 2. | The core loop is unproven, and Windows adds retrying atomic replaces, Task Scheduler install, `.bat` and `.sh` scripts and path rules. Fewer acceptance tests and a faster first release. The owner works on macOS. | All three OSes from the start (the largest test matrix before the core loop is proven). | 2026-11-14-macos-and-linux-in-phase-1 (D6) |
 | OAuth login is out of scope; phase 1 uses a key or gateway token. `factory doctor` must pass the canary on Linux before the phase 1a pilot. | `doctor` makes an untested machine fail closed, so waiting costs nothing, and wave 0 needs neither. | Test both before wave 0. Declare phase 1a macOS only. | 2026-11-14-linux-and-oauth-testing (Q5) |
+| A setting comes from its file, then its default. `FACTORY_WORKTREE_ROOT` is the only environment override and no flag changes a setting. The unused `pick` helper is deleted. | Nothing needs the broad order, and a variable or flag name is a promise for as long as the factory lasts. A later request adds an override where one is needed. | Build a flag, then environment variable, then file order for every key. | 2026-11-22-owner-calls D6 shrink-to-built |

@@ -82,6 +82,8 @@ class Clock(Protocol):
 class GateSpec:       kind: Literal["cmd", "check", "schema"]; cmd: list[str] | None
                       check: str | None; schema: str | None; args: dict; skippable: bool
 
+# GateContext.task_dir is the task's work/ folder (tasks/<task id>/work/), the one place its worker writes.
+# For the triage gate it is the folder of the artifact the gate reads.
 @dataclass
 class GateContext:    run: Run; stage: str; task_id: str | None; worktree: Path
                       task_dir: Path | None; artifact: Path | None; task_base: str | None
