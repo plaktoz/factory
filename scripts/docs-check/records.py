@@ -10,8 +10,8 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    not durable until this passes.
 2. The .html beside each .json is the rendering of it (same data), so the page cannot show
    a question the record has already closed.
-3. docs/tasks.md says "`main` is at `<sha>`"; that commit must be on first-parent main and at most
-   MAX_BEHIND merges behind it.
+3. (retired 2026-11-22) tasks.md used to name the sha `main` was at, and this check failed when it fell more than
+   3 merges behind. Every merge made it stale, so it was removed; `git log origin/main` is the source for the sha.
 4. A PR that docs/tasks.md calls open or blocked (the same item says "not merged", "open and
    not merged" or "blocked") must not already be merged on origin/main.
 5. docs/adr/ holds only proposed ADRs (docs/process.md, the fold rule). Each one has front matter with
@@ -32,7 +32,6 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
 import json, re, subprocess, sys
 from pathlib import Path
 
-MAX_BEHIND = 3
 LOG_CAP = 12
 root = Path(sys.argv[1] if len(sys.argv) > 1 else ".").resolve()
 problems = []
@@ -77,23 +76,6 @@ for src in sorted((root / "docs/decision-pages").glob("*.json")):
             problems.append(f"{rec.name}: row for {d['id']} names none of its options {sorted(ids)}")
 
 tasks = (root / "docs/tasks.md").read_text(encoding="utf-8")
-m = re.search(r"`main` is at `([0-9a-f]{7,40})`", tasks)
-if m:
-    try:
-        chain = subprocess.run(["git", "-C", str(root), "rev-list", "--first-parent", "origin/main"],
-                               capture_output=True, text=True, check=True).stdout.split()
-        full = subprocess.run(["git", "-C", str(root), "rev-parse", m.group(1)],
-                              capture_output=True, text=True, check=True).stdout.strip()
-        behind = chain.index(full) if full in chain else None
-        if behind is None:
-            problems.append(f"tasks.md: `main` is at {m.group(1)}, which is not on origin/main's first-parent line")
-        elif behind > MAX_BEHIND:
-            problems.append(f"tasks.md: `main` is at {m.group(1)}, {behind} merges behind origin/main (max {MAX_BEHIND})")
-    except subprocess.CalledProcessError as e:
-        problems.append(f"tasks.md: cannot check the main sha: {e.stderr.strip() or e}")
-else:
-    problems.append("tasks.md: no line of the form 'main is at `<sha>`'")
-
 merged = subprocess.run(["git", "-C", str(root), "log", "--first-parent", "--format=%s", "origin/main"],
                         capture_output=True, text=True).stdout
 merged_prs = set(re.findall(r"Merge pull request #(\d+)\b", merged))

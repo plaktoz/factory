@@ -12,8 +12,6 @@ _SKIP = {"engine", ".venv", "__pycache__", "tests"}  # top level of the kit only
 
 
 def seed_repo(tmp_path: Path) -> Path:
-    bare = tmp_path / "remote.git"
-    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
     src = tmp_path / "repo"
     subprocess.run(["git", "init", "-q", "-b", "main", str(src)], check=True)
     (src / "services").mkdir()
@@ -23,6 +21,9 @@ def seed_repo(tmp_path: Path) -> Path:
     subprocess.run(["git", "-C", str(src), "add", "-A"], check=True)
     subprocess.run(["git", "-C", str(src), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "init"],
                    check=True)
+    # A bare clone and a fetch give origin/main without a push: the managed pre-push scan costs ~20 s per push.
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "clone", "-q", "--bare", str(src), str(bare)], check=True)
     subprocess.run(["git", "-C", str(src), "remote", "add", "origin", str(bare)], check=True)
-    subprocess.run(["git", "-C", str(src), "push", "-q", "origin", "main"], check=True)
+    subprocess.run(["git", "-C", str(src), "fetch", "-q", "origin"], check=True)
     return src
