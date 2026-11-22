@@ -140,7 +140,8 @@ def upgrade(repo: Path, version: str) -> UpgradeReport:
 
     `version` names the kit being installed; it is recorded in the report only, because choosing a kit by version is
     the launcher's job (module 16). A run created earlier keeps its own snapshot, so nothing here affects it."""
-    if not (repo / "factory").is_dir():
+    cut_short = (repo / "factory.old").is_dir()  # an earlier upgrade died after moving factory/ aside; this one finishes it
+    if not (repo / "factory").is_dir() and not cut_short:
         raise FactoryError("config.invalid", f"{repo} has no factory/ folder", hint="run factory init first")
     before = {p: p.read_bytes() for p in (repo / ".factory" / "config").rglob("*") if p.is_file()}
     report = UpgradeReport()

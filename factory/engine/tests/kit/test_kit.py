@@ -193,6 +193,42 @@ def test_upgrade_leaves_a_runs_kit_snapshot_and_its_kit_hash_alone(repo, fake_ki
     assert state.read_run(ref.run_dir).kit_hash == h
 
 
+def test_upgrade_after_a_crash_between_the_swap_steps_installs_the_new_kit_and_keeps_the_old_one_until_then(repo, fake_kit):
+    """Module 3, Upgrade: a process that dies after moving factory/ aside leaves factory.old/ and no factory/. The next
+    upgrade must not say "run factory init first" (init would build a fresh kit and lose the old one's edits); it
+    installs the new kit and only then removes factory.old/."""
+    kit.init_repo(repo)
+    (repo / "factory" / "old.txt").write_text("the old kit")
+    real, calls = kit.os.replace, []
+
+    def dies_after_the_move_aside(a, b):
+        calls.append(b)
+        if len(calls) == 2:           # the second replace puts factory.new/ in place: the process dies before it
+            raise KeyboardInterrupt
+        return real(a, b)
+
+    kit.os.replace = dies_after_the_move_aside
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            kit.upgrade(repo, "2")
+    finally:
+        kit.os.replace = real
+    assert not (repo / "factory").exists() and (repo / "factory.old" / "old.txt").read_text() == "the old kit"
+    report = kit.upgrade(repo, "2")
+    assert report.replaced == repo / "factory" and (repo / "factory" / "workflows" / "bug-fix.yaml").is_file()
+    assert not (repo / "factory.old").exists() and not (repo / "factory.new").exists()
+
+
+def test_doctor_in_the_cli_exits_1_when_a_check_fails_and_0_when_all_pass(repo, fake_kit, monkeypatch, capsys):
+    """Module 3, doctor: exit 0 when every check passes, 1 when any fails; --no-repo checks the machine only."""
+    from factory_engine import api, cli
+    monkeypatch.setattr(api, "doctor", lambda r, as_scheduler=False: [kit.CheckResult("a", True, "ok", "")])
+    assert cli.main(["doctor", "--no-repo", "--json"]) == 0
+    monkeypatch.setattr(api, "doctor", lambda r, as_scheduler=False: [kit.CheckResult("a", True, "ok", ""), kit.CheckResult("b", False, "bad", "fix it")])
+    assert cli.main(["doctor", "--no-repo", "--json"]) == 1
+    capsys.readouterr()
+
+
 def test_doctor_reports_a_bad_repo_config(repo, fake_kit):
     kit.init_repo(repo)
     assert by_name(kit.doctor(repo))["repo-config"].ok
