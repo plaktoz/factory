@@ -56,10 +56,10 @@ What one tick does, in order:
 
 1. Takes a machine-wide tick lock. If the previous tick is still running, it exits at once and logs `tick_skipped`.
 2. For each repo in `repos`, it syncs tagged GitHub issues and the markdown inbox, creating runs for new requests. A `last_sync` cursor in `$FACTORY_HOME/sync/<repo key>.json` limits the GitHub query to recently updated issues.
-3. It checks the open pull requests of runs waiting on merge (`watch_pr`):
-   - merged: finishes the run and cleans up
-   - closed: aborts the run
-   - red CI: routes the run back to fix
+3. It checks the open pull requests of runs waiting on merge (`watch_pr`). The tick only reads them and starts an engine, because only the engine that holds a run's lock writes its state (see the table below):
+   - merged: the engine finishes the run and cleans up
+   - closed: the engine aborts the run
+   - red CI: the engine routes the run back to fix
 4. It starts a detached engine for every run that can proceed and has no live lock, including runs whose decision was answered while no engine was running.
 5. It resumes runs whose engine has died: status running and no process holding the lock. A sleeping laptop is not a death; its engine still holds the lock and carries on when it wakes.
 6. It sends a reminder for each run that waits for a person, once `remind_after_hours` have passed since the last notice (module 11). A failed channel is reported and never stops the tick.
@@ -240,10 +240,10 @@ flowchart LR
 | Group | Events |
 | --- | --- |
 | Run | `run_created`, `request_invalid`, `request_duplicate`, `run_done`, `run_failed`, `run_aborted`, `run_blocked`, `run_resumed`, `request_changed`, `infra_waiting`, `infra_recovered` |
-| Stage and task | `stage_started`, `stage_done`, `task_created`, `attempt_started`, `attempt_ended`, `checkpoint`, `task_interrupted` |
+| Stage and task | `stage_started`, `stage_done`, `task_created`, `attempt_started`, `attempt_ended`, `checkpoint`, `task_interrupted`, `usage_unreadable` |
 | Gates and rework | `gate_passed`, `gate_failed`, `gate_skipped`, `routed_back`, `run_retried`, `run_routed`, `merge_conflict` |
 | Human stops | `attention_requested`, `attention_cleared`, `decision_requested`, `decision_recorded`, `decision_approved`, `decision_rejected`, `decision_invalidated`, `decision_reopened` |
-| Steering | `note_queued`, `note_delivered`, `worker_restarted` |
+| Steering | `note_queued`, `note_delivered`, `worker_restarted`, `triage_answered` |
 | Delivery and cleanup | `pr_opened`, `merge_evaluated`, `merge_blocked`, `merged`, `sink_written`, `archived` |
 | Snapshot | `run_snapshot` [snapshot-event] |
 

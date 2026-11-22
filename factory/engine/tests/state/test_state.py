@@ -6,6 +6,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 import pytest
@@ -115,7 +116,17 @@ def test_acquire_succeeds_right_after_the_holder_is_killed(tmp_path):
     assert lock_status(d) == "live"
     holder.kill()
     holder.wait()
-    lock = acquire_lock(d, "engine-2")  # no raise
+    # POSIX frees the lock at once. Windows can free a dead process's byte-range lock a moment late (issue 103),
+    # so the test allows up to 2 seconds there.
+    deadline = time.monotonic() + (2.0 if sys.platform == "win32" else 0.0)
+    while True:
+        try:
+            lock = acquire_lock(d, "engine-2")
+            break
+        except FactoryError:
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.05)
     release(lock)
 
 

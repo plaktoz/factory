@@ -1,6 +1,6 @@
 # Tutorial: your first factory run in a new project
 
-This page takes you from nothing to a merged pull request, in two parts. In part 1 you run one small `chore` on a scratch repo, and the factory opens a pull request that you merge. In part 2 you file a GitHub issue and the factory turns it into a bug fix. The dashboard sits between them.
+This page takes you from nothing to a merged pull request, in three parts. In part 1 you run one small `chore` on a scratch repo, and the factory opens a pull request that you merge. In part 2 you file a GitHub issue and the factory turns it into a bug fix. In part 3 you add the factory to a project you already have. The dashboard sits between parts 1 and 2.
 
 Every command and output below comes from a real run on 2026-11-21 and 2026-11-22 (macOS, Claude Code through a gateway). Times and run ids differ on your machine.
 
@@ -98,7 +98,7 @@ factory add "Greet with an exclamation mark" --type chore --no-run
 created run greet-with-an-exclamation-mark-6v61l
 ```
 
-`--no-run` creates the run and starts nothing. `factory status` lists it.
+`--no-run` creates the run and starts nothing. `factory status --json` lists it (without `--json`, `status` prints only a count).
 
 ### 5. Run it
 
@@ -132,7 +132,7 @@ greet-with-an-exclamation-mark-zavus [merge_review] Pull request #4 waits for re
 This stop is the merge policy at work. A `chore` is not in the `auto` list in `.factory/config/merge-policy.yaml`, so a person reviews and merges it. Open the pull request, read the diff (it changes `src/hello.py` and the assertion in `scripts/check`), and merge it on GitHub, or from the terminal:
 
 ```sh
-gh pr merge 4 --merge
+gh pr merge <pr-number> --merge   # the number of the pull request the run opened
 ```
 
 The run does not notice the merge by itself. A scheduled `tick` does, and you can run one by hand:
@@ -145,7 +145,7 @@ factory tick
 started 1, resumed 0
 ```
 
-`factory status` now shows the run as `done`. To run `tick` for you every few minutes, use `factory schedule install`.
+`factory status --json` now shows the run as `done`. To run `tick` for you every few minutes, use `factory schedule install`.
 
 **The pull request body.** Its `What changed` section reads `Not available: the run's worktree could not be read` when your base branch is not the repo's default branch. Your branch from step 2 is the default, so you will see the file list.
 
@@ -173,7 +173,7 @@ It prints a URL with a token, and the server keeps running after the command ret
 - **Runs.** One row per run: repo, title, stage and status. Click a row to see its files and events.
 - **Show JSON.** The raw state, from `/api/state.json`. The API needs the `X-Factory-Token` header, which the page sends for you. A request with the token only in the address gets `403`.
 
-The page refreshes every 5 seconds. A warning at the top says `no tick has been recorded yet` until a `tick` runs. If you lose the URL, the token is in `$FACTORY_HOME/dashboard.json`. To stop the server, read its pid from `dashboard.json` (the `pid` field) and run `kill <pid>`. Do not use `pkill -f`: it matches any process whose command line names the server, such as a scan of its source file.
+The page refreshes every 5 seconds. A warning at the top says `no tick has been recorded yet` until a `tick` runs. If you lose the URL, the token is in `dashboard.json` under the factory home: `$FACTORY_HOME` if you set it, otherwise `~/.factory`. To stop the server, read its pid from `dashboard.json` (the `pid` field) and run `kill <pid>`. Do not use `pkill -f`: it matches any process whose command line names the server, such as a scan of its source file.
 
 ## Part 2. Fix a GitHub issue
 
@@ -257,10 +257,12 @@ factory sync
 1 new run(s)
 ```
 
-If it says `0 new run(s)` a moment after you file the issue, run it again: GitHub's issue list can lag by a few seconds. The same issue never makes a second run, so run it only once per issue. Then run the new run:
+The message does not print the run id. `factory sync --json` lists it under `data.created`.
+
+If it says `0 new run(s)` a moment after you file the issue, wait a few seconds and run it again: GitHub's issue list can lag. An issue that already has a run is reported under `data.duplicates` and not started again, so `sync` is safe to repeat. Then run the new run, with the id you found:
 
 ```sh
-factory run greet-returns-hello-for-an-empty-name-lpchj
+factory run <run-id>
 ```
 
 The run goes through `reproduce`, `fix` and `verify`, and stops at the merge review in about a minute and a half. In the real run the `reproduce` task wrote `tests/test_hello.py` with a failing test for the empty name, and the `fix` task changed `src/hello.py`:
@@ -274,7 +276,121 @@ Merge the pull request and run `factory tick`, as in part 1. The run goes to `do
 
 ### What the issue shows
 
-The factory writes two things to the issue at the start: the `factory:queued` label and one comment, `Run <id> is queued.`. In the real runs that was all the issue got. It did not move to `factory:running`, `factory:blocked` or `factory:done`, even after the pull request merged. This is a known gap (item 36 in `docs/tasks.md`), not something you did wrong. Use `factory status` and the dashboard to follow a run.
+The factory moves the issue's `factory:*` label as the run moves, and writes a comment at each stop: `factory:queued` when it picks the issue up, `factory:running` while it works, `factory:needs-human` with a comment at a stop (a decision or the merge review), `factory:blocked` with the `factory retry` command, and `factory:done` or `factory:failed` at the end. This was checked on real GitHub on 2026-11-22 (item 36 in `docs/tasks.md`): an issue went through `queued`, `running`, `needs-human` at the merge review and `done` after the merge, and an issue whose `verify` always failed went to `blocked` with the `factory retry` command in its comment. `factory status` and the dashboard show the same state.
+
+## Part 3. Add the factory to a project you already have
+
+A new project is easy. An existing one has its own test tools, its own lint rules and its own `AGENTS.md`. This part ran on a real project, a Python library with 175 tests, `uv` and `ruff`. Steps 2 to 4 each fix a failure from that run.
+
+**What the project needs first:** a `main` branch (see part 1, step 3 if yours has another name); `ruff` and `pytest` installed in a `.venv` inside the project (`uv sync` does it for a `uv` project, or `python3 -m venv .venv && .venv/bin/pip install pytest ruff`); tests that pass; and code that `ruff check` and `ruff format --check` accept on the folders `scripts/check` names (step 4). The `verify` stage runs both, so a project that fails either one blocks at `verify`, and the log names the file. The credentials from "Before you start" must be set in the shell that runs `factory run`.
+
+Run everything on a copy first. Replace the address with your repo's, and do every step in the copy:
+
+```sh
+git clone https://github.com/you/your-project.git factory-try
+cd factory-try
+```
+
+The kit adds 131 files to the repo. A run makes its own working copy (a *worktree*) under `~/.factory/worktrees/`.
+
+### 1. Install the kit
+
+Do part 1, step 1 (it sets `FACTORY_SRC` and installs the `factory` command), then run the commands of part 1, step 3 in the copy: `factory init`, the commit, and `factory init --github` after you point `origin` at your GitHub repo. `init` leaves your `AGENTS.md`, your CI and your config alone. It adds `factory/` (the *kit*) and `.factory/config/` only. If you skip this step, nothing below works, and `factory add` says that `main` has no `factory/` folder.
+
+### 2. Keep your linter out of `factory/`
+
+`factory/` holds the kit's own Python, 84 files. If your lint covers the whole repo, it now fails. In the real project, `ruff check .` went from passing to 1,672 errors, almost all `E501` (line too long), once the kit was in. Tell the linter to skip the folder. For `ruff`, add this to `pyproject.toml`:
+
+```toml
+[tool.ruff]
+extend-exclude = ["factory"]
+```
+
+Do the same for your test runner. This project set `testpaths = ["tests"]` in `pyproject.toml`, so `pytest` never looked in `factory/`. If yours collects from the repo root, set `testpaths` (or `norecursedirs`) the same way, or `pytest` imports the kit's Python and may fail on it. The kit's own tests are not copied.
+
+### 3. Put your tools on the `PATH`
+
+`factory doctor` checks the tools of your language profile (the file `factory/languages/python.yaml`). For Python it runs `ruff` and `pytest` by their bare names. A project that keeps them in its own `.venv` fails the check:
+
+```text
+failed: 7 of 8 checks passed
+hint: toolchain:python:ruff: install ruff; the python profile needs it
+```
+
+Put the venv first on the `PATH` in the shell that starts the factory, and keep using that shell for the rest of this part:
+
+```sh
+export PATH="$PWD/.venv/bin:$PATH"
+factory doctor
+```
+
+```text
+8 of 8 checks passed
+```
+
+### 4. Write `scripts/check` for a sandbox with no network
+
+Your project's test command is the `chore` workflow's `verify` stage. The stage runs `scripts/check` under a sandbox that writes only to the worktree and the task folder, and that has **no network**. So `uv run pytest`, which syncs and downloads, fails. Two real runs showed it:
+
+```text
+error: Could not create temporary file
+  cause: Operation not permitted (os error 1) at path "~/.cache/uv/.tmp8mM7RN"
+```
+
+```text
+error: Failed to download `typing-inspection==0.4.5`
+  cause: tunnel error: unsuccessful
+```
+
+The engine has no setting that lets a task that runs a command (as `verify` does) reach a package index, so the script must use the tools already installed. Call `pytest` and `ruff` directly, point them at your own code folders, and turn their caches off, because a cache is a file in the worktree. The script below names `src tests scripts`; change that list to your project's folders, and leave out any that do not exist:
+
+```sh
+mkdir -p scripts
+```
+
+```sh
+cat > scripts/check <<'EOF'
+#!/bin/sh
+# The factory's verify step. No network, and writes only to the worktree and $FACTORY_TASK_DIR.
+set -e
+export PYTHONDONTWRITEBYTECODE=1
+{
+  pytest -q -p no:cacheprovider
+  ruff check --no-cache src tests scripts
+  ruff format --no-cache --check src tests scripts
+} > "${FACTORY_TASK_DIR:-.}/check.log" 2>&1
+EOF
+chmod +x scripts/check
+```
+
+The two rules from part 1 still hold: the script writes `check.log` into `$FACTORY_TASK_DIR` (the task's own folder, which the sandbox lets it write to) and leaves no file in the worktree. Test it the way the engine runs it, with a minimal environment. This test was run on the real project: exit code 0, 175 tests passed, and `git status --short` showed nothing new.
+
+```sh
+mkdir -p /tmp/taskdir
+env -i HOME="$HOME" PATH="$PATH" FACTORY_TASK_DIR=/tmp/taskdir ./scripts/check; echo $?
+git status --short   # nothing new
+```
+
+Commit the script and the `pyproject.toml` change on `main` (run `git checkout main` first if you are on another branch), because a run reads the committed `main`, then run a request. Use a small real task from your own project, such as a missing test. The one below is the request that was run on the real project, so replace the words:
+
+```sh
+git add scripts/check pyproject.toml && git commit -m "add the factory's verify step"
+```
+
+```sh
+factory add "Test that a non-empty prompt is refused when the context window is zero" --type chore --no-run
+factory run --all
+```
+
+```text
+created run test-that-a-non-empty-prompt-is-refused-mmk74
+```
+
+`factory status --json` showed `triage`, `implement` and `verify` all `done`. The worker added one test to `tests/test_precheck.py` (8 lines, in the project's own style: a `pytest.raises` on `ContextOverflow` and an assert on `model_limit`), and `summary.md` read `Scope check passed · Gates 3 passed, 0 failed`.
+
+### What this part did not check
+
+The real project is public, and its `AGENTS.md` asks for approval before any push, so this part did not push to it. The run used a private copy of the project in its own GitHub repo. The first try of the pull request step failed on a local folder remote, with `git.auth_expired: ... none of the git remotes configured for this repository point to a known GitHub host`. After `origin` pointed at the GitHub copy, `factory run <run>` finished that step without any repair. Pull request #1 opened with one changed file, `tests/test_precheck.py`, and was merged, and `factory tick` ended the run. What was not tried: a repo with branch protection or required CI checks, so the merge-policy side of a pull request is shown only in parts 1 and 2.
 
 ## Clean up
 
@@ -282,5 +398,6 @@ The factory writes two things to the issue at the start: the `factory:queued` la
 gh repo delete you/factory-scratch --yes   # asks for the delete_repo scope if you lack it
 rm -rf scratch
 factory abort <run>                        # for any run still open
+rm -rf factory-try                         # the copy from part 3
 ```
 
