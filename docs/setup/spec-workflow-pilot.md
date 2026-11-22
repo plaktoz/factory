@@ -29,6 +29,8 @@ The ADRs leave steps 2 to 5 below undecided. Each of those steps has a default. 
 
 ## Compare at day 14
 
+**Proposed 2026-11-22, not yet accepted:** the comparison runs at any time with `python3 -I scripts/spec-pilot.py --window <W>` (for example `--window 2h --window 72h`), on history that already exists, instead of on day 14. The proposal and its first results are in `docs/adr/2026-11-22-measure-the-spec-pilot-on-existing-history.md`. The first verdict is inconclusive. The steps below are the accepted method until the owner answers.
+
 **Proposed 2026-11-22, not yet accepted:** the comparison runs at any time with `python3 -I scripts/spec-pilot.py --hours <H>`, on history that already exists, instead of on day 14. The script's window ends when it runs. The proposal, with the first results, is `docs/adr/2026-11-22-measure-the-spec-pilot-on-existing-history.md`. On 2026-11-22 the result is inconclusive: the longest window that covers all three spec pull requests is about 2 h, and in windows that short most baseline pull requests show no rework either. The steps below are the accepted method until the owner answers.
 
 1. Put the pilot numbers next to the baseline.

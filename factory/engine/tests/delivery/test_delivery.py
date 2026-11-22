@@ -121,6 +121,41 @@ def test_merge_json_holds_every_rule_with_its_result(home, tmp_path, cfg):
     assert doc["auto"] is False and doc["reason"] == "chore is not in the auto workflows"
 
 
+def test_the_merge_json_the_engine_writes_validates_against_its_schema(home, tmp_path, cfg):
+    """Issue #88: merge.json has a schema, and a real evaluation (auto and not auto) writes a file that matches it."""
+    from factory_engine.validate import validate
+    for policy, auto, run_id in ((POLICY, True, "tidy-aaaaa"), (NO_WORKFLOWS, False, "tidy-bbbbb")):
+        run_dir, wt, _ = chore(home, tmp_path / run_id, cfg, run_id=run_id,
+                               kit_files={".factory/config/merge-policy.yaml": policy})
+        evaluate(run_dir, cfg, wt)
+        doc = json.loads((run_dir / "merge.json").read_text())
+        validate(doc, "merge", file=str(run_dir / "merge.json"))
+        assert doc["auto"] is auto
+
+
+MERGE = {"auto": False, "reason": "chore is not in the auto workflows", "ci": "green",
+         "rules": [{"rule": "auto.workflows", "passed": False, "detail": "chore is not in the auto workflows"}]}
+
+
+@pytest.mark.parametrize("break_it", [
+    lambda d: d.pop("rules"),
+    lambda d: d["rules"][0].update(passed="yes"),
+    lambda d: d["rules"][0].pop("detail"),
+    lambda d: d.update(auto="false"),
+    lambda d: d.pop("reason"),
+    lambda d: d.pop("ci"),
+], ids=["no rules", "passed not a boolean", "no detail", "auto not a boolean", "no reason", "no ci"])
+def test_a_malformed_merge_json_fails_validation(break_it):
+    import copy
+    from factory_engine.validate import validate
+    validate(MERGE, "merge")                     # the good one passes, so each failure below is the break and nothing else
+    bad = copy.deepcopy(MERGE)
+    break_it(bad)
+    with pytest.raises(FactoryError) as err:
+        validate(bad, "merge", file="merge.json")
+    assert err.value.code == "config.invalid"
+
+
 def test_a_red_ci_check_blocks_auto(home, tmp_path, cfg):
     run_dir, wt, _ = chore(home, tmp_path, cfg)
     d = evaluate(run_dir, cfg, wt, ci="red")
