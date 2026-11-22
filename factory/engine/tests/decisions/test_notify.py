@@ -1,6 +1,8 @@
 """Module 11 acceptance criteria, notify half: attention items, GitHub and markdown channels, reminders, and a
 failed webhook never stopping the run."""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -325,3 +327,16 @@ def test_remind_notifies_only_a_parked_run_whose_reminder_is_due(run):
     assert "Reminder" in tracker.statuses[-1].comment
     set_run(run, status="running", stage="architecture", attention=None)
     assert N.remind(run.run_dir, cfg(), tracker, now="2026-12-01T00:00:00+08:00") is None
+
+
+def test_an_item_read_back_from_run_json_notifies_the_source(run):
+    """run.json stores the page as text. A notify for an item read back from disk must still reach the source."""
+    ask_architecture(run)
+    item = attention(run)
+    set_run(run, status="awaiting_approval", stage="architecture", attention=item)
+    stored = state.read_run(run.run_dir).attention
+    assert isinstance(stored.page, Path)
+    tracker = FakeTracker()
+    report = N.notify(stored, cfg(), tracker)
+    assert report.failed == {} and "tracker" in report.sent
+    assert tracker.statuses[-1].status == "factory:needs-human"

@@ -174,6 +174,12 @@ def read_run(run_dir: Path) -> Run:
     return _run_from_doc(doc)
 
 
+def _attention_from_doc(doc: dict) -> AttentionItem:
+    """run.json holds the page as text; the item carries it as a Path, as attention_for makes it."""
+    page = doc.get("page")
+    return AttentionItem(**{**doc, "page": Path(page) if page else None})
+
+
 def _run_from_doc(doc: dict) -> Run:
     req = Request(
         request_id=doc["request"]["request_id"], source=Source(**doc["request"]["source"]),
@@ -181,7 +187,7 @@ def _run_from_doc(doc: dict) -> Run:
         type=doc["request"]["type"], type_source=doc["request"]["type_source"], priority=doc["request"]["priority"],
         acceptance=doc["request"]["acceptance"])
     stages = [StageState(**s) for s in doc["stages"]]
-    attention = AttentionItem(**doc["attention"]) if doc.get("attention") else None
+    attention = _attention_from_doc(doc["attention"]) if doc.get("attention") else None
     pr = PrRef(**doc["pr"]) if doc.get("pr") else None
     signals = Signals(**doc["signals"]) if doc.get("signals") else None
     infra = InfraWait(**doc["infra_wait"]) if doc.get("infra_wait") else None
