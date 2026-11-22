@@ -53,11 +53,11 @@ These come from the ADRs. Read them when you judge the numbers.
 | Owner of the first draft | The repo owner (`plaktoz`) |
 | Pilot ticket 1 | [#86](https://github.com/plaktoz/factory/issues/86): `factory gc` frees worktrees by real GitHub pull request state (PR #96) |
 | Pilot ticket 2 | [#87](https://github.com/plaktoz/factory/issues/87): an engine crash stops a task after `max_interruptions` (PR #99) |
-
-Issues #88 and #89 were opened on 2026-11-22 as candidate tickets (task 42). The pilot did not use them. Both are still open spec issues.
 | Baseline ticket 1 | [PR #74](https://github.com/plaktoz/factory/pull/74), see the baseline record below |
 | Baseline ticket 2 | [PR #71](https://github.com/plaktoz/factory/pull/71), see the baseline record below |
 | Start day | 2026-11-22. Day 14 is 2026-12-06 |
+
+Issues #88 and #89 were opened on 2026-11-22 as candidate tickets (task 42). The pilot did not use them. Both are still open spec issues.
 
 ## Baseline record
 
