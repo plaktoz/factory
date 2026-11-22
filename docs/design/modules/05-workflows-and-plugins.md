@@ -171,7 +171,7 @@ A plugin is a folder in `.factory/config/plugins/` with one manifest. `factory p
 name: frontend-review
 version: 0.1.0
 requires: {skills: [impeccable]}         # must be in skills.lock
-applies_to: [feature, bug-fix, new-app]
+applies_to: [bug-fix]                     # goto fix exists only in bug-fix; feature and new-app have no stage list yet
 when: {changed_paths: ["web/**"]}        # skipped if no UI files changed
 insert:
   after: verify
@@ -314,7 +314,7 @@ class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec 
   - `Defaults`: `retries`, `timeout_minutes`, `checkpoint_every_minutes` and `max_restarts`, the `defaults:` key. Each has the value in the example above when a file omits it.
 - **Join-time keys.** `regenerate_at_join` lists files that are not joined from task changes, such as lockfiles and generated code. At each join, a task's edits to them are dropped from its diff. `join_cmd` is a command, as a list, that runs once after the last task joins, and only when `regenerate_at_join` is not empty. If it exits 0, the listed files are staged and committed as `chore: regenerate lockfiles at join`. If it exits non-zero, nothing is committed, and the join still succeeds. `shared_files` maps a file to the task that owns it. Load checks that the owner is a task, and a listed file clears the overlap check. The engine does not order the other tasks after the owner, so a workflow that needs that order must also add `needs`.
 
-- **Run and test:** `pytest factory/engine/tests/workflow` against the five built-in workflows and broken fixtures; `factory plugins enable frontend-review --json`.
+- **Run and test:** `pytest factory/engine/tests/workflow` against the built-in workflows that ship in phase 1a (`_triage`, bug-fix, chore) and broken fixtures; `factory plugins enable frontend-review --json`.
 - **Errors:** all fail fast at load or enable; no run starts on an invalid workflow.
 
 Acceptance criteria:

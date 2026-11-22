@@ -11,7 +11,7 @@ run(task) -> {status, artifact_path, usage}
   rules:  cwd is the task worktree; the engine owns timeout and kill;
           the worker writes its artifact, progress.md and the helpers ledger to
           $FACTORY_TASK_DIR, never into the worktree
-capabilities: {subagents: native | none, usage: yes | no}
+capabilities: {subagents: native | none, usage: bool}
 ```
 
 | Claude adapter | |
@@ -266,7 +266,7 @@ Your own CLAUDE.md, plugins, hooks and MCP servers must not leak into workers: i
 - The adapter starts each harness with flags that load only the factory's per-attempt MCP config, only project-level settings, and no user-level plugins or hooks. The repo's `AGENTS.md` is the only instruction file. Check the flag names with `--help` on the installed version. Verified on Claude Code 2.1.325: `--setting-sources <user,project,local>`, `--strict-mcp-config` with `--mcp-config`, `--no-session-persistence`, `--allowedTools`, `--disallowedTools`, `--tools` and `--permission-mode` all exist. A headless run with no flags received the global `CLAUDE.md` (it quoted the Telegram notify rule); a run with `--setting-sources project --strict-mcp-config --mcp-config '{"mcpServers":{}}'` did not.
 - **Login: an API key or a gateway token only (decision, 2026-11-14).** Phase 1 supports `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL` for a gateway. A login session (OAuth) is not supported and not tested: whether it carries over with `--setting-sources project` is Unspecified, and nothing in phase 1 depends on it. `factory doctor` fails with `config.no_credentials` when neither is set. `--bare` is not used, because its help says it reads only `ANTHROPIC_API_KEY` or `apiKeyHelper` and never OAuth or the keychain.
 - **Linux is a pre-pilot check.** Claude Code's sandbox on Linux rests on `bwrap`, and `srt` on `bubblewrap`. Neither was run. Before the phase 1a pilot, run `factory doctor` on a Linux machine; it must pass the canary for Claude and for `srt`. D6 stands (macOS and Linux in phase 1), and an untested machine fails closed.
-- `factory doctor` starts a probe worker that lists the instructions, MCP servers and hooks it loaded, and fails if any personal one appears. If flags prove leaky, the fallback is a factory-owned config folder (`CLAUDE_CONFIG_DIR`) with its own API key or gateway token.
+- `factory doctor` starts a probe worker that lists the plugins, MCP servers and hooks it loaded, and fails if any personal one appears. It cannot check instructions: the init event does not list the loaded `CLAUDE.md` (see Implementation notes, wave 2 build). If flags prove leaky, the fallback is a factory-owned config folder (`CLAUDE_CONFIG_DIR`) with its own API key or gateway token.
 
 **Deterministic tasks** (`cmd`, `script`, `python`) use `CommandAdapter`, and a skill task uses the worker registered for its harness; the engine picks the adapter for each task. `CommandAdapter` implements the same `WorkerAdapter` interface with `capabilities: {subagents: none, usage: false}`. 6B therefore schedules, times out, logs and retries every task the same way. `CommandAdapter` writes no usage record, since no tokens are spent.
 
@@ -331,7 +331,7 @@ Acceptance criteria:
 - `AttemptResult.error_kind` carries `binary_missing` for a missing `cmd` or `claude` binary. The spec's list has no code for it, and the error-kind list in the contract has it.
 - A sandbox refusal Claude reports on stderr raises `sandbox.*` as a `FactoryError` from `wait`, since no attempt ran. Only stderr is checked, so a worker that quotes the phrase is not mistaken for a sandbox failure.
 - `CommandAdapter` writes its captured output to the task's `work/` folder, not the attempt folder. `srt` confines a sandboxed child's writes to the worktree and `work/`, so a capture file under the denied factory home is refused and the output is lost (observed with a Python child, 2026-11-15).
-- The Claude adapter resolves `${...}` values against the machine environment when it is built, so a literal reference never reaches the child. The stub-tested config may carry references; the engine resolves them when the attempt starts.
+- The Claude adapter resolves `${...}` values against the machine environment when an attempt starts, so a literal reference never reaches the child. The stub-tested config may carry references; the adapter resolves them at that point.
 - `doctor` for Claude spends one short model call per run: a canary that asks the worker to try six routes and reads the verdicts from the filesystem and the tool-call record, not from the model's report. The isolation probe spends one more call and reads the init event.
 - Worker isolation checks plugins, MCP servers and hooks. It does not check instructions: the init event does not list the loaded `CLAUDE.md`. Whether a personal `CLAUDE.md` reaches a worker under `--setting-sources project` is Unspecified; the 2026-11-14 test is the only evidence and was run without the flags.
 - The worktree is listed in `allowRead` as well as `allowWrite`, and the factory home's children on the way to it are denied one by one. The default worktree root is `~/.factory/worktrees`, inside the denied home, so a whole-folder deny would also hide the worker's own worktree.
