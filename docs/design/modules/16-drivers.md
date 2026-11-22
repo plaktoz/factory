@@ -64,7 +64,8 @@ def spawn_engine(repo, run_id) -> int | None
 def dispatch(argv: list[str]) -> int        # find repo by cwd, --repo, or the run's repo path; exec its engine
 def tick(cfg: Config, *, repos: list[Path]) -> TickReport
     """cfg comes from load_config(None): the machine part only, with repo=None. For each repo in
-    repos, tick calls load_config(repo) for the steps that read repo settings (sync, housekeeping)."""
+    repos, tick calls load_config(repo) for the steps that read repo settings (sync, reminders, housekeeping).
+    TickReport.reminded lists the runs it sent a reminder for."""
 def schedule_install(every: str, *, dashboard: bool = False) -> None
 ```
 

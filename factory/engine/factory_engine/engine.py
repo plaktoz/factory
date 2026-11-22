@@ -280,15 +280,17 @@ class Engine:
         told = [e.data.get("key") for e in state.read_events(run_dir) if e.type == "source_told"]
         if told and told[-1] == key:
             return
-        state.append_event(run_dir, "source_told", key=key)
         if stop:
-            notify.notify(item, self.cfg, self.tracker)
+            if "tracker" not in notify.notify(item, self.cfg, self.tracker).failed:
+                state.append_event(run_dir, "source_told", key=key)  # a failed tell writes none, so the next pass tries again
             return
         body = f"Run `{run.run_id}` is {run.status}." + (f" Pull request: {run.pr.url}" if run.pr else "")
         try:
             self.tracker.set_status(run.request.source.ref, label, comment=body if run.status != "running" else None)
         except Exception as e:  # noqa: BLE001  a tracker outage must not stop the run
             state.append_event(run_dir, "source_tell_failed", status=label, error=str(e))
+        else:
+            state.append_event(run_dir, "source_told", key=key)
 
     def _pass_once(self, run_dir: Path, lock: Lock) -> TickResult:
         run = state.read_run(run_dir)

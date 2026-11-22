@@ -64,7 +64,7 @@ What one tick does, in order:
    - red CI: the engine routes the run back to fix
 4. It starts a detached engine for every run that can proceed and has no live lock, including runs whose decision was answered while no engine was running.
 5. It resumes runs whose engine has died: status running and no process holding the lock. A sleeping laptop is not a death; its engine still holds the lock and carries on when it wakes.
-6. It sends due reminders for open attention items.
+6. It sends a reminder for each run that waits for a person, once `remind_after_hours` have passed since the last notice (module 11). A failed channel is reported and never stops the tick.
 7. It runs the housekeeping plan when `retention.auto_gc` is on.
 8. It writes `last_tick` and its result to tick.json in the factory home and exits, normally within seconds. `tick.json` is `{"last_tick": <ISO time>, "result": {started, resumed, skipped, repo_missing: [run id], synced: {repo key: [run id]}, errors: [text], skipped_tick: bool}}`, written by replacing a temporary file.
 

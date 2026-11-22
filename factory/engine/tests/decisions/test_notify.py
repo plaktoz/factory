@@ -1,6 +1,8 @@
 """Module 11 acceptance criteria, notify half: attention items, GitHub and markdown channels, reminders, and a
 failed webhook never stopping the run."""
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -301,3 +303,40 @@ def test_an_item_read_back_from_run_json_notifies_like_one_made_in_memory(run):
     report = N.notify(item, cfg(), tracker)
     assert report.failed == {} and report.sent == ["tracker"]
     assert "architecture.1.yaml" in tracker.statuses[0].comment
+
+
+def test_a_reminder_is_worded_as_one_and_reaches_the_source_and_the_webhook(run, monkeypatch):
+    ask_architecture(run)
+    sent = []
+    monkeypatch.setattr(N, "_post", lambda url, payload: sent.append(payload))
+    tracker = FakeTracker()
+    N.notify(attention(run), cfg({"github_mention": "author", "desktop": False, "webhook": "http://hook", "remind_after_hours": 24}),
+             tracker, reminder=True)
+    assert tracker.statuses[-1].comment.startswith("@alice Reminder: run `new-color-q1w2e` still needs you:")
+    assert sent[0]["reminder"] is True
+
+
+def test_remind_notifies_only_a_parked_run_whose_reminder_is_due(run):
+    ask_architecture(run)
+    parked = attention(run, now="2026-11-14T09:00:00+08:00")
+    set_run(run, status="awaiting_approval", stage="architecture", attention=parked)
+    tracker = FakeTracker()
+    assert N.remind(run.run_dir, cfg(), tracker, now="2026-11-14T20:00:00+08:00") is None       # 11 hours
+    assert tracker.statuses == []
+    assert N.remind(run.run_dir, cfg(), tracker, now=NOW) is not None                           # 25 hours
+    assert "Reminder" in tracker.statuses[-1].comment
+    set_run(run, status="running", stage="architecture", attention=None)
+    assert N.remind(run.run_dir, cfg(), tracker, now="2026-12-01T00:00:00+08:00") is None
+
+
+def test_an_item_read_back_from_run_json_notifies_the_source(run):
+    """run.json stores the page as text. A notify for an item read back from disk must still reach the source."""
+    ask_architecture(run)
+    item = attention(run)
+    set_run(run, status="awaiting_approval", stage="architecture", attention=item)
+    stored = state.read_run(run.run_dir).attention
+    assert isinstance(stored.page, Path)
+    tracker = FakeTracker()
+    report = N.notify(stored, cfg(), tracker)
+    assert report.failed == {} and "tracker" in report.sent
+    assert tracker.statuses[-1].status == "factory:needs-human"

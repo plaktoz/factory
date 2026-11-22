@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/merge.schema.json",
+  "title": "merge",
+  "description": "merge.json, written by evaluate_merge (module 13): each merge rule with its result and the CI state it saw. Written by hand: delivery.py builds the file from a dict, not from a dataclass, so schemagen does not generate it. Keep it in step with evaluate_merge and RuleResult in delivery.py.",
+  "type": "object",
+  "properties": {
+    "auto": {
+      "type": "boolean"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "ci": {
+      "type": "string"
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rule": {
+            "type": "string"
+          },
+          "passed": {
+            "type": "boolean"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "rule",
+          "passed",
+          "detail"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "auto",
+    "reason",
+    "ci",
+    "rules"
+  ],
+  "additionalProperties": false
+}

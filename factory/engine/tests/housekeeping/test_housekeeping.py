@@ -715,3 +715,250 @@ def test_a_deleted_pull_request_in_the_fake_is_kept_the_same_way(home, repo, cfg
     report = apply(plan(home, cfg, now=clock.now(), prs=prs))
 
     assert wt.exists() and any(s.run_id == "gone" and s.reason == "pull request cannot be read" for s in report.skipped)
+
+
+# --- issue #89: the seven unticked criteria (lines 127 and 129 to 134 of module 17) ---
+
+def test_a_running_runs_worker_log_is_not_cut_and_an_ended_kept_one_is_cut_to_its_newest_bytes(home, repo, cfg, clock):
+    """Line 127: a running run's log over the cap is left whole; an ended run that is kept is cut to its newest bytes."""
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt_run = worktree_for(cfg, repo, "live")
+    running = make_run(home, repo, "live", status="running", worktree=wt_run, tasks=[("backend", "running", None)],
+                       ended=None)
+    big = b"a" * (1024 * 1024) + b"b" * (1024 * 1024) + b"NEWEST"
+    (running / "tasks" / "backend" / "worker.log").write_bytes(big)
+    wt_done = worktree_for(cfg, repo, "kept")
+    ended = make_run(home, repo, "kept", status="done", worktree=wt_done, tasks=[("backend", "done", None)],
+                     ended=days_ago(clock, 2))
+    (ended / "tasks" / "backend" / "worker.log").write_bytes(big)
+
+    report = apply(plan(home, cfg, now=clock.now()))
+
+    assert (running / "tasks" / "backend" / "worker.log").read_bytes() == big
+    kept = (ended / "tasks" / "backend" / "worker.log").read_bytes()
+    assert kept.endswith(b"NEWEST") and len(kept) == 1024 * 1024
+    assert str(running / "tasks" / "backend" / "worker.log") not in report.trimmed
+
+
+def _archived_run(home, repo, cfg, clock, run_id, written_days_ago):
+    """An archived run: its zip written `written_days_ago` before now, with no folder left."""
+    wt = worktree_for(cfg, repo, run_id)
+    run_dir = make_run(home, repo, run_id, status="done", worktree=wt, ended=days_ago(clock, 30))
+    apply(plan(home, cfg, now=clock.now()))  # archives it: the run ended 30 days ago, past archive_after_days
+    zips = sorted((home / "archive").rglob(f"*{run_id}*.zip"))
+    assert zips, "the run should have been archived"
+    written = (clock.now() - timedelta(days=written_days_ago)).timestamp()
+    import os
+    for z in zips:
+        os.utime(z, (written, written))
+    return zips[0]
+
+
+def test_an_archive_zip_is_deleted_once_delete_archive_after_days_have_passed_and_not_one_day_before(home, repo, cfg, clock):
+    """Line 129: gc --apply deletes an archive zip when delete_archive_after_days (90) have passed since it was written."""
+    zp = _archived_run(home, repo, cfg, clock, "old-zip", written_days_ago=0)
+    assert zp.exists()
+    import os
+    written = clock.now() - timedelta(days=89)
+    os.utime(zp, (written.timestamp(), written.timestamp()))
+    apply(plan(home, cfg, now=clock.now()))
+    assert zp.exists(), "89 days is not past delete_archive_after_days (90)"
+
+    written = clock.now() - timedelta(days=90)
+    os.utime(zp, (written.timestamp(), written.timestamp()))
+    report = apply(plan(home, cfg, now=clock.now()))
+    assert not zp.exists() and str(zp) in report.deleted
+
+
+def test_git_worktree_prune_runs_in_each_repo_with_a_worktree_item_after_apply_and_clears_gone_records(home, repo, cfg, clock):
+    """Line 130: after apply, `git worktree prune` runs in each repo that had a worktree or archive item, so a record
+    whose folder is gone is cleared."""
+    wt = worktree_for(cfg, repo, "pruned")
+    make_run(home, repo, "pruned", status="done", worktree=wt, ended=days_ago(clock, 8))
+    p = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "archive" and i.repo == repo for i in p.items)
+    shutil.rmtree(wt)  # the worktree folder goes, so git still has a record of it
+    assert "pruned" in git_run(repo, "worktree", "list", "--porcelain")
+    apply(p)
+    assert "pruned" not in git_run(repo, "worktree", "list", "--porcelain")
+
+
+def test_a_failed_runs_worktree_is_due_at_exactly_keep_failed_days_and_not_one_day_before(home, repo, cfg, clock):
+    """Line 131: a failed run's worktrees are due at exactly keep_failed_days (14) after its end."""
+    wt = worktree_for(cfg, repo, "due-failed")
+    make_run(home, repo, "due-failed", status="failed", worktree=wt, ended=days_ago(clock, 0))
+    assert not any(i.kind == "worktree" and i.path == wt
+                   for i in plan(home, cfg, now=clock.now() + timedelta(days=13, hours=23)).items)
+    assert any(i.kind == "worktree" and i.path == wt
+               for i in plan(home, cfg, now=clock.now() + timedelta(days=14)).items)
+
+
+def test_a_run_is_archived_at_exactly_archive_after_days_and_not_one_day_before(home, repo, cfg, clock):
+    """Line 132: a done run is archived at exactly archive_after_days (7) after its end."""
+    wt = worktree_for(cfg, repo, "due-done")
+    make_run(home, repo, "due-done", status="done", worktree=wt, ended=days_ago(clock, 0))
+    assert not items_of(plan(home, cfg, now=clock.now() + timedelta(days=6, hours=23)), "archive")
+    assert [i for i in items_of(plan(home, cfg, now=clock.now() + timedelta(days=7)), "archive")
+            if i.run_id == "due-done"]
+
+
+def test_a_failed_removal_is_reported_and_the_other_items_still_run(home, repo, cfg, clock, monkeypatch):
+    """Line 133: a failed worktree, branch, kit or archive-delete removal appears in GcReport.failed, and the rest run."""
+    zp = _archived_run(home, repo, cfg, clock, "old-zip", written_days_ago=200)  # a real archive, past its 90 days
+    wt_bad = worktree_for(cfg, repo, "bad-wt")
+    wt_good = worktree_for(cfg, repo, "good-wt")
+    make_run(home, repo, "bad-wt", status="done", worktree=wt_bad, ended=days_ago(clock, 30))
+    make_run(home, repo, "good-wt", status="done", worktree=wt_good, ended=days_ago(clock, 30))
+    kit = home / "kits" / "orphan-kit"
+    kit.mkdir(parents=True)
+    (kit / "x").write_text("x")
+    import os
+
+    real_rmtree = shutil.rmtree
+
+    def rmtree(path, *a, **k):
+        if Path(path) == kit:
+            raise OSError("disk says no")
+        return real_rmtree(path, *a, **k)
+
+    monkeypatch.setattr(housekeeping.shutil, "rmtree", rmtree)
+    real_unlink = Path.unlink
+
+    def unlink(self, *a, **k):
+        if self == zp:
+            raise OSError("zip is locked")
+        return real_unlink(self, *a, **k)
+
+    monkeypatch.setattr(Path, "unlink", unlink)
+
+    report = apply(plan(home, cfg, now=clock.now()))
+
+    failed = {str(f.path) for f in report.failed}
+    assert str(kit) in failed and str(zp) in failed
+    assert "could not delete the kit" in " ".join(f.message for f in report.failed)
+    assert not wt_good.exists() and str(wt_good) in report.removed, "the other worktree still went"
+
+
+def test_an_archive_that_fails_testzip_is_not_moved_into_place_and_the_run_folder_is_kept(home, repo, cfg, clock, monkeypatch):
+    """Line 134: an archive that fails testzip(), or whose members differ from the folder, is not moved into place and
+    the run folder is kept."""
+    wt = worktree_for(cfg, repo, "bad-zip")
+    run_dir = make_run(home, repo, "bad-zip", status="done", worktree=wt, ended=days_ago(clock, 30))
+
+    real_testzip = zipfile.ZipFile.testzip
+    monkeypatch.setattr(zipfile.ZipFile, "testzip", lambda self: "member.json")  # every archive is corrupt
+    report = apply(plan(home, cfg, now=clock.now()))
+    monkeypatch.setattr(zipfile.ZipFile, "testzip", real_testzip)
+
+    assert run_dir.exists(), "the folder is kept when the archive does not verify"
+    assert "bad-zip" not in report.archived
+    assert not list((home / "archive").rglob("*bad-zip*.zip")), "a zip that fails testzip is not moved into place"
+
+
+def test_an_archive_whose_members_differ_from_the_folder_is_not_moved_into_place_and_the_run_folder_is_kept(
+        home, repo, cfg, clock, monkeypatch):
+    """Line 134, second half: a zip that passes testzip() but lists a different set of files than the run folder is
+    not moved into place, and the run folder is kept."""
+    wt = worktree_for(cfg, repo, "short-zip")
+    run_dir = make_run(home, repo, "short-zip", status="done", worktree=wt, ended=days_ago(clock, 30))
+
+    real_write = zipfile.ZipFile.write
+
+    def write_with_an_extra_member(self, filename, arcname=None, *a, **k):
+        real_write(self, filename, arcname, *a, **k)
+        if arcname == "run.json":
+            self.writestr("stray.txt", "a member the run folder does not have")  # byte-compare never reads it
+
+    monkeypatch.setattr(zipfile.ZipFile, "write", write_with_an_extra_member)
+    report = apply(plan(home, cfg, now=clock.now()))
+    monkeypatch.setattr(zipfile.ZipFile, "write", real_write)
+
+    assert run_dir.exists(), "the folder is kept when the archive lists different files"
+    assert "short-zip" not in report.archived
+    assert any("not archived" in f.message for f in report.failed)
+    assert not list((home / "archive").rglob("*short-zip*.zip"))
+
+
+def test_a_failed_worktree_removal_and_a_failed_branch_delete_are_reported_and_the_other_items_still_run(
+        home, repo, cfg, clock, monkeypatch):
+    """Line 133, the worktree and branch halves: each failure lands in GcReport.failed and the next worktree still goes."""
+    from factory_engine.errors import FactoryError
+    wt_a = worktree_for(cfg, repo, "stuck-wt")
+    wt_b = worktree_for(cfg, repo, "stuck-branch")
+    wt_c = worktree_for(cfg, repo, "fine")
+    for rid, wt in (("stuck-wt", wt_a), ("stuck-branch", wt_b), ("fine", wt_c)):
+        make_run(home, repo, rid, status="done", worktree=wt, ended=days_ago(clock, 30))
+
+    real_remove, real_delete = housekeeping.remove_worktree, housekeeping.delete_branch
+
+    def remove(path, **k):
+        if Path(path) == wt_a:
+            raise FactoryError("git.command_failed", "worktree is locked")
+        return real_remove(path, **k)
+
+    def delete(repo_, branch, **k):
+        if branch == "stuck-branch":
+            raise FactoryError("git.command_failed", "branch is checked out elsewhere")
+        return real_delete(repo_, branch, **k)
+
+    monkeypatch.setattr(housekeeping, "remove_worktree", remove)
+    monkeypatch.setattr(housekeeping, "delete_branch", delete)
+
+    report = apply(plan(home, cfg, now=clock.now()))
+
+    messages = {Path(f.path): f.message for f in report.failed}
+    assert "worktree is locked" in messages[wt_a]
+    assert "branch stuck-branch kept" in messages[wt_b]
+    assert str(wt_c) in report.removed and not wt_c.exists(), "the third worktree still went"
+
+
+def test_an_archive_with_a_member_that_differs_from_its_file_is_not_moved_into_place_and_the_run_folder_is_kept(
+        home, repo, cfg, clock, monkeypatch):
+    """Line 134, third part: a zip whose member has different bytes than the file in the run folder is not moved into
+    place, and the run folder is kept."""
+    wt = worktree_for(cfg, repo, "wrong-bytes")
+    run_dir = make_run(home, repo, "wrong-bytes", status="done", worktree=wt, ended=days_ago(clock, 30))
+
+    real_write = zipfile.ZipFile.write
+
+    def write_wrong_bytes(self, filename, arcname=None, *a, **k):
+        if arcname == "events.jsonl":
+            return self.writestr(arcname, "not the folder's events\n")  # a member that is present but has other bytes
+        return real_write(self, filename, arcname, *a, **k)
+
+    monkeypatch.setattr(zipfile.ZipFile, "write", write_wrong_bytes)
+    report = apply(plan(home, cfg, now=clock.now()))
+    monkeypatch.setattr(zipfile.ZipFile, "write", real_write)
+
+    assert run_dir.exists(), "the folder is kept when a member differs"
+    assert "wrong-bytes" not in report.archived
+    assert any("archive differs from events.jsonl" in f.message for f in report.failed)
+    assert not list((home / "archive").rglob("*wrong-bytes*.zip"))
+
+
+def test_an_archived_worker_log_is_whole_when_no_earlier_gc_cut_it_and_cut_when_one_did(home, repo, cfg, clock):
+    """Module 17, the archived worker.log: it is the copy as it was at archive time. A run archived at once keeps the
+    whole log; a run an earlier gc cut keeps the cut copy, because an archive is made as the run is, without a cut."""
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    mb = 1024 * 1024
+    big = b"a" * mb + b"b" * mb + b"NEWEST"
+
+    def archived_log(run_id, ended_days, *, cut_first):
+        wt = worktree_for(cfg, repo, run_id)
+        run_dir = make_run(home, repo, run_id, status="done", worktree=wt, tasks=[("backend", "done", None)],
+                           ended=days_ago(clock, ended_days))
+        log = run_dir / "tasks" / "backend" / "worker.log"
+        log.write_bytes(big)
+        if cut_first:
+            apply(plan(home, cfg, now=clock.now()))                      # ended 2 days ago, not yet due: its log is cut
+            assert len(log.read_bytes()) == mb
+            apply(plan(home, cfg, now=clock.now() + timedelta(days=6)))  # a later gc archives it, now due
+        else:
+            apply(plan(home, cfg, now=clock.now()))                      # ended 8 days ago, due at once: archived as it is
+        [zp] = [z for z in (home / "archive").rglob("*.zip") if run_id in z.name]
+        with zipfile.ZipFile(zp) as z:
+            return z.read("tasks/backend/worker.log")
+
+    assert archived_log("never-cut", 8, cut_first=False) == big, "no earlier gc cut it: the archive keeps it whole"
+    cut = archived_log("cut-first", 2, cut_first=True)
+    assert cut == big[-mb:] and cut.endswith(b"NEWEST"), "an earlier gc cut it: the archive keeps the cut copy"
