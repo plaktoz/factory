@@ -26,6 +26,8 @@ Run from the repo root: python3 -I scripts/docs-check/records.py .
    choice made at the recommendation can be found and reversed.
 9. A pull request merged on main since 2026-11-22 must not name an open issue in its title (AGENTS.md,
    "Close the ticket with the work"). Skipped, with a note, when `gh` cannot answer.
+10. A Decisions-table row in docs/design/ or docs/process.md has a real Why and Not chosen, not a placeholder such
+   as "Not recorded in the ADR" (decision_rows.py).
 """
 import json, re, subprocess, sys
 from pathlib import Path
@@ -151,6 +153,12 @@ if github is None:
     print("records: skipped the issue-close check (9): gh could not list pull requests and issues")
 else:
     problems += issue_close.open_issue_problems(*github)
+
+import decision_rows  # noqa: E402
+
+for spec in sorted([*(root / "docs/design").rglob("*.md"), root / "docs/process.md"]):
+    if spec.is_file():
+        problems += decision_rows.placeholder_problems(spec.relative_to(root).as_posix(), spec.read_text(encoding="utf-8"))
 
 RETIRED = "docs/reviews"
 if (root / RETIRED).exists():

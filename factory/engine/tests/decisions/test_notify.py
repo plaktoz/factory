@@ -290,3 +290,14 @@ def test_no_network_call_is_made_while_notifying_a_markdown_request(home, tmp_pa
     ask_architecture(ref)
     monkeypatch.setattr(N, "_post", lambda *a: pytest.fail("no webhook is configured"))
     N.notify(attention(ref), cfg(), FakeTracker())
+
+
+def test_an_item_read_back_from_run_json_notifies_like_one_made_in_memory(run):
+    """run.json stores the page as text. The engine tells the source with the item it reads back."""
+    ask_architecture(run)
+    item = attention(run)
+    item.page = str(item.page)
+    tracker = FakeTracker()
+    report = N.notify(item, cfg(), tracker)
+    assert report.failed == {} and report.sent == ["tracker"]
+    assert "architecture.1.yaml" in tracker.statuses[0].comment

@@ -57,7 +57,7 @@ def abort(repo, run_id, *, reason) -> None                                   # t
 def recover(repo, run_id, *, rebuild=False) -> None                          # 6A, 14
 def usage(repo, run_id=None, since=None) -> UsageReport                      # 14
 def gc(repo, *, apply=False) -> GcPlan                                       # 17
-def doctor(repo, *, as_scheduler=False) -> list[CheckResult]                    # 3, then 17A toolchain checks (9 and 10 not wired yet)
+def doctor(repo, *, as_scheduler=False) -> list[CheckResult]                    # 3, then 10 lock and pack size, then 17A toolchains (9 not wired yet)
 def spawn_engine(repo, run_id) -> int | None
     """Start `factory run <run_id> --detach` unless a live lock exists; return pid."""
 # launcher (machine): dispatch and machine commands

@@ -103,6 +103,8 @@ class CommandAdapter:
             kind, argv, cwd = self._inner(ctx)
             wrapped = sandbox.srt_command(bin_, settings, argv)
             env = self._env(ctx)
+            if kind == "python":
+                env["PYTHONPATH"] = os.pathsep.join([str(Path(__file__).resolve().parents[3]), *filter(None, [env.get("PYTHONPATH")])])
             # Output goes to the task folder: srt confines a child's writes to the worktree and that folder, so a file
             # under the attempt folder (in the denied factory home) would be refused inside the sandbox.
             out_path, err_path = ctx.task_dir / "stdout.txt", ctx.task_dir / "stderr.txt"

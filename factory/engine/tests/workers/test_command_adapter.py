@@ -4,6 +4,7 @@ These need the real `srt` (0.0.83) and Node 22.12 or later. They skip when srt i
 fails in that case, so a missing srt is never a silent pass in a real run.
 """
 
+import json
 import os
 import shutil
 from pathlib import Path
@@ -176,6 +177,22 @@ def test_a_plugin_python_function_gets_the_task_context_on_stdin_and_its_result_
     result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
     assert result.exit == "ok" and result.exit_code == 0
     assert '"found": "backend"' in log.read_text()
+
+
+@needs_srt
+def test_a_plugin_function_runs_on_the_engine_that_started_it(cmd_ctx, tmp_path, factory_home):
+    """The runner is a child process. It must import the adapter's own `factory_engine`, not whichever copy the
+    interpreter's site-packages happens to name (a stale editable install made three plugin tests fail)."""
+    import factory_engine
+    plugin = tmp_path / "plugin"
+    (plugin / "checks").mkdir(parents=True)
+    (plugin / "checks" / "__init__.py").write_text("")
+    (plugin / "checks" / "where.py").write_text(
+        "import factory_engine\n\ndef scan(ctx):\n    return {'status': 'passed', 'engine': factory_engine.__file__}\n")
+    ctx = cmd_ctx(run=RunSpec(None, "checks.where:scan", []), plugin_dir=plugin)
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "ok"
+    assert json.dumps(factory_engine.__file__) in log.read_text()
 
 
 @needs_srt
