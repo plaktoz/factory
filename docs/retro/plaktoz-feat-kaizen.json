@@ -3,42 +3,44 @@
   "branch": "plaktoz/feat-kaizen",
   "base": "origin/main",
   "sessions": [
+    "20b88939-b13f-42d3-86e7-58cc6151b1a8",
     "8b607737-63ef-4890-980c-129af7c519ec"
   ],
-  "commits": 3,
+  "commits": 5,
   "lines": {
     "product": 0,
     "spec": 0,
-    "process": 2049
+    "process": 2141
   },
   "adrs_added": 0,
   "agent_runs": [
     "8b607737-63ef-4890-980c-129af7c519ec"
   ],
   "time": {
-    "wall_s": 54477.3,
+    "wall_s": 54825.5,
     "buckets": {
-      "agent_think": 5237.1,
-      "think_reply": 4445.1,
-      "investigate": 337.8,
-      "records_checks": 26.7,
+      "agent_think": 5238.2,
+      "think_reply": 4610.6,
+      "investigate": 355.7,
+      "records_checks": 41.6,
       "build_product": 296.5,
       "run_tests": 195.2,
       "edit_records": 6.0,
-      "mixed_shell": 60.2,
-      "commit_hooks": 4.7,
+      "mixed_shell": 71.2,
+      "commit_hooks": 141.7,
       "wait_reply": 940.8,
       "github": 12.1,
       "deliver_chain": 5.9,
-      "away": 42909.1
+      "away": 42909.1,
+      "delegate": 0.7
     }
   },
   "tokens": {
     "main": {
-      "input": 280,
-      "output": 404808,
-      "cache_creation": 1198948,
-      "cache_read": 23373361
+      "input": 312,
+      "output": 414230,
+      "cache_creation": 1244951,
+      "cache_read": 24776903
     },
     "subagent": {
       "input": 0,
@@ -48,12 +50,12 @@
     },
     "by_activity": {
       "investigate": {
-        "new": 1032818,
-        "reread": 12061286
+        "new": 1075827,
+        "reread": 12534388
       },
       "records_checks": {
-        "new": 56059,
-        "reread": 547904
+        "new": 61299,
+        "reread": 671011
       },
       "build_product": {
         "new": 256496,
@@ -72,12 +74,12 @@
         "reread": 1142461
       },
       "commit_hooks": {
-        "new": 1125,
-        "reread": 104149
+        "new": 5491,
+        "reread": 540020
       },
       "think_reply": {
-        "new": 19949,
-        "reread": 898344
+        "new": 21966,
+        "reread": 1204339
       },
       "github": {
         "new": 11112,
@@ -86,18 +88,77 @@
       "deliver_chain": {
         "new": 1926,
         "reread": 262716
+      },
+      "delegate": {
+        "new": 825,
+        "reread": 65467
       }
     }
   },
   "prompts": {
-    "handoff": 4,
+    "handoff": 5,
     "steer": 1,
     "instruction": 7,
     "approve": 2,
-    "interrupt": 1
+    "interrupt": 1,
+    "harness": 1
   },
   "owner_decisions": [],
   "agent_decisions": [
+    {
+      "id": "no-stop-on-a-status-update",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "5c40c179a"
+    },
+    {
+      "id": "cap-a-decision-page-at-five-cards",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "5c40c179a"
+    },
+    {
+      "id": "no-stop-on-a-status-update",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "cap-a-decision-page-at-five-cards",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "read-decisions-before-asking-again",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "retro-reports-capped-question-waits",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "retro-ranking-leaves-out-hooks",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "wait-on-a-pull-request-with-one-command",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "measure-background-waits-before-changing-them",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
     {
       "id": "retro-skill-reads-facts-and-cites-them",
       "importance": "medium",
@@ -114,15 +175,20 @@
   "friction": {
     "tool_errors": 4,
     "interrupts": 1,
-    "secret_scans": 9,
-    "slow": []
+    "secret_scans": 11,
+    "slow": [
+      [
+        121,
+        "rm -r .scratch/retro && ls .scratch 2>/dev/null | head -3\ngi"
+      ]
+    ]
   },
   "hooks": {
-    "SessionStart": 1.2,
-    "PreToolUse": 41.8,
-    "PostToolUse": 33.9,
-    "PostToolBatch": 26.3,
+    "SessionStart": 2.0,
+    "PreToolUse": 45.6,
+    "PostToolUse": 37.0,
+    "PostToolBatch": 29.4,
     "PostToolUseFailure": 0.8,
-    "Stop": 1.1
+    "Stop": 1.4
   }
 }
