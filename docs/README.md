@@ -11,6 +11,7 @@
 | `tasks.md` | The task list and its state. Read "Resume here" to continue the work from the file alone. |
 | `tasks-archive.md` | Closed items, finished sections and older Log entries moved from `tasks.md`, unchanged. History only. |
 | `decisions.md` | Reversible choices a session made at the recommendation, one line each, with how to undo it. Skim it to veto. |
+| `retro/` | One `<branch>.json` per task, made by `scripts/task-record.py write`: wall time, time waiting on the owner (turn, question and permission waits), decisions, tokens and lines by product, spec and process. A turn wait counts every gap before your next prompt, so it is an upper bound on approval time. `scripts/task-record.py report` totals the folder, and the `retro` skill (`.claude/skills/retro/`) reads it and writes a Markdown and HTML report with options and a prompt to paste back. |
 | `approvals.md` | Standing owner approvals and whether each was carried through to every doc and task. |
 | `research/` | Primary-source notes, such as CLI flags and output formats. |
 

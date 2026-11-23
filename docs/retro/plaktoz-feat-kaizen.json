@@ -1,0 +1,194 @@
+{
+  "task": "feat-kaizen",
+  "branch": "plaktoz/feat-kaizen",
+  "base": "origin/main",
+  "sessions": [
+    "20b88939-b13f-42d3-86e7-58cc6151b1a8",
+    "8b607737-63ef-4890-980c-129af7c519ec"
+  ],
+  "commits": 5,
+  "lines": {
+    "product": 0,
+    "spec": 0,
+    "process": 2141
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "8b607737-63ef-4890-980c-129af7c519ec"
+  ],
+  "time": {
+    "wall_s": 54825.5,
+    "buckets": {
+      "agent_think": 5238.2,
+      "think_reply": 4610.6,
+      "investigate": 355.7,
+      "records_checks": 41.6,
+      "build_product": 296.5,
+      "run_tests": 195.2,
+      "edit_records": 6.0,
+      "mixed_shell": 71.2,
+      "commit_hooks": 141.7,
+      "wait_reply": 940.8,
+      "github": 12.1,
+      "deliver_chain": 5.9,
+      "away": 42909.1,
+      "delegate": 0.7
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 312,
+      "output": 414230,
+      "cache_creation": 1244951,
+      "cache_read": 24776903
+    },
+    "subagent": {
+      "input": 0,
+      "output": 0,
+      "cache_creation": 0,
+      "cache_read": 0
+    },
+    "by_activity": {
+      "investigate": {
+        "new": 1075827,
+        "reread": 12534388
+      },
+      "records_checks": {
+        "new": 61299,
+        "reread": 671011
+      },
+      "build_product": {
+        "new": 256496,
+        "reread": 3922188
+      },
+      "run_tests": {
+        "new": 210708,
+        "reread": 3522198
+      },
+      "edit_records": {
+        "new": 2374,
+        "reread": 101887
+      },
+      "mixed_shell": {
+        "new": 11469,
+        "reread": 1142461
+      },
+      "commit_hooks": {
+        "new": 5491,
+        "reread": 540020
+      },
+      "think_reply": {
+        "new": 21966,
+        "reread": 1204339
+      },
+      "github": {
+        "new": 11112,
+        "reread": 810228
+      },
+      "deliver_chain": {
+        "new": 1926,
+        "reread": 262716
+      },
+      "delegate": {
+        "new": 825,
+        "reread": 65467
+      }
+    }
+  },
+  "prompts": {
+    "handoff": 5,
+    "steer": 1,
+    "instruction": 7,
+    "approve": 2,
+    "interrupt": 1,
+    "harness": 1
+  },
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "no-stop-on-a-status-update",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "5c40c179a"
+    },
+    {
+      "id": "cap-a-decision-page-at-five-cards",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "5c40c179a"
+    },
+    {
+      "id": "no-stop-on-a-status-update",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "cap-a-decision-page-at-five-cards",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "read-decisions-before-asking-again",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "retro-reports-capped-question-waits",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "retro-ranking-leaves-out-hooks",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "wait-on-a-pull-request-with-one-command",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "measure-background-waits-before-changing-them",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "f6e8b3920"
+    },
+    {
+      "id": "retro-skill-reads-facts-and-cites-them",
+      "importance": "medium",
+      "category": "process and records",
+      "commit": "38f2361ef"
+    },
+    {
+      "id": "task-cost-is-one-derived-file-per-branch",
+      "importance": "medium",
+      "category": "process and records",
+      "commit": "1643568d5"
+    }
+  ],
+  "friction": {
+    "tool_errors": 4,
+    "interrupts": 1,
+    "secret_scans": 11,
+    "slow": [
+      [
+        121,
+        "rm -r .scratch/retro && ls .scratch 2>/dev/null | head -3\ngi"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 2.0,
+    "PreToolUse": 45.6,
+    "PostToolUse": 37.0,
+    "PostToolBatch": 29.4,
+    "PostToolUseFailure": 0.8,
+    "Stop": 1.4
+  }
+}

@@ -40,6 +40,23 @@ def with_card(**changes):
     return doc
 
 
+class CapTests(unittest.TestCase):
+    def cards(self, n):
+        doc = copy.deepcopy(PAGE)
+        doc["decisions"] = [dict(copy.deepcopy(CARD), id=f"D{i + 1}") for i in range(n)]
+        return doc
+
+    def test_five_cards_render(self):
+        r, _ = render(self.cards(5))
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_a_sixth_card_is_refused_and_told_to_decide_it(self):
+        r, _ = render(self.cards(6))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("most a page holds is 5", r.stderr)
+        self.assertIn("docs/decisions.md", r.stderr)
+
+
 class TriggerTests(unittest.TestCase):
     def test_a_card_with_a_stop_trigger_renders_and_shows_why_it_was_asked(self):
         r, html = render(PAGE)
