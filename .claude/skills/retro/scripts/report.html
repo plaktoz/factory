@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'">
+<title>__TITLE__</title>
+<style>
+:root{--bg:#f7f7f5;--card:#fff;--ink:#1c1c1a;--mute:#666660;--line:#dcdcd6;--accent:#2b5fd9;--accent-bg:#e8eefc;--pro:#1b7a3e;--con:#b3261e;--rec:#8a5a00;--rec-bg:#fdf1d6;--hi:#b3261e;--med:#8a5a00;--lo:#4a5568}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f0c060;--rec-bg:#3a2e10;--hi:#ff8a80;--med:#f0c060;--lo:#a0aec0}}
+:root[data-theme="dark"]{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f0c060;--rec-bg:#3a2e10;--hi:#ff8a80;--med:#f0c060;--lo:#a0aec0}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:900px;margin:0 auto;padding:24px 16px 140px}
+h1{font-size:22px;margin:0 0 4px}
+h2.sec{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:28px 0 8px}
+.sub{color:var(--mute);margin:0 0 12px}
+.limits{border-left:3px solid var(--rec);background:var(--rec-bg);padding:8px 12px;border-radius:0 6px 6px 0;margin:0 0 16px;font-size:14px}
+.limits ul{margin:4px 0 0;padding-left:18px}
+table.idx{border-collapse:collapse;width:100%;font-size:14px;margin:0 0 8px}
+table.idx th,table.idx td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+table.idx th{color:var(--mute);font-weight:600}
+table.idx a{color:var(--accent);text-decoration:none}
+.imp{display:inline-block;font-size:11px;font-weight:700;border:1px solid currentColor;border-radius:4px;padding:0 6px;text-transform:uppercase}
+.imp.high{color:var(--hi)} .imp.medium{color:var(--med)} .imp.low{color:var(--lo)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
+.card h3{font-size:17px;margin:0 0 2px}
+.tag{font-size:12px;color:var(--mute);margin:0 0 10px}
+.ev{width:100%;border-collapse:collapse;font-size:14px;margin:0 0 12px}
+.ev td{padding:4px 8px;border-bottom:1px solid var(--line)}
+.ev td.v{text-align:right;font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.ev td.p{color:var(--mute);font-size:12px;font-family:ui-monospace,monospace}
+.ctx{margin:0 0 10px}
+.ctx b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute);margin-bottom:2px}
+.opts{display:grid;gap:8px}
+label.opt{display:block;border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer}
+label.opt:has(input:checked){border-color:var(--accent);background:var(--accent-bg)}
+label.opt input{margin-right:8px}
+.name{font-weight:600}
+.rec{font-size:11px;font-weight:600;color:var(--rec);background:var(--rec-bg);border-radius:4px;padding:1px 6px;margin-left:6px}
+.see{margin:4px 0 0 24px;font-size:14px}
+.pc{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:6px 0 0 24px;font-size:13px}
+@media(max-width:560px){.pc{grid-template-columns:1fr;margin-left:0}.see{margin-left:0}}
+.pc ul{margin:0;padding-left:16px}
+.pro li::marker{color:var(--pro)} .con li::marker{color:var(--con)}
+.why{margin:10px 0 0;font-size:14px;color:var(--mute)}
+.note{width:100%;margin-top:8px;font:inherit;font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+.dock{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px}
+.dock .in{max-width:900px;margin:0 auto}
+.dock textarea{width:100%;height:120px;font:12px/1.4 ui-monospace,monospace;background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:8px;display:none}
+button{font:inherit;font-size:14px;padding:6px 14px;border-radius:6px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+button.alt{background:transparent;color:var(--accent)}
+.bars{display:grid;gap:6px;margin:6px 0 4px}
+.bar{display:grid;grid-template-columns:200px 1fr 60px;gap:8px;align-items:center;font-size:13px}
+.bar .t{height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar .t i{display:block;height:8px;background:var(--accent);border-radius:4px}
+.bar .n{text-align:right;font-variant-numeric:tabular-nums;color:var(--mute)}
+@media(max-width:560px){.bar{grid-template-columns:120px 1fr 48px}}
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title"></h1>
+  <p class="sub" id="intro"></p>
+  <div class="limits" id="limits"></div>
+  <h2 class="sec">Findings, most important first</h2>
+  <table class="idx" id="idx"></table>
+  <div id="cards"></div>
+</main>
+<div class="dock"><div class="in">
+  <textarea id="prompt" readonly></textarea>
+  <button id="gen">Generate prompt</button>
+  <button id="copy" class="alt">Copy</button>
+  <span id="status" class="sub"></span>
+</div></div>
+<script>
+const R=__DATA__;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const KEY="retro:"+R.storage_key;
+let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||"{}")}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(saved))}catch(e){}};
+document.getElementById("title").textContent=R.title;
+document.getElementById("intro").innerHTML=esc(R.intro)+" Period: "+esc(R.period)+". Recommended options are preselected. Change a choice, add a note, press <b>Generate prompt</b>, then paste it into Claude Code.";
+document.getElementById("limits").innerHTML="<b>What this data cannot show</b><ul>"+R.limits.map(x=>"<li>"+esc(x)+"</li>").join("")+"</ul>";
+document.getElementById("idx").innerHTML="<tr><th>Id</th><th>Finding</th><th>Category</th><th>Impact</th><th>Asked because</th></tr>"+
+ R.findings.map(f=>`<tr><td><a href="#${esc(f.id)}">${esc(f.id)}</a></td><td>${esc(f.title)}</td><td>${esc(f.category)}</td><td><span class="imp ${esc(f.impact)}">${esc(f.impact)}</span></td><td>${esc(f.trigger)}</td></tr>`).join("");
+const cards=document.getElementById("cards");
+R.findings.forEach(f=>{
+  const rec=f.options.find(o=>o.recommended);
+  const pick=(saved[f.id]&&saved[f.id].opt)||rec.id;
+  const el=document.createElement("section");el.className="card";el.id=f.id;
+  el.innerHTML=`<h3>${esc(f.id)}. ${esc(f.title)}</h3>
+  <p class="tag">${esc(f.category)} · impact <span class="imp ${esc(f.impact)}">${esc(f.impact)}</span> · asked because: ${esc(f.trigger)} (${esc(f.trigger_detail)}) · signal: ${esc(f.signal)}</p>
+  <table class="ev">${f.rows.map(r=>`<tr><td>${esc(r.label)}</td><td class="v">${esc(r.value)}</td><td class="p">${esc(r.path)}</td></tr>`).join("")}</table>
+  <div class="ctx"><b>Today</b>${esc(f.today)}</div>
+  <div class="ctx"><b>After the recommended option</b>${esc(f.after)}</div>
+  <div class="opts">${f.options.map(o=>`<label class="opt"><input type="radio" name="${esc(f.id)}" value="${esc(o.id)}" ${o.id===pick?"checked":""}>
+    <span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">recommended</span>':""}
+    <div class="see">${esc(o.see)} <i>It asks of you: ${esc(o.asks)}.</i></div>
+    <div class="pc"><div class="pro"><b>Pros</b><ul>${o.pros.map(p=>"<li>"+esc(p)+"</li>").join("")}</ul></div>
+    <div class="con"><b>Cons</b><ul>${o.cons.map(p=>"<li>"+esc(p)+"</li>").join("")}</ul></div></div></label>`).join("")}
+    <label class="opt"><input type="radio" name="${esc(f.id)}" value="__unsure" ${pick==="__unsure"?"checked":""}><span class="name">Not sure</span><div class="see">Ask me first. Write the question below.</div></label></div>
+  <textarea class="note" rows="2" placeholder="Note, or your question if you are not sure" data-id="${esc(f.id)}">${esc((saved[f.id]&&saved[f.id].note)||"")}</textarea>
+  <p class="why"><b>Why the recommendation.</b> ${esc(f.why)}</p>`;
+  cards.appendChild(el);
+});
+cards.addEventListener("change",e=>{if(e.target.type==="radio"){saved[e.target.name]=Object.assign(saved[e.target.name]||{},{opt:e.target.value});save()}});
+cards.addEventListener("input",e=>{if(e.target.dataset&&e.target.dataset.id){saved[e.target.dataset.id]=Object.assign(saved[e.target.dataset.id]||{},{note:e.target.value});save()}});
+const ta=document.getElementById("prompt"),st=document.getElementById("status");
+document.getElementById("gen").onclick=()=>{
+  const lines=["Apply these retro decisions. For each, make the change in the repo, record it by cost (commit message, docs/decisions.md line, or a proposed ADR), and report what you did.",""];
+  R.findings.forEach(f=>{
+    const s=saved[f.id]||{},rec=f.options.find(o=>o.recommended),id=s.opt||rec.id,note=(s.note||"").trim();
+    if(id==="__unsure"){lines.push(`${f.id} ${f.title}: NOT SURE. Question: ${note||"(none written)"}`);return}
+    const o=f.options.find(x=>x.id===id);
+    lines.push(`${f.id} ${f.title}: ${o.name} [${o.id}] (${o.recommended?"recommended":"not the recommendation"})`+(note?` Note: ${note}`:""));
+  });
+  ta.value=lines.join("\n");ta.style.display="block";st.textContent="";
+};
+document.getElementById("copy").onclick=async()=>{
+  if(!ta.value)document.getElementById("gen").click();
+  try{await navigator.clipboard.writeText(ta.value);st.textContent="Copied"}catch(e){ta.select();st.textContent=(document.execCommand&&document.execCommand("copy"))?"Copied":"Select and copy"}
+};
+</script>
+</body>
+</html>

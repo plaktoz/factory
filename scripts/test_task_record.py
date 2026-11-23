@@ -307,3 +307,204 @@ def test_git_side_rates_each_agent_decision_by_where_it_was_recorded(tmp_path):
     assert g["decision_trailers"] == 3
     assert g["lines"]["product"] == 3
     assert g["agent_runs"] == ["r1"]
+
+
+def test_a_chained_shell_command_is_not_charged_to_the_hooks_it_contains(tmp_path):
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        asst(5, "a", "tool_use", [bash("cd e && uv run pytest -q && git add -A && git commit -q -m x")]), result(65, "a-0"),
+        asst(70, "b", "tool_use", [bash("git commit -q -m y && git push -u origin HEAD && gh pr create --fill")]), result(80, "b-0"),
+        asst(85, "c", "end_turn"),
+    ])
+    b = s["time"]["buckets"]
+    assert b["mixed_shell"] == 5 + 60
+    assert b["deliver_chain"] == 5 + 10
+    assert "commit_hooks" not in b
+
+
+def test_commands_report_own_time_apart_from_chained_time_and_gh_by_subcommand(tmp_path):
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        asst(5, "a", "tool_use", [bash("gh pr view 5")]), result(8, "a-0"),
+        asst(20, "b", "tool_use", [bash("gh pr view 5")]), result(22, "b-0"),
+        asst(30, "c", "tool_use", [bash("git push origin HEAD && gh pr create --fill")]), result(40, "c-0"),
+        asst(50, "d", "tool_use", [bash("git commit -q -m x")]), result(52, "d-0"),
+        asst(60, "e", "end_turn"),
+    ])
+    c = s["commands"]
+    assert c["gh pr view"] == {"calls": 2, "s": 5, "pure_calls": 2, "pure_s": 5}
+    assert c["gh"] == {"calls": 3, "s": 15, "pure_calls": 2, "pure_s": 5}
+    assert c["git push"] == {"calls": 1, "s": 10, "pure_calls": 0, "pure_s": 0}
+    assert c["git commit"] == {"calls": 1, "s": 2, "pure_calls": 1, "pure_s": 2}
+    assert s["gh_repeat_reads"] == {"n": 1, "s": 2}
+
+
+def test_a_reply_gap_is_filed_by_what_the_agent_ended_its_turn_with(tmp_path):
+    def turn(start, mid, text):
+        return [asst(start, mid, "end_turn", text=text)]
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        *turn(5, "a", "Which option do you want?"), prompt(65, "A"),
+        *turn(70, "b", "Opened https://github.com/o/r/pull/9"), prompt(100, "ok"),
+        *turn(105, "c", "All 12 tests passed."), prompt(125, "ok"),
+        *turn(130, "d", "Still working through the second module."), prompt(190, "ok"),
+        *turn(195, "e", "Which option do you want?"), prompt(5000, "back"),
+        *turn(5005, "f", "done"),
+    ])
+    g = s["reply_gaps"]
+    assert g["asked"] == {"n": 1, "s": 60}
+    assert g["delivered"] == {"n": 1, "s": 30}
+    assert g["finished"] == {"n": 1, "s": 20}
+    assert g["status"] == {"n": 1, "s": 60}
+    assert sum(v["n"] for v in g.values()) == 4
+
+
+def test_question_waits_are_kept_one_by_one_so_a_few_open_questions_cannot_pose_as_the_total(tmp_path):
+    ask = ("AskUserQuestion", {"questions": []})
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        asst(1, "a", "tool_use", [ask]), result(31, "a-0", answers={}),
+        asst(32, "b", "tool_use", [ask]), result(3032, "b-0", answers={}),
+        asst(3033, "c", "end_turn"),
+    ])
+    assert s["question_wait_s"] == [30, 3000]
+
+
+def test_a_question_has_a_theme_and_a_day_so_repeats_and_surges_show():
+    t = tr.question_theme
+    assert t("Push and open the PR now?") == "push, PR and merge approval"
+    assert t("Token rotation: has the gateway token been rotated?") == "token and secret rotation"
+    assert t("Stalled ADR: fix it now or record a task?") == "fix now or later"
+    assert t("Which file should hold the index?") == "where it lives"
+    assert t("Spec wording for module 9") == "spec wording"
+    assert t("Something unrelated") == "other"
+
+
+def _rec(tmp, **over):
+    base = {"task": "t", "time": {"wall_s": 0, "buckets": {}}, "tokens": {"main": {}, "subagent": {}, "by_activity": {}},
+            "prompts": {}, "owner_decisions": [], "agent_decisions": [], "hooks": {}, "commands": {},
+            "reply_gaps": {}, "question_wait_s": [], "gh_repeat_reads": {"n": 0, "s": 0},
+            "friction": {"tool_errors": 0, "interrupts": 0, "secret_scans": 0, "slow": []}}
+    base.update(over)
+    return base
+
+
+def test_signals_fire_only_on_the_numbers_that_justify_them():
+    def q(theme, outcome, day="2026-11-22"):
+        return {"source": "question", "header": theme, "theme": theme, "outcome": outcome, "day": day}
+    quiet = _rec(None)
+    assert tr.signals(tr.facts([quiet])) == []
+    loud = _rec(
+        None,
+        reply_gaps={"status": {"n": 20, "s": 3000}, "asked": {"n": 5, "s": 300}},
+        question_wait_s=[10, 20, 4000],
+        gh_repeat_reads={"n": 30, "s": 90},
+        commands={"gh auth status": {"calls": 10, "s": 400, "pure_calls": 10, "pure_s": 400}},
+        owner_decisions=[q("token and secret rotation", "followed", f"2026-11-{d}") for d in (15, 16, 17, 18, 21)]
+        + [q("fix now or later", "overridden", "2026-11-22") for _ in range(30)],
+        time={"wall_s": 0, "buckets": {"think_reply": 1000, "wait_machine": 600}},
+    )
+    got = {s["id"] for s in tr.signals(tr.facts([loud]))}
+    assert got == {"stops-without-asking", "repeated-question", "open-questions-inflate-wait", "gh-polling",
+                   "gh-slow-call", "question-surge", "background-waits"}
+
+
+def test_facts_cap_open_questions_and_name_repeated_themes():
+    rec = _rec(None, question_wait_s=[30, 60, 3000],
+               owner_decisions=[{"source": "question", "header": "Token", "theme": "token and secret rotation",
+                                 "outcome": "followed", "day": "2026-11-21"}] * 2)
+    f = tr.facts([rec])
+    w = f["waiting"]["question"]
+    assert (w["n"], w["total_s"], w["long_n"], w["long_s"], w["capped_s"]) == (3, 3090, 1, 3000, 30 + 60 + 1800)
+    assert f["decisions"]["themes"]["token and secret rotation"]["n"] == 2
+    assert f["decisions"]["repeated_headers"] == [["token", 2]]
+
+
+def test_the_html_report_has_the_new_sections(tmp_path):
+    rec = _rec(None, reply_gaps={"status": {"n": 2, "s": 120}}, question_wait_s=[10],
+               commands={"gh": {"calls": 2, "s": 6, "pure_calls": 2, "pure_s": 6},
+                         "gh pr view": {"calls": 2, "s": 6, "pure_calls": 2, "pure_s": 6}},
+               time={"wall_s": 100, "buckets": {"think_reply": 100}})
+    page = tr.render_html([rec])
+    for needle in ("Waiting on you, taken apart", "Repeated questions", "Commands: own time and chained time", "gh pr view"):
+        assert needle in page
+
+
+def test_a_command_with_a_pipe_or_chain_is_never_an_own_call(tmp_path):
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        asst(5, "a", "tool_use", [bash("git status --short && gh auth status")]), result(36, "a-0"),
+        asst(40, "b", "end_turn"),
+    ])
+    c = s["commands"]
+    assert c["gh"]["pure_calls"] == 0
+    assert c["gh auth status"]["pure_calls"] == 0
+
+
+def test_the_slow_gh_signal_ignores_calls_chained_with_other_commands():
+    chained = {"gh auth status": {"calls": 10, "s": 400.0, "pure_calls": 0, "pure_s": 0.0}}
+    own = {"gh auth status": {"calls": 10, "s": 400.0, "pure_calls": 10, "pure_s": 400.0}}
+    base = _rec(None, commands=chained)
+    assert [s for s in tr.signals(tr.facts([base])) if s["id"] == "gh-slow-call"] == []
+    base = _rec(None, commands=own)
+    assert [s["command"] for s in tr.signals(tr.facts([base])) if s["id"] == "gh-slow-call"] == ["gh auth status"]
+
+
+def test_the_facts_command_writes_facts_and_signals_for_a_folder(tmp_path):
+    (tmp_path / "a.json").write_text(json.dumps(_rec(None, reply_gaps={"status": {"n": 20, "s": 3000},
+                                                                        "asked": {"n": 5, "s": 300}})))
+    out = tmp_path / "facts.json"
+    assert tr.main(["facts", str(tmp_path), "--out", str(out)]) == 0
+    bundle = json.loads(out.read_text())
+    assert set(bundle) == {"facts", "signals", "records"}
+    assert bundle["records"] == 1
+    assert [s["id"] for s in bundle["signals"]] == ["stops-without-asking"]
+    assert "waiting" in bundle["facts"]
+
+
+def test_the_records_folder_is_not_read_back_into_itself(tmp_path):
+    (tmp_path / "a.json").write_text(json.dumps(_rec(None)))
+    (tmp_path / "facts.json").write_text(json.dumps({"facts": {}, "signals": [], "records": 0}))
+    assert len(tr.load_records(tmp_path)) == 1
+
+
+def test_a_final_message_that_lists_what_waits_on_the_owner_is_blocked_not_status():
+    k = tr.gap_kind
+    assert k("- **C9, B7, D12:** waiting on your answers, as before.") == "blocked"
+    assert k("Item 16 (the auto-merge call) needs your decision.") == "blocked"
+    assert k("Committing needs the trailer, and pushing needs your go-ahead.") == "blocked"
+    assert k("Pick option 1, 2 or 3 and I will continue.") == "blocked"
+    assert k("Item 34 is still unticked. Nothing is committed.") == "status"
+    assert k("Which option do you want?") == "asked"
+
+
+def test_an_output_filter_or_a_status_echo_does_not_make_a_command_a_chain(tmp_path):
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        asst(5, "a", "tool_use", [bash("gh pr view 5 2>&1 | head -20")]), result(8, "a-0"),
+        asst(10, "b", "tool_use", [bash("git commit -q -m x; echo \"exit=$?\"")]), result(14, "b-0"),
+        asst(20, "c", "tool_use", [bash("git commit -q -m x && git log --oneline -1 | cat")]), result(23, "c-0"),
+        asst(30, "d", "tool_use", [bash("gh pr view 5 && uv run pytest")]), result(90, "d-0"),
+        asst(95, "e", "end_turn"),
+    ])
+    c = s["commands"]
+    assert c["gh pr view"]["pure_calls"] == 1
+    assert c["git commit"]["pure_calls"] == 2
+    assert c["git commit"]["calls"] == 2
+    assert c["gh"]["pure_calls"] == 1
+
+
+def test_setup_steps_and_log_lines_around_a_command_do_not_make_it_a_chain(tmp_path):
+    s = read(tmp_path, [
+        prompt(0, "go"),
+        asst(5, "a", "tool_use", [bash("cd /w/x && git add -A && git commit -q -m x && git log --oneline -1 && git status -sb")]),
+        result(9, "a-0"),
+        asst(15, "b", "tool_use", [bash("export A=1; git add f && git commit -q -m y && git push -u origin HEAD")]),
+        result(25, "b-0"),
+        asst(30, "c", "tool_use", [bash("git add f && git commit -q -m y && uv run pytest -q")]), result(90, "c-0"),
+        asst(95, "d", "end_turn"),
+    ])
+    c = s["commands"]
+    assert c["git commit"]["pure_calls"] == 1
+    assert c["git commit"]["calls"] == 3
+    assert c["git push"]["pure_calls"] == 0

@@ -2,6 +2,7 @@
 
     python3 -I scripts/task-record.py write [--base origin/main]
     python3 -I scripts/task-record.py report [docs/retro] [--html PATH]
+    python3 -I scripts/task-record.py facts [docs/retro] --out PATH
 
 `write` makes docs/retro/<branch>.json from the Claude Code transcripts of the sessions that worked on this branch,
 and from git. Each branch owns its file, and no other branch writes it, so merges cannot conflict. `report` totals a
@@ -35,6 +36,7 @@ GROUPS = {
                           "run_tests"},
     "process and records": {"edit_records", "write_adr", "records_checks", "decision_pages", "github"},
     "git hooks": {"commit_hooks", "push_hooks"},
+    "chained shell (unsplit)": {"deliver_chain", "mixed_shell"},
     "waiting on you": {"wait_reply", "wait_question", "wait_permission", "ask_owner"},
     "waiting on machine": {"wait_machine"},
 }
@@ -45,21 +47,29 @@ LABELS = {
     "run_tests": "running tests", "edit_records": "editing records (tasks, decisions, AGENTS)",
     "write_adr": "writing ADRs", "records_checks": "records and docs checks", "decision_pages": "decision pages",
     "github": "GitHub calls", "commit_hooks": "git commit (company hooks)", "push_hooks": "git push (company hooks)",
+    "deliver_chain": "commit + push + gh in one command", "mixed_shell": "tests or checks chained with git",
     "ask_owner": "asking you", "wait_reply": "waiting for your reply",
     "wait_question": "waiting on your answer", "wait_permission": "waiting on a permission you decided",
     "wait_machine": "waiting on background work", AWAY: "away (not counted)",
 }
 # Most overhead first. A message takes the first activity in this list that any of its tools has.
-OVERHEAD = ["commit_hooks", "push_hooks", "records_checks", "decision_pages", "edit_records", "write_adr", "github",
+OVERHEAD = ["deliver_chain", "mixed_shell", "commit_hooks", "push_hooks", "records_checks", "decision_pages", "edit_records", "write_adr", "github",
             "ask_owner", "write_spec", "build_product", "run_tests", "wait_machine", "delegate", "investigate"]
-BASH_RULES = [
-    ("commit_hooks", r"\bgit\b[^|;&]*\bcommit\b"),
-    ("push_hooks", r"\bgit\b[^|;&]*\bpush\b"),
-    ("records_checks", r"docs-check|records\.py|spec-pilot"),
-    ("github", r"\bgh\b"),
-    ("run_tests", r"pytest|\bnpm test\b|\bvitest\b"),
-    ("wait_machine", r"(^|[;&|]\s*)sleep\s"),
+CMD_CATS = [
+    ("git commit", r"\bgit\b[^|;&]*\bcommit\b"),
+    ("git push", r"\bgit\b[^|;&]*\bpush\b"),
+    ("gh", r"\bgh\b"),
+    ("pytest", r"pytest|\bnpm test\b|\bvitest\b"),
+    ("records", r"docs-check|records\.py|spec-pilot"),
+    ("sleep", r"(^|[;&|]\s*)sleep\s"),
 ]
+CAT_ACTIVITY = {"git commit": "commit_hooks", "git push": "push_hooks", "gh": "github", "pytest": "run_tests",
+                "records": "records_checks", "sleep": "wait_machine"}
+DELIVERY = {"git commit", "git push", "gh"}
+GH_SUB = re.compile(r"\bgh\s+(api|pr|issue|run|repo|auth|workflow|release|search|label|gist)\b(?:\s+([a-z][a-z-]*))?")
+GH_READ = re.compile(r"\bgh\s+(pr|issue)\s+(view|checks|list|status)\b(?:\s+#?(\d+))?")
+REPEAT_READ_S = 600
+LONG_WAIT_S = 1800
 SKILL_ACTIVITY = {"decision-page": "decision_pages", "revise-spec": "records_checks"}
 EDIT_RECORDS = {"docs/decisions.md", "docs/tasks.md", "docs/tasks-archive.md", "docs/approvals.md", "docs/process.md",
                 "docs/README.md", "AGENTS.md"}
@@ -125,13 +135,28 @@ def file_activity(path):
     return "build_product"
 
 
+def _code(cmd):
+    """The command without heredoc bodies and quoted text, so a commit message cannot name a command it runs."""
+    cmd = re.sub(r"<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n.*?\n\s*\1\b", "", cmd, flags=re.S)
+    return re.sub(r"'[^']*'|\"[^\"]*\"", "''", cmd)
+
+
+def bash_categories(cmd):
+    code = _code(cmd)
+    return {name for name, rx in CMD_CATS if re.search(rx, code)}
+
+
 def tool_activity(name, inp):
     inp = inp or {}
     if name in ("Edit", "Write", "NotebookEdit"):
         return file_activity(inp.get("file_path") or inp.get("notebook_path") or "")
     if name == "Bash":
-        cmd = inp.get("command") or ""
-        return next((act for act, rx in BASH_RULES if re.search(rx, cmd)), "investigate")
+        cats = bash_categories(inp.get("command") or "")
+        if not cats:
+            return "investigate"
+        if len(cats) == 1:
+            return CAT_ACTIVITY[next(iter(cats))]
+        return "deliver_chain" if cats <= DELIVERY else "mixed_shell"
     if name == "Skill":
         return SKILL_ACTIVITY.get(inp.get("skill") or "", "investigate")
     if name == "AskUserQuestion":
@@ -276,25 +301,100 @@ def _outcome(options, answer):
     return "custom"
 
 
-def _question_record(q, answer):
+QUESTION_THEMES = [
+    ("token and secret rotation", re.compile(r"token|secret|credential|rotat", re.I)),
+    ("push, PR and merge approval", re.compile(r"\bpush\b|\bPRs?\b|pull request|\bmerge\b", re.I)),
+    ("fix now or later", re.compile(r"fix (it )?now|now or|\blater\b|follow-up|record (as|a)\b|defer|backfill", re.I)),
+    ("where it lives", re.compile(r"\bwhere\b|which (file|folder|path|name)|rename|\bmove\b", re.I)),
+    ("spec wording", re.compile(r"wording|\bspec\b|module \d|contract|section", re.I)),
+]
+
+
+def question_theme(text):
+    return next((name for name, rx in QUESTION_THEMES if rx.search(text)), "other")
+
+
+def gap_kind(text):
+    """What the agent ended its turn with, read from its last message: a question, a delivery, a finish or a status."""
+    t = text.strip()
+    tail = t[-400:].lower()
+    if t.endswith("?") or re.search(r"which (option|do you)|do you want|should i\b|let me know|your call|approve", tail):
+        return "asked"
+    if re.search(r"waiting on you|needs? your|your (go-ahead|decision|answer|call|approval)|pick (an )?option|"
+                 r"option \d,? .*\bor\b|awaiting (your|the owner)", tail):
+        return "blocked"
+    if re.search(r"pull/\d+|\bpushed\b|\bopened\b", tail):
+        return "delivered"
+    if re.search(r"\bdone\b|complete|finished|passed", tail):
+        return "finished"
+    return "status"
+
+
+_PIPE_FILTER = re.compile(r"^(head|tail|cat|tee|wc|sort|uniq|grep|cut|tr|sed|awk)\b")
+_TRAILER = re.compile(r"^(echo|printf|true|pwd|git log|git status|git diff --stat|git branch --show-current)\b")
+_SETUP = re.compile(r"^(cd|export|set|unset|source|git add|git checkout -q|git switch|env|mkdir|\w+=\S*)\b|^\w+=")
+
+
+def _is_single(cmd):
+    """One command. Setup before it (cd, export, git add), log lines after it, and output filters add no work."""
+    code = _code(cmd).strip()
+    steps = [p.strip() for p in re.split(r"&&|\|\||;|\n", code) if p.strip()]
+    while len(steps) > 1 and _TRAILER.match(steps[-1]):
+        steps.pop()
+    while len(steps) > 1 and _SETUP.match(steps[0]):
+        steps.pop(0)
+    if len(steps) != 1:
+        return False
+    return all(_PIPE_FILTER.match(p.strip()) for p in steps[0].split("|")[1:])
+
+
+def _count_command(commands, read_at, repeats, cmd, started, span):
+    """Charge a shell command's time to each kind it contains, and apart to the kinds it is the only one of."""
+    cats = bash_categories(cmd)
+    pure = len(cats) == 1 and _is_single(cmd)
+    keys = list(cats)
+    if "gh" in cats:
+        m = GH_SUB.search(_code(cmd))
+        if m:
+            keys.append(" ".join(["gh", m[1]] + ([m[2]] if m[2] else [])))
+        r = GH_READ.search(_code(cmd))
+        if r:
+            ident = (r[1], r[3] or "list")
+            if ident in read_at and started - read_at[ident] < REPEAT_READ_S:
+                repeats["n"] += 1
+                repeats["s"] += span
+            read_at[ident] = started
+    for k in keys:
+        slot = commands[k]
+        slot["calls"] += 1
+        slot["s"] += span
+        if pure:
+            slot["pure_calls"] += 1
+            slot["pure_s"] += span
+
+
+def _question_record(q, answer, day=""):
     rec = {"source": "question", "header": q.get("header") or q.get("question", ""),
-           "question": q.get("question", ""),
+           "question": q.get("question", ""), "day": day,
+           "theme": question_theme((q.get("header") or "") + " " + q.get("question", "")),
            "outcome": "unanswered" if answer is None else _outcome(q.get("options") or [], answer),
            "answer": str(answer or "")[:120]}
     rec.update(classify_decision(q.get("question", "")))
     return rec
 
 
-def _page_answers(text):
+def _page_answers(text, day=""):
     """Answers on a decision page, as the page's prompt writes them: one line per card, in the owner's words."""
     out = []
     for m in PAGE_CHOICE.finditer(text):
-        rec = {"source": "page", "id": m[1], "header": m[2].strip(), "answer": m[3].strip(),
+        rec = {"source": "page", "id": m[1], "header": m[2].strip(), "answer": m[3].strip(), "day": day,
                "outcome": "followed" if m[5] == "recommended" else "overridden"}
+        rec["theme"] = question_theme(rec["header"] + " " + rec["answer"])
         rec.update(classify_decision(rec["header"] + " " + rec["answer"]))
         out.append(rec)
     for m in PAGE_UNSURE.finditer(text):
-        rec = {"source": "page", "id": m[1], "header": m[2].strip(), "outcome": "unsure"}
+        rec = {"source": "page", "id": m[1], "header": m[2].strip(), "outcome": "unsure", "day": day}
+        rec["theme"] = question_theme(rec["header"])
         rec.update(classify_decision(rec["header"]))
         out.append(rec)
     return out
@@ -316,6 +416,10 @@ def read_session(path, subagent_paths):
     friction = {"tool_errors": 0, "interrupts": 0, "secret_scans": 0, "slow": []}
     state, cursor, first, last = "start", None, None, None
     open_tools, asked, seen_ids = {}, {}, set()
+    commands = defaultdict(lambda: {"calls": 0, "s": 0.0, "pure_calls": 0, "pure_s": 0.0})
+    reply_gaps = defaultdict(lambda: {"n": 0, "s": 0.0})
+    question_wait_s, read_at, repeats = [], {}, {"n": 0, "s": 0.0}
+    msg_text, end_text = defaultdict(str), ""
 
     for e in _events(entries):
         t = _ts(e["timestamp"])
@@ -336,8 +440,13 @@ def read_session(path, subagent_paths):
         elif state == "end" and prompt:
             if kind == "harness":
                 bucket = "wait_machine"
+            elif t - cursor > AWAY_S:
+                bucket = AWAY
             else:
-                bucket = AWAY if t - cursor > AWAY_S else "wait_reply"
+                bucket = "wait_reply"
+                slot = reply_gaps[gap_kind(end_text)]
+                slot["n"] += 1
+                slot["s"] += t - cursor
         elif e["type"] == "assistant":
             # Time before a message is the model writing it, so it goes to what that message does.
             tools = [(b["name"], b.get("input") or {}) for b in blocks
@@ -349,6 +458,9 @@ def read_session(path, subagent_paths):
         cursor = last = t
 
         if e["type"] == "assistant":
+            msg_text[m.get("id")] += _text(m)
+            if m.get("stop_reason") == "end_turn":
+                end_text = msg_text[m.get("id")]
             # A message is logged as several entries that share its id, so each tool use opens its own span
             # wherever it arrives. Re-logged content is skipped by tool id.
             for b in blocks:
@@ -372,16 +484,20 @@ def read_session(path, subagent_paths):
                 if t - t0 > SLOW_S:
                     label = (inp.get("command") or "")[:60] if name == "Bash" else name
                     friction["slow"].append([round(t - t0), label])
+                if name == "Bash":
+                    _count_command(commands, read_at, repeats, inp.get("command") or "", t0, t - t0)
                 if name == "AskUserQuestion":
+                    question_wait_s.append(round(t - t0))
                     answers = tur.get("answers") or {}
                     for q in asked.get(tid, []):
-                        _add_owner(owner, seen_owner, _question_record(q, answers.get(q.get("question"))))
+                        _add_owner(owner, seen_owner,
+                                   _question_record(q, answers.get(q.get("question")), e["timestamp"][:10]))
             state = "tool" if open_tools else "think"
         elif prompt:
             prompts[kind] += 1
             if kind == "interrupt":
                 friction["interrupts"] += 1
-            for rec in _page_answers(text):
+            for rec in _page_answers(text, e["timestamp"][:10]):
                 _add_owner(owner, seen_owner, rec)
             open_tools.clear()
             state = "think"
@@ -401,6 +517,10 @@ def read_session(path, subagent_paths):
         "owner_decisions": owner,
         "friction": friction,
         "hooks": {k: round(v, 1) for k, v in hooks.items()},
+        "commands": {k: {f: round(x, 1) for f, x in v.items()} for k, v in commands.items()},
+        "reply_gaps": {k: {"n": v["n"], "s": round(v["s"], 1)} for k, v in reply_gaps.items()},
+        "question_wait_s": question_wait_s,
+        "gh_repeat_reads": {"n": repeats["n"], "s": round(repeats["s"], 1)},
     }
 
 
@@ -526,7 +646,9 @@ def build_record(root, base, sessions_root):
 # --- reports --------------------------------------------------------------------------------------------------------
 
 def load_records(folder):
-    return [json.loads(p.read_text(encoding="utf-8")) for p in sorted(Path(folder).glob("*.json"))]
+    """The task records in a folder. A file that is not a record (facts.json, reports) is skipped."""
+    out = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(Path(folder).glob("*.json"))]
+    return [r for r in out if isinstance(r, dict) and "time" in r and "tokens" in r]
 
 
 def merge_records(records):
@@ -578,6 +700,98 @@ def summarize(rec):
         "not_recommended_rate": (100 * (out["overridden"] + out["custom"]) / answered) if answered else None,
         "friction": rec["friction"], "hooks": rec["hooks"],
     }
+
+
+def _sum_slots(records, key):
+    out = defaultdict(lambda: {"n": 0, "s": 0.0})
+    for r in records:
+        for k, v in (r.get(key) or {}).items():
+            out[k]["n"] += v["n"]
+            out[k]["s"] += v["s"]
+    return out
+
+
+def facts(records):
+    """The numbers a retro reads, reduced from the records. Every threshold in `signals` reads only these."""
+    m = merge_records(records)
+    b = m["time"]["buckets"]
+    active = sum(v for k, v in b.items() if k != AWAY)
+    gaps = _sum_slots(records, "reply_gaps")
+    waits = sorted(x for r in records for x in r.get("question_wait_s", []))
+    long_waits = [x for x in waits if x > LONG_WAIT_S]
+    themes, headers, per_day = {}, Counter(), Counter()
+    for d in m["owner_decisions"]:
+        slot = themes.setdefault(d.get("theme", "other"), {"n": 0, "followed": 0, "days": set()})
+        slot["n"] += 1
+        slot["followed"] += d["outcome"] == "followed"
+        if d.get("day"):
+            slot["days"].add(d["day"])
+            per_day[d["day"]] += 1
+        headers[re.sub(r"\W+", " ", d["header"].lower()).strip()] += 1
+    cmds = defaultdict(lambda: {"calls": 0, "s": 0.0, "pure_calls": 0, "pure_s": 0.0})
+    for r in records:
+        for k, v in (r.get("commands") or {}).items():
+            for f, x in v.items():
+                cmds[k][f] += x
+    reads = {"n": sum(r.get("gh_repeat_reads", {}).get("n", 0) for r in records),
+             "s": sum(r.get("gh_repeat_reads", {}).get("s", 0) for r in records)}
+    out = Counter(d["outcome"] for d in m["owner_decisions"])
+    answered = out["followed"] + out["overridden"] + out["custom"]
+    return {
+        "active_s": active, "buckets": dict(b),
+        "waiting": {
+            "reply": {"n": sum(v["n"] for v in gaps.values()), "total_s": sum(v["s"] for v in gaps.values()),
+                      "by_kind": {k: {"n": v["n"], "s": round(v["s"])} for k, v in gaps.items()}},
+            "question": {"n": len(waits), "total_s": sum(waits), "long_n": len(long_waits),
+                         "long_s": sum(long_waits), "capped_s": sum(min(x, LONG_WAIT_S) for x in waits),
+                         "median_s": waits[len(waits) // 2] if waits else 0},
+        },
+        "decisions": {
+            "answered": answered, "followed": out["followed"],
+            "follow_rate": round(100 * out["followed"] / answered) if answered else None,
+            "themes": {k: {"n": v["n"], "followed": v["followed"], "days": sorted(v["days"])}
+                       for k, v in sorted(themes.items(), key=lambda kv: -kv[1]["n"])},
+            "repeated_headers": [[k, v] for k, v in headers.items() if v > 1],
+            "per_day": dict(sorted(per_day.items())),
+        },
+        "commands": {k: {f: round(x, 1) for f, x in v.items()} for k, v in cmds.items()},
+        "gh_repeat_reads": reads,
+    }
+
+
+def signals(f):
+    """Named findings, each fired by a number in `facts`. None fires on a quiet history."""
+    out = []
+    reply = f["waiting"]["reply"]
+    status = reply["by_kind"].get("status", {"n": 0, "s": 0})
+    if status["n"] >= 10 and reply["n"] and status["n"] / reply["n"] >= 0.25:
+        out.append({"id": "stops-without-asking", "n": status["n"], "s": status["s"]})
+    for theme, v in f["decisions"]["themes"].items():
+        if theme != "other" and v["n"] >= 3 and len(v["days"]) >= 2:
+            out.append({"id": "repeated-question", "theme": theme, "n": v["n"], "days": len(v["days"]),
+                        "follow_rate": round(100 * v["followed"] / v["n"])})
+    q = f["waiting"]["question"]
+    if q["total_s"] and q["long_s"] / q["total_s"] >= 0.5:
+        out.append({"id": "open-questions-inflate-wait", "long_n": q["long_n"], "long_s": q["long_s"],
+                    "total_s": q["total_s"], "capped_s": q["capped_s"]})
+    reads = f["gh_repeat_reads"]
+    if reads["n"] >= 10:
+        out.append({"id": "gh-polling", "n": reads["n"], "s": reads["s"]})
+    for name, v in f["commands"].items():
+        if name.startswith("gh ") and v["pure_calls"] >= 5 and v["pure_s"] / v["pure_calls"] >= 20:
+            out.append({"id": "gh-slow-call", "command": name, "calls": v["pure_calls"],
+                        "mean_s": round(v["pure_s"] / v["pure_calls"])})
+    days = f["decisions"]["per_day"]
+    if len(days) >= 3:
+        typical = sorted(days.values())[len(days) // 2]
+        top = max(days.items(), key=lambda kv: kv[1])
+        if top[1] >= 3 * max(typical, 1) and top[1] >= 10:
+            out.append({"id": "question-surge", "day": top[0], "n": top[1], "typical": typical})
+    b, active = f["buckets"], f["active_s"]
+    if active and b.get("wait_machine", 0) / active >= 0.15:
+        out.append({"id": "background-waits", "s": round(b["wait_machine"]),
+                    "share": round(100 * b["wait_machine"] / active)})
+    return out
 
 
 def ranked_non_dev(records):
@@ -703,7 +917,47 @@ def render_html(records):
         out.append(f"<tr{cls}><td>{e(name)}</td><td class=num>{f['tool_errors']}</td>"
                    f"<td class=num>{f['interrupts']}</td><td class=num>{f['secret_scans']}</td>"
                    f"<td class=num>{len(f['slow'])}</td><td>{hooks}</td></tr>")
-    out.append("</table></body></html>\n")
+    out.append("</table>")
+    out.append(_new_sections(facts(records), e))
+    out.append("</body></html>\n")
+    return "\n".join(out)
+
+
+def _new_sections(f, e):
+    q, rp = f["waiting"]["question"], f["waiting"]["reply"]
+    out = ["<h2>Waiting on you, taken apart</h2><p class=note>Replies under 30 minutes, filed by how the agent ended "
+           "its turn. A reply is only owed after a question. The other kinds are the agent handing control back with "
+           "nothing to decide. The kind is read from the last message by keyword, so treat it as an estimate.</p>"
+           "<table><tr><th>Agent ended with</th><th class=num>Gaps</th><th class=num>Time</th></tr>"]
+    names = {"asked": "a question", "blocked": "items waiting on you", "status": "a status update with nothing owed",
+             "delivered": "a delivery", "finished": "a finish"}
+    for k, v in sorted(rp["by_kind"].items(), key=lambda kv: -kv[1]["s"]):
+        out.append(f"<tr><td>{e(names.get(k, k))}</td><td class=num>{v['n']}</td><td class=num>{_hm(v['s'])}</td></tr>")
+    out.append(f"</table><p class=note>Question waits: {q['n']} calls, {_hm(q['total_s'])} in all, median "
+               f"{q['median_s']}s. {q['long_n']} of them ran over 30 minutes and hold {_hm(q['long_s'])}. Capped at 30 "
+               f"minutes each the total is {_hm(q['capped_s'])}.</p>")
+    d = f["decisions"]
+    out.append("<h2>Repeated questions</h2><p class=note>Questions and decision-page answers, grouped by theme "
+               "(keyword match). A theme asked on several days with a high follow rate is a rule waiting to be "
+               "written down.</p><table><tr><th>Theme</th><th class=num>Asked</th><th class=num>Days</th>"
+               "<th class=num>Followed the recommendation</th></tr>")
+    for theme, v in d["themes"].items():
+        rate = round(100 * v["followed"] / v["n"]) if v["n"] else 0
+        out.append(f"<tr><td>{e(theme)}</td><td class=num>{v['n']}</td><td class=num>{len(v['days'])}</td>"
+                   f"<td class=num>{rate}%{_track(rate)}</td></tr>")
+    out.append("</table>")
+    out.append("<h2>Commands: own time and chained time</h2><p class=note>Own time counts only calls where the "
+               "command was the whole shell command. Chained time is the span of every command that contains it, so "
+               "it also holds the tests, pushes and waits chained beside it.</p><table><tr><th>Command</th>"
+               "<th class=num>Calls</th><th class=num>Own calls</th><th class=num>Own time</th>"
+               "<th class=num>Chained time</th><th class=num>Own mean</th></tr>")
+    for name, v in sorted(f["commands"].items(), key=lambda kv: -kv[1]["s"])[:16]:
+        mean = f"{v['pure_s'] / v['pure_calls']:.1f}s" if v["pure_calls"] else "-"
+        out.append(f"<tr><td>{e(name)}</td><td class=num>{int(v['calls'])}</td><td class=num>{int(v['pure_calls'])}"
+                   f"</td><td class=num>{_hm(v['pure_s'])}</td><td class=num>{_hm(v['s'])}</td>"
+                   f"<td class=num>{mean}</td></tr>")
+    out.append(f"</table><p class=note>GitHub reads repeated within 10 minutes: {f['gh_repeat_reads']['n']} calls, "
+               f"{_hm(f['gh_repeat_reads']['s'])}.</p>")
     return "\n".join(out)
 
 
@@ -716,7 +970,17 @@ def main(argv=None):
     r = sub.add_parser("report")
     r.add_argument("folder", nargs="?", default=RETRO)
     r.add_argument("--html", type=Path)
+    fx = sub.add_parser("facts")
+    fx.add_argument("folder", nargs="?", default=RETRO)
+    fx.add_argument("--out", type=Path, required=True)
     a = ap.parse_args(argv)
+    if a.cmd == "facts":
+        records = load_records(a.folder)
+        f = facts(records)
+        bundle = {"facts": f, "signals": signals(f), "records": len(records)}
+        a.out.write_text(json.dumps(bundle, indent=2, default=list) + "\n", encoding="utf-8")
+        print(f"wrote {a.out} ({len(records)} records, {len(bundle['signals'])} signals)")
+        return 0
     if a.cmd == "report":
         records = load_records(a.folder)
         if a.html:

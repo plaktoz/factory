@@ -1,0 +1,121 @@
+{
+  "task": "feat-kaizen",
+  "branch": "plaktoz/feat-kaizen",
+  "base": "origin/main",
+  "sessions": [
+    "8b607737-63ef-4890-980c-129af7c519ec"
+  ],
+  "commits": 2,
+  "lines": {
+    "product": 0,
+    "spec": 0,
+    "process": 1050
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "8b607737-63ef-4890-980c-129af7c519ec"
+  ],
+  "time": {
+    "wall_s": 11250.9,
+    "buckets": {
+      "agent_think": 5237.1,
+      "think_reply": 4242.7,
+      "investigate": 298.1,
+      "records_checks": 6.1,
+      "build_product": 292.9,
+      "run_tests": 154.2,
+      "edit_records": 6.0,
+      "mixed_shell": 53.3,
+      "commit_hooks": 4.7,
+      "wait_reply": 940.8,
+      "github": 8.9,
+      "deliver_chain": 5.9
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 238,
+      "output": 380687,
+      "cache_creation": 911808,
+      "cache_read": 17782042
+    },
+    "subagent": {
+      "input": 0,
+      "output": 0,
+      "cache_creation": 0,
+      "cache_read": 0
+    },
+    "by_activity": {
+      "investigate": {
+        "new": 751680,
+        "reread": 9693874
+      },
+      "records_checks": {
+        "new": 51811,
+        "reread": 247151
+      },
+      "build_product": {
+        "new": 255174,
+        "reread": 3629564
+      },
+      "run_tests": {
+        "new": 198690,
+        "reread": 2058536
+      },
+      "edit_records": {
+        "new": 2374,
+        "reread": 101887
+      },
+      "mixed_shell": {
+        "new": 10685,
+        "reread": 837437
+      },
+      "commit_hooks": {
+        "new": 1125,
+        "reread": 104149
+      },
+      "think_reply": {
+        "new": 16031,
+        "reread": 621076
+      },
+      "github": {
+        "new": 3237,
+        "reread": 225652
+      },
+      "deliver_chain": {
+        "new": 1926,
+        "reread": 262716
+      }
+    }
+  },
+  "prompts": {
+    "handoff": 3,
+    "steer": 1,
+    "instruction": 7,
+    "approve": 2,
+    "interrupt": 1
+  },
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "task-cost-is-one-derived-file-per-branch",
+      "importance": "medium",
+      "category": "process and records",
+      "commit": "1643568d5"
+    }
+  ],
+  "friction": {
+    "tool_errors": 3,
+    "interrupts": 1,
+    "secret_scans": 8,
+    "slow": []
+  },
+  "hooks": {
+    "SessionStart": 1.2,
+    "PreToolUse": 36.8,
+    "PostToolUse": 30.2,
+    "PostToolBatch": 22.3,
+    "PostToolUseFailure": 0.6,
+    "Stop": 0.8
+  }
+}
