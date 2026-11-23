@@ -16,6 +16,8 @@ MECHANISM = ("script", "function", "module", "adapter", "schema", "json", "yaml"
 # "commit" is not on the list: in a repo it is something the user does, not how the tool works inside.
 # The stop triggers in AGENTS.md (Working rules). A card that meets none of them is decided by the session, not asked.
 TRIGGERS = ("reopens-decision", "changes-scope", "costly-to-reverse", "no-clear-winner")
+# A page holds at most this many cards (docs/process.md, 2026-11-23-cap-a-decision-page-at-five-cards).
+MAX_CARDS = 5
 INTERNAL_ID = re.compile(r"\b(?:[A-Z]{1,2}\d{1,2}[A-Z]?|module \d+[A-Z]?)\b")
 
 def fail(msg):
@@ -36,6 +38,9 @@ def validate(doc):
     for k in ("title", "intro", "target", "storage_key"): text(doc, k, "page")
     ds = doc.get("decisions")
     if not isinstance(ds, list) or not ds: fail("page: 'decisions' must be a non-empty list")
+    if len(ds) > MAX_CARDS:
+        fail(f"page: {len(ds)} cards, the most a page holds is {MAX_CARDS}; decide the rest at the recommendation "
+             "and log each in docs/decisions.md")
     ids_on_page = {d.get("id") for d in ds}
     seen = set()
     for d in ds:
