@@ -508,3 +508,41 @@ def test_setup_steps_and_log_lines_around_a_command_do_not_make_it_a_chain(tmp_p
     assert c["git commit"]["pure_calls"] == 1
     assert c["git commit"]["calls"] == 3
     assert c["git push"]["pure_calls"] == 0
+
+
+def test_the_ranking_leaves_out_hooks_and_counts_open_questions_apart():
+    rec = _rec(None, time={"wall_s": 100, "buckets": {
+        "commit_hooks": 30, "push_hooks": 10, "wait_machine": 60, "wait_question": 3000, "think_reply": 900}},
+        question_wait_s=[30, 3000])
+    names = [label for label, _, _ in tr.ranked_non_dev([rec])]
+    assert not any("hook" in n for n in names)
+    assert "waiting on your answer (capped at 30 min each)" in names
+    assert "questions left open over 30 min" in names
+    capped = dict((l, hm) for l, hm, _ in tr.ranked_non_dev([rec]))
+    assert capped["waiting on your answer (capped at 30 min each)"] == "0h30m"
+    assert capped["questions left open over 30 min"] == "0h20m"
+
+
+
+
+def test_a_gap_before_a_background_notification_is_idle_when_the_agent_called_no_tool(tmp_path):
+    note = "<task-notification><task-id>x</task-id></task-notification>"
+    s = read(tmp_path, [
+        prompt(0, "go"), asst(10, "a", "end_turn"),
+        prompt(400, note), asst(410, "b", "end_turn"),
+        prompt(2400, note), asst(2410, "c", "end_turn"),
+    ])
+    w = s["notify_gaps"]
+    assert w["idle"] == {"n": 2, "s": 390 + 1990}
+    assert w["over_30min"] == {"n": 1, "s": 1990}
+
+
+def test_a_gap_where_the_agent_kept_working_is_not_idle(tmp_path):
+    note = "<task-notification><task-id>x</task-id></task-notification>"
+    s = read(tmp_path, [
+        prompt(0, "go"), asst(10, "a", "end_turn"),
+        prompt(100, note), asst(105, "b", "tool_use", [bash("ls")]), result(110, "b-0"), asst(115, "c", "end_turn"),
+        prompt(400, note), asst(405, "d", "end_turn"),
+    ])
+    w = s["notify_gaps"]
+    assert w["idle"]["n"] == 2

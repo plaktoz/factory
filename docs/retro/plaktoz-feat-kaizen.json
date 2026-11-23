@@ -5,39 +5,40 @@
   "sessions": [
     "8b607737-63ef-4890-980c-129af7c519ec"
   ],
-  "commits": 2,
+  "commits": 3,
   "lines": {
     "product": 0,
     "spec": 0,
-    "process": 1050
+    "process": 2049
   },
   "adrs_added": 0,
   "agent_runs": [
     "8b607737-63ef-4890-980c-129af7c519ec"
   ],
   "time": {
-    "wall_s": 11250.9,
+    "wall_s": 54477.3,
     "buckets": {
       "agent_think": 5237.1,
-      "think_reply": 4242.7,
-      "investigate": 298.1,
-      "records_checks": 6.1,
-      "build_product": 292.9,
-      "run_tests": 154.2,
+      "think_reply": 4445.1,
+      "investigate": 337.8,
+      "records_checks": 26.7,
+      "build_product": 296.5,
+      "run_tests": 195.2,
       "edit_records": 6.0,
-      "mixed_shell": 53.3,
+      "mixed_shell": 60.2,
       "commit_hooks": 4.7,
       "wait_reply": 940.8,
-      "github": 8.9,
-      "deliver_chain": 5.9
+      "github": 12.1,
+      "deliver_chain": 5.9,
+      "away": 42909.1
     }
   },
   "tokens": {
     "main": {
-      "input": 238,
-      "output": 380687,
-      "cache_creation": 911808,
-      "cache_read": 17782042
+      "input": 280,
+      "output": 404808,
+      "cache_creation": 1198948,
+      "cache_read": 23373361
     },
     "subagent": {
       "input": 0,
@@ -47,40 +48,40 @@
     },
     "by_activity": {
       "investigate": {
-        "new": 751680,
-        "reread": 9693874
+        "new": 1032818,
+        "reread": 12061286
       },
       "records_checks": {
-        "new": 51811,
-        "reread": 247151
+        "new": 56059,
+        "reread": 547904
       },
       "build_product": {
-        "new": 255174,
-        "reread": 3629564
+        "new": 256496,
+        "reread": 3922188
       },
       "run_tests": {
-        "new": 198690,
-        "reread": 2058536
+        "new": 210708,
+        "reread": 3522198
       },
       "edit_records": {
         "new": 2374,
         "reread": 101887
       },
       "mixed_shell": {
-        "new": 10685,
-        "reread": 837437
+        "new": 11469,
+        "reread": 1142461
       },
       "commit_hooks": {
         "new": 1125,
         "reread": 104149
       },
       "think_reply": {
-        "new": 16031,
-        "reread": 621076
+        "new": 19949,
+        "reread": 898344
       },
       "github": {
-        "new": 3237,
-        "reread": 225652
+        "new": 11112,
+        "reread": 810228
       },
       "deliver_chain": {
         "new": 1926,
@@ -89,7 +90,7 @@
     }
   },
   "prompts": {
-    "handoff": 3,
+    "handoff": 4,
     "steer": 1,
     "instruction": 7,
     "approve": 2,
@@ -98,6 +99,12 @@
   "owner_decisions": [],
   "agent_decisions": [
     {
+      "id": "retro-skill-reads-facts-and-cites-them",
+      "importance": "medium",
+      "category": "process and records",
+      "commit": "38f2361ef"
+    },
+    {
       "id": "task-cost-is-one-derived-file-per-branch",
       "importance": "medium",
       "category": "process and records",
@@ -105,17 +112,17 @@
     }
   ],
   "friction": {
-    "tool_errors": 3,
+    "tool_errors": 4,
     "interrupts": 1,
-    "secret_scans": 8,
+    "secret_scans": 9,
     "slow": []
   },
   "hooks": {
     "SessionStart": 1.2,
-    "PreToolUse": 36.8,
-    "PostToolUse": 30.2,
-    "PostToolBatch": 22.3,
-    "PostToolUseFailure": 0.6,
-    "Stop": 0.8
+    "PreToolUse": 41.8,
+    "PostToolUse": 33.9,
+    "PostToolBatch": 26.3,
+    "PostToolUseFailure": 0.8,
+    "Stop": 1.1
   }
 }

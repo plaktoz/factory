@@ -417,6 +417,8 @@ def read_session(path, subagent_paths):
     state, cursor, first, last = "start", None, None, None
     open_tools, asked, seen_ids = {}, {}, set()
     commands = defaultdict(lambda: {"calls": 0, "s": 0.0, "pure_calls": 0, "pure_s": 0.0})
+    notify = defaultdict(lambda: {"n": 0, "s": 0.0})
+    worked_since_end, last_end_t = False, None
     reply_gaps = defaultdict(lambda: {"n": 0, "s": 0.0})
     question_wait_s, read_at, repeats = [], {}, {"n": 0, "s": 0.0}
     msg_text, end_text = defaultdict(str), ""
@@ -440,6 +442,12 @@ def read_session(path, subagent_paths):
         elif state == "end" and prompt:
             if kind == "harness":
                 bucket = "wait_machine"
+                if text.lstrip().startswith("<task-notification") and last_end_t is not None \
+                        and not worked_since_end:
+                    gap = t - last_end_t
+                    for key in ("idle", "over_30min") if gap > AWAY_S else ("idle",):
+                        notify[key]["n"] += 1
+                        notify[key]["s"] += gap
             elif t - cursor > AWAY_S:
                 bucket = AWAY
             else:
@@ -461,11 +469,13 @@ def read_session(path, subagent_paths):
             msg_text[m.get("id")] += _text(m)
             if m.get("stop_reason") == "end_turn":
                 end_text = msg_text[m.get("id")]
+                last_end_t, worked_since_end = t, False
             # A message is logged as several entries that share its id, so each tool use opens its own span
             # wherever it arrives. Re-logged content is skipped by tool id.
             for b in blocks:
                 if isinstance(b, dict) and b.get("type") == "tool_use" and b.get("id") not in seen_ids:
                     seen_ids.add(b["id"])
+                    worked_since_end = True
                     open_tools[b["id"]] = (t, b["name"], b.get("input") or {})
                     if b["name"] == "AskUserQuestion":
                         asked[b["id"]] = (b.get("input") or {}).get("questions", [])
@@ -521,6 +531,7 @@ def read_session(path, subagent_paths):
         "reply_gaps": {k: {"n": v["n"], "s": round(v["s"], 1)} for k, v in reply_gaps.items()},
         "question_wait_s": question_wait_s,
         "gh_repeat_reads": {"n": repeats["n"], "s": round(repeats["s"], 1)},
+        "notify_gaps": {k: {"n": v["n"], "s": round(v["s"], 1)} for k, v in notify.items()},
     }
 
 
@@ -795,11 +806,22 @@ def signals(f):
 
 
 def ranked_non_dev(records):
-    b = merge_records(records)["time"]["buckets"]
-    active = sum(v for k, v in b.items() if k != AWAY)
-    rows = sorted(((k, v) for k, v in b.items() if k != AWAY and group_of(k) != "agent development"),
-                  key=lambda kv: -kv[1])
-    return [(LABELS.get(k, k), _hm(v), 100 * v / active if active else 0.0) for k, v in rows]
+    """Non-development time, largest first. Hooks are left out (a second each). Question waits are capped at 30
+    minutes each, and the time over the cap is listed apart as questions left open."""
+    b = dict(merge_records(records)["time"]["buckets"])
+    waits = [x for r in records for x in r.get("question_wait_s", [])]
+    open_s = sum(max(x - LONG_WAIT_S, 0) for x in waits)
+    if "wait_question" in b:
+        b["wait_question"] = max(b["wait_question"] - open_s, 0)
+    active = sum(v for k, v in b.items() if k != AWAY) + open_s
+    skip = {AWAY, "commit_hooks", "push_hooks"}
+    rows = [(LABELS.get(k, k), v) for k, v in b.items() if k not in skip and group_of(k) != "agent development"]
+    rows = [("waiting on your answer (capped at 30 min each)" if l == LABELS["wait_question"] else l, v)
+            for l, v in rows]
+    if open_s:
+        rows.append(("questions left open over 30 min", open_s))
+    rows.sort(key=lambda kv: -kv[1])
+    return [(label, _hm(v), 100 * v / active if active else 0.0) for label, v in rows]
 
 
 def _hm(seconds):
