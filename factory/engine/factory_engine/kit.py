@@ -115,6 +115,31 @@ def _ignore_engine_tests(src: Path):
     return ignore
 
 
+def _kit_files(root: Path) -> dict[str, bytes]:
+    """The files `init` and `upgrade` would copy from `root`, by path relative to it: the same set (`_ignore_engine_tests`)."""
+    ignore = _ignore_engine_tests(root)
+    out: dict[str, bytes] = {}
+    for folder, dirs, files in os.walk(root):
+        skipped = ignore(folder, dirs + files)
+        dirs[:] = sorted(d for d in dirs if d not in skipped)
+        for name in sorted(files):
+            if name not in skipped:
+                path = Path(folder) / name
+                out[path.relative_to(root).as_posix()] = path.read_bytes()
+    return out
+
+
+def kit_differences(repo: Path) -> list[str] | None:
+    """The kit files whose content differs between this repo's `factory/` and the installed kit: changed, missing from
+    the repo, or only in the repo. None when the repo has no `factory/` folder. A repo may edit its kit on purpose, so
+    this is information, not an error (a run uses the kit snapshot it was created from, module 3)."""
+    mine = repo / "factory"
+    if not mine.is_dir():
+        return None
+    installed, committed = _kit_files(KIT_SOURCE), _kit_files(mine)
+    return sorted(name for name in installed.keys() | committed.keys() if installed.get(name) != committed.get(name))
+
+
 def init_repo(repo: Path) -> InitReport:
     """Create the layout. A second run changes nothing, and the repo's root .gitignore is never edited."""
     if not repo.is_dir():
@@ -182,6 +207,15 @@ def doctor(repo: Path | None, *, as_scheduler: bool = False) -> list[CheckResult
                            "key or gateway token found" if ok else "no ANTHROPIC_API_KEY, or no ANTHROPIC_AUTH_TOKEN with ANTHROPIC_BASE_URL",
                            "" if ok else "set ANTHROPIC_API_KEY, or ANTHROPIC_AUTH_TOKEN with ANTHROPIC_BASE_URL; a login session is not supported in phase 1"))
     if repo is not None:
+        differing = kit_differences(repo)
+        if differing is not None:
+            shown = ", ".join(differing[:5]) + (f" and {len(differing) - 5} more" if len(differing) > 5 else "")
+            out.append(CheckResult("kit-current", not differing,
+                                   "factory/ matches the installed kit" if not differing
+                                   else f"factory/ differs from the installed kit in {len(differing)} file(s): {shown}",
+                                   "" if not differing else
+                                   "a run uses the kit committed on its base branch; run factory upgrade <version>, commit factory/, "
+                                   "then start new runs (a repo that edited its kit on purpose can ignore this)"))
         cfg = repo / ".factory" / "config" / "factory.yaml"
         if not cfg.is_file():
             out.append(CheckResult("repo-config", False, f"{cfg} is missing", "run factory init"))
