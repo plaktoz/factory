@@ -27,7 +27,7 @@ Recommended option: **change the spec's labels to the real files, and teach the 
 
 ## Options considered
 
-1. **Relabel the spec and teach the reader (recommended).** For: the check then covers 10 more signatures, and the spec names the files a builder will find. Against: edits section 18's table and the labels in modules 3, 9 and 16; the reader gains two small rules.
+1. **Relabel the spec and teach the reader (recommended).** For: the check then covers 6 more signatures now (4 more once the launcher is importable), and the spec names the files a builder will find. Against: edits section 18's table and the labels in modules 3, 9 and 16; the reader gains two small rules.
 2. **Move the code into `config.py`.** For: the spec stays as written. Against: puts `load_config`, `validate`, `mask` and `worktree_path` in one file again, undoing the split that `loadcfg.py`, `validate.py`, `redact.py` and `paths.py` made; every importer changes; the `Config` import becomes circular.
 3. **Leave it, and lower the check's expectation.** For: no change. Against: the count of 12 stays, and the check says nothing about 10 functions that are built.
 
@@ -37,7 +37,7 @@ The labels are the only part that is wrong. The code is split by what each funct
 
 ## Consequences
 
-- If accepted: the pending count falls from 12 to 2, and the check starts comparing the 10 signatures to the code; any that differ will fail, so a few spec lines may need a fix in the same change. The pin on the signature count (`== 155` in `test_signatures_match_spec.py`) does not move, because the count is of spec signatures, not files.
+- If accepted: the six engine signatures (the five module 3 functions and `FakeWorkerAdapter.__init__`) move from pending to checked, so the count falls from 12 to 6. The four launcher signatures (`dispatch`, `tick`, `schedule_install`, `install_once`) stay pending until the contract test can import `factory_launcher`, which the engine's environment cannot do today (`ModuleNotFoundError`, checked 2026-11-24). Making it importable is a second step: add the launcher folder to the test's path, or install it in the engine's dev group, which is a new dependency and the owner's call. The check then compares the signatures to the code; any that differ will fail, so a few spec lines may need a fix in the same change. The pin on the signature count (`== 155` in `test_signatures_match_spec.py`) does not move, because the count is of spec signatures, not files.
 - If option 3: the 10 stay unchecked, and a change to one of them is never caught against the spec.
 - Supersedes: none.
 
