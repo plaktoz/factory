@@ -104,7 +104,7 @@ The `Result` in the header is the run's status when the file is written. The sum
 
 ```python
 # summary.py
-def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None) -> Path   # base: the repo's base branch, for the file list before a PR names its own
+def render_summary(run_dir: Path, usage: UsageReport, base: str | None = None, *, delivering: bool = False) -> Path   # base: the repo's base branch, for the file list before a PR names its own; delivering: the run is about to wait for review, so a running run reads "awaiting review"
 # delivery.py
 def write_adr(run_dir: Path, worktree: Path) -> Path | None        # docs/adr/<date>-<run id>.md
 def open_pr(run_dir: Path, cfg: Config, prs: PullRequests) -> PrRef
