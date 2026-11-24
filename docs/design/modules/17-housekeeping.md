@@ -12,9 +12,9 @@ Everything the factory creates has a defined end of life. `factory gc` shows the
 | Run folder `$FACTORY_HOME/runs/<repo key>/<id>/` | `archive_after_days` after the run ends | Zipped to `$FACTORY_HOME/archive/<repo key>/<yyyy-mm>/<id>.zip` (Python `zipfile`) |
 | Archive zip | `delete_archive_after_days` | Deleted by `factory gc --apply` |
 | `history.jsonl` line | Never; one small line per run | No action |
-| Processed markdown requests | At intake | Moved to `.factory/inbox/processed/`, archived with the run. The code does not move requests yet (see choices) |
+| Processed markdown requests | At intake | Moved to `.factory/inbox/processed/`, archived with the run. **Not built:** the code does not move requests yet (see choices) |
 | `worker.log` | Over `worker_log_max_mb`, for a run that has ended and is not yet due for archive | Oldest bytes cut so the newest `worker_log_max_mb` remain. The table said the archive keeps the log whole; the code keeps whatever copy existed at archive time (see choices) |
-| Runs whose repo is missing, and orphan worktrees | After `keep_failed_days`; orphans are only reported | Archived like any ended run; orphans listed by `factory gc` for you to remove. The CLI does not print orphans yet (see choices) |
+| Runs whose repo is missing, and orphan worktrees | After `keep_failed_days`; orphans are only reported | Archived like any ended run; orphans listed by `factory gc` for you to remove. **Not built:** the CLI does not print orphans yet (see choices) |
 
 **Safety rules**
 
@@ -122,7 +122,7 @@ class GcReport: removed: list[str]; archived: list[str]; deleted: list[str]; tri
   - `factory abort` ends a run as `aborted` even when its pull request is open. After `keep_failed_days`, `gc` reads the pull request. While it is open, the worktree and the branch stay and `gc` reports `pull request open`. Once it is closed or merged, `gc` removes the worktree, and deletes the branch unless it holds unpushed commits.
   - Nothing in the code moves a processed markdown request to `.factory/inbox/processed/`. Intake only skips a folder of that name. The table row describes the intended design.
   - `api.gc(repo, *, apply=False) -> GcPlan` (module 16) matches the code's return type. With `apply=True` it still returns the plan, not the `GcReport`.
-  - `factory gc --json` prints `{"ok", "code", "message", "hint", "data"}`. `code` is `ok`. `data` is `{"applied": bool, "items": [{"kind", "path", "run_id"}], "skipped": [{"path", "reason", "detail"}]}`, where `skipped` is the plan's list and `detail` is the plan's `Skipped.detail` (empty when there is none; for a pull request that cannot be read it holds the `gh` error). The `--apply` result (archived, removed, deleted, trimmed, failed) is not printed, because `api.gc` drops the `GcReport`. Orphans are not printed either, so the table's "orphans listed by `factory gc`" does not hold. This is a disagreement between the table and the code.
+  - `factory gc --json` prints `{"ok", "code", "message", "hint", "data"}`. `code` is `ok`. `data` is `{"applied": bool, "items": [{"kind", "path", "run_id"}], "skipped": [{"path", "reason", "detail"}]}`, where `skipped` is the plan's list and `detail` is the plan's `Skipped.detail` (empty when there is none; for a pull request that cannot be read it holds the `gh` error). The `--apply` result (archived, removed, deleted, trimmed, failed) is not printed, because `api.gc` drops the `GcReport`. Orphans are not printed either, so the table's "orphans listed by `factory gc`" is not built. The table row is the intended design.
 - **Run and test:** `pytest factory/engine/tests/housekeeping` with `FakeClock` and `FakePullRequests`; `factory gc --json`.
 - **Errors:** a worktree that is not clean and fails `cleanup_check` is skipped and reported (`GcReport.skipped` holds the path, the reason and the check output); a failed delete is reported and the rest continues; an archive is verified before the run folder is removed.
 
