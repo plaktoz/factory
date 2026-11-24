@@ -1,0 +1,140 @@
+{
+  "task": "retro-filters",
+  "branch": "plaktoz/retro-filters",
+  "base": "origin/main",
+  "sessions": [
+    "20b88939-b13f-42d3-86e7-58cc6151b1a8",
+    "88da363d-e47c-425f-bc01-c138cfd5dee2",
+    "8b607737-63ef-4890-980c-129af7c519ec",
+    "f1f13c34-8de8-46bd-92a2-83ac3d401e18"
+  ],
+  "commits": 2,
+  "lines": {
+    "product": 0,
+    "spec": 0,
+    "process": 48
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "8b607737-63ef-4890-980c-129af7c519ec"
+  ],
+  "time": {
+    "wall_s": 89495.3,
+    "buckets": {
+      "agent_think": 5239.8,
+      "think_reply": 5294.6,
+      "github": 97.4,
+      "investigate": 479.8,
+      "wait_machine": 146.1,
+      "run_tests": 234.5,
+      "records_checks": 55.6,
+      "commit_hooks": 150.7,
+      "delegate": 0.7,
+      "mixed_shell": 112.8,
+      "wait_reply": 1974.7,
+      "push_hooks": 5.4,
+      "away": 75394.6,
+      "build_product": 296.5,
+      "edit_records": 6.0,
+      "deliver_chain": 5.9
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 514,
+      "output": 458445,
+      "cache_creation": 1963972,
+      "cache_read": 32411339
+    },
+    "subagent": {
+      "input": 0,
+      "output": 0,
+      "cache_creation": 0,
+      "cache_read": 0
+    },
+    "by_activity": {
+      "github": {
+        "new": 216876,
+        "reread": 1615041
+      },
+      "investigate": {
+        "new": 1389060,
+        "reread": 16238619
+      },
+      "wait_machine": {
+        "new": 6710,
+        "reread": 319423
+      },
+      "run_tests": {
+        "new": 310523,
+        "reread": 4164176
+      },
+      "records_checks": {
+        "new": 72111,
+        "reread": 1499921
+      },
+      "commit_hooks": {
+        "new": 7933,
+        "reread": 738877
+      },
+      "delegate": {
+        "new": 825,
+        "reread": 65467
+      },
+      "mixed_shell": {
+        "new": 129195,
+        "reread": 1513544
+      },
+      "think_reply": {
+        "new": 28480,
+        "reread": 1885879
+      },
+      "push_hooks": {
+        "new": 422,
+        "reread": 83601
+      },
+      "build_product": {
+        "new": 256496,
+        "reread": 3922188
+      },
+      "edit_records": {
+        "new": 2374,
+        "reread": 101887
+      },
+      "deliver_chain": {
+        "new": 1926,
+        "reread": 262716
+      }
+    }
+  },
+  "prompts": {
+    "harness": 3,
+    "handoff": 6,
+    "deliver": 3,
+    "approve": 3,
+    "instruction": 10,
+    "steer": 1,
+    "interrupt": 1
+  },
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 6,
+    "interrupts": 1,
+    "secret_scans": 17,
+    "slow": [
+      [
+        121,
+        "rm -r .scratch/retro && ls .scratch 2>/dev/null | head -3\ngi"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 2.4,
+    "PreToolUse": 60.6,
+    "PostToolUse": 49.5,
+    "PostToolBatch": 42.9,
+    "PostToolUseFailure": 1.1,
+    "Stop": 3.3
+  }
+}
