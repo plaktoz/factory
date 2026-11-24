@@ -109,18 +109,18 @@ The live pilot test is in the [integration tests](shared/20-dependencies-and-pla
 
 ## Stack support: P2-5 to P2-7
 
-The factory is meant to build and change Java, React and Python applications. Each of the three entries below covers the whole process for its stack: **lint, build and run**. Each also lists one **principles file** under `factory/stacks/` as a deliverable. The engine loads that file as context while it develops code for that stack, so generated code follows good design for the stack.
+The factory is meant to build and change Java, React and Python applications. Each of the three entries below covers the whole process for its stack: **lint, build and run**. Each also lists one **principles file** as a deliverable, as a topic in that language's practice pack (`factory/skills/own/practices/<language>/`, module 10). The engine loads that file as context while it develops code for that stack, so generated code follows good design for the stack.
 
 Rules that apply to all three entries:
 
 - **No reference to `docs/`.** `factory/` is the kit that is copied into other repos, so nothing in it may reference this repo's `docs/` (rule in `AGENTS.md`). Each principles file must be self-contained and must not link or point into `docs/`. The links on this page are fine because this page is in `docs/`.
 - **Principles files are not drafted here.** This backlog lists them as deliverables only. Filenames are Unspecified; one file per stack, for example one each for Java, React and Python.
-- **Loading is Unspecified.** How the engine loads a principles file (by prompt pointer, by inclusion in the worker context, or by stage) is to be decided. Whether `factory/stacks/` is separate from the practice packs of [module 10](modules/10-skills.md) or replaces them is also to be decided (see the open question below).
+- **Loading** is the practice-pack mechanism of [module 10](modules/10-skills.md): the detector chooses the pack, the prompt lists its path, and the worker opens the topic file only when it is in scope (owner decision D1, 2026-11-24).
 - **Tool names come from 17A or are Unspecified.** The commands named below are the defaults already written in [module 17A](modules/17a-language-toolchains.md). Anything that module does not state is marked Unspecified.
 - **"Run" is new.** The 17A profile has `format`, `format_check`, `lint`, `test` and `build` steps and no `run` step. `run_step` in the 17A contract accepts only those five. A run step, and what "run" means for each stack (start a server, a dev server or a CLI), is to be decided.
 - **"Lint, build and run" is the engine's process.** That means the engine can detect the stack, run lint on changed files, build, and run the result in the task worktree, with the evidence recorded as gate evidence. The workflow and gate shapes for build and run are Unspecified.
 
-**Open question for the owner (applies to P2-5 to P2-7).** [Module 10](modules/10-skills.md) already specifies per-language practice packs under `factory/skills/own/practices/` (`java/`, `typescript/`, `python/`, and others), chosen by 17A's `detect`, loaded by pointer, with a size limit, in phase 1b. `factory/stacks/` could be that same mechanism under a new name, a layer on top of it, or a replacement. Decide before building so there is one place for per-language guidance. Adding `factory/stacks/` to the layout table in `AGENTS.md` is part of the work, and is not done here.
+**Decided (owner decision D1, 2026-11-24, option `use-existing-practice-packs`).** Per-language guidance lives in the practice packs that [module 10](modules/10-skills.md) already specifies: `factory/skills/own/practices/java/`, `typescript/` and `python/`, chosen by 17A's `detect` and loaded by pointer under the pack size limit. No `factory/stacks/` folder is created. The three principles files above are topics inside those packs. Module 10's size limit (`practices.max_lines`) applies to each pack's `SKILL.md`; a large stack guide is split into topic files, not a second folder. `AGENTS.md`'s layout table is not changed by this decision. Not built: the three principles files, which wait for their stack (P2-5 to P2-7).
 
 ### P2-5 Java application support
 
@@ -144,7 +144,7 @@ Rules that apply to all three entries:
 
 - [ ] The Java profile is verified end to end (lint, build, run) on a fixture repo for Maven and for Gradle.
 - [ ] A run step for Java, with its command per variant. Unspecified.
-- [ ] A Java principles file under `factory/stacks/` (name Unspecified): good design and principles for Java, loaded as engine context during development. Self-contained; no reference to `docs/`.
+- [ ] A Java principles file, as a topic in `factory/skills/own/practices/java/` (name Unspecified): good design and principles for Java, loaded by pointer during development. Self-contained; no reference to `docs/`.
 - [ ] `factory doctor` reports a missing Java tool or build plugin (such as Spotless) before a run, as 17A already requires.
 
 **To decide.** Framework coverage (module 10 names a `spring.md` topic file read only when Spring is detected). Java and JDK version policy. Both Unspecified.
@@ -172,7 +172,7 @@ Rules that apply to all three entries:
 - [ ] A way to tell a React application from other `package.json` projects. Unspecified; the phase 1 profile detects `package.json` only, so React needs its own detection rule or a variant of the existing profile.
 - [ ] A build step and a run step for React, with commands. Unspecified.
 - [ ] Lint, build and run verified end to end on a fixture React repo.
-- [ ] A React principles file under `factory/stacks/` (name Unspecified): good design and principles for React, loaded as engine context during development. Self-contained; no reference to `docs/`.
+- [ ] A React principles file, as a topic in `factory/skills/own/practices/typescript/` (name Unspecified): good design and principles for React, loaded by pointer during development. Self-contained; no reference to `docs/`.
 - [ ] `factory doctor` reports a missing tool before a run.
 
 **To decide.** Whether React builds on the TypeScript profile or has its own. Package manager, test runner beyond `npm test`, and browser-level checks are Unspecified.
@@ -199,7 +199,7 @@ Rules that apply to all three entries:
 - [ ] Detection beyond `pyproject.toml`, if needed (for example, repos with no `pyproject.toml`). Unspecified.
 - [ ] A build step and a run step for Python, with commands. Unspecified.
 - [ ] Lint, build and run verified end to end on a fixture Python repo.
-- [ ] A Python principles file under `factory/stacks/` (name Unspecified): good design and principles for Python, loaded as engine context during development. Self-contained; no reference to `docs/`.
+- [ ] A Python principles file, as a topic in `factory/skills/own/practices/python/` (name Unspecified): good design and principles for Python, loaded by pointer during development. Self-contained; no reference to `docs/`.
 - [ ] `factory doctor` reports a missing tool before a run.
 
 **To decide.** Environment and dependency tooling for the target app (virtual environment, lock file, installer). Python version policy. Both Unspecified. The factory engine's own pinned environment ([module 3](modules/03-kit-and-configuration.md)) is separate and must not be reused for target apps.
@@ -474,7 +474,7 @@ flowchart TD
 
 **To decide.**
 
-- Whether the review runs once, or on a schedule as the workflows grow. Unspecified.
+- Whether the review runs once, or on a schedule as the workflows grow. **Decided (owner decision D2, 2026-11-24, option `run-once-by-hand`):** the review runs once, when a person asks for it. Nothing starts it on a timer, and no schedule or budget cap is added. A later schedule needs its own decision.
 - Who owns the finding (the owner, or a review agent with the owner's decision on each proposal). Unspecified.
 - Whether a layer that blocks is allowed to be switched off per repo. Unspecified; D12 shows the cost of that kind of switch.
 
@@ -485,3 +485,5 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | Rule | Why | Not chosen | Id |
 | --- | --- | --- | --- |
 | The Codex worker adapter is out of phase 1 and tracked here. Phase 1 keeps the adapter contract, the `harness` and `routing` keys and the `harnesses` map. | The owner said phase 2 is not needed now and phase 1 comes first. | No option list was written; it was a statement. | `2026-11-14-codex-moves-to-phase-2` (owner statement 2026-11-14) |
+| Per-language guidance for Java, React and Python lives in the practice packs module 10 already specifies (`factory/skills/own/practices/`), not in a new `factory/stacks/` folder. | Module 10 already gives one folder per language, chosen by detection and loaded by pointer, so a second folder would hold guidance for one language in two places. | A new `factory/stacks/` folder, with a row in the AGENTS.md layout table and its own loader path. | 2026-11-24-phase-2-stacks-are-practice-packs D1 use-existing-practice-packs |
+| The architecture review (P2-11) runs once, when a person asks for it, and no schedule or budget cap is added. | A one-off study of the architecture does not need a recurring job; a person asking is enough, and a schedule would cost money without a person starting it. | A schedule with a budget cap, which adds recurring cost and a new job the factory starts itself. | 2026-11-24-phase-2-architecture-review-runs-once D2 run-once-by-hand |
