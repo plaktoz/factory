@@ -1,0 +1,253 @@
+{
+  "task": "tasks-backlog-2026-11-24",
+  "branch": "plaktoz/tasks-backlog-2026-11-24",
+  "base": "origin/main",
+  "sessions": [
+    "9f7a575f-f3d5-415f-b76f-bf9d8df4cb7a"
+  ],
+  "commits": 4,
+  "lines": {
+    "product": 0,
+    "spec": 17,
+    "process": 49
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "backlog-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 15797.5,
+    "buckets": {
+      "agent_think": 98.0,
+      "think_reply": 7239.0,
+      "decision_pages": 0.7,
+      "investigate": 444.5,
+      "github": 132.9,
+      "records_checks": 97.1,
+      "run_tests": 101.0,
+      "mixed_shell": 199.9,
+      "wait_machine": 1.7,
+      "build_product": 81.0,
+      "away": 6254.5,
+      "commit_hooks": 10.6,
+      "wait_reply": 1027.8,
+      "write_adr": 21.2,
+      "ask_owner": 11.8,
+      "wait_question": 75.8
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 298,
+      "output": 879971,
+      "cache_creation": 2149216,
+      "cache_read": 29910619
+    },
+    "subagent": {
+      "input": 0,
+      "output": 0,
+      "cache_creation": 0,
+      "cache_read": 0
+    },
+    "by_activity": {
+      "decision_pages": {
+        "new": 20615,
+        "reread": 23322
+      },
+      "investigate": {
+        "new": 1418180,
+        "reread": 16055272
+      },
+      "github": {
+        "new": 621184,
+        "reread": 3594641
+      },
+      "records_checks": {
+        "new": 154324,
+        "reread": 4318655
+      },
+      "run_tests": {
+        "new": 62243,
+        "reread": 996643
+      },
+      "mixed_shell": {
+        "new": 704594,
+        "reread": 1391479
+      },
+      "wait_machine": {
+        "new": 4925,
+        "reread": 271970
+      },
+      "build_product": {
+        "new": 12030,
+        "reread": 571429
+      },
+      "think_reply": {
+        "new": 8585,
+        "reread": 955054
+      },
+      "commit_hooks": {
+        "new": 14529,
+        "reread": 1006654
+      },
+      "write_adr": {
+        "new": 5041,
+        "reread": 356690
+      },
+      "ask_owner": {
+        "new": 3235,
+        "reread": 368810
+      }
+    }
+  },
+  "prompts": {
+    "harness": 1,
+    "handoff": 2,
+    "instruction": 2,
+    "approve": 1
+  },
+  "owner_decisions": [
+    {
+      "source": "page",
+      "id": "D1",
+      "header": "Should GitHub check a pull request before it merges?",
+      "answer": "Add a fast check and turn on auto-merge",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "other",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "page",
+      "id": "D2",
+      "header": "Which issue should the first live pilot run work on?",
+      "answer": "Write one small chore issue and approve it",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "other",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "page",
+      "id": "D3",
+      "header": "Should a repo be allowed to choose Codex today?",
+      "answer": "Accept Codex now and update the decision",
+      "day": "2026-11-24",
+      "outcome": "overridden",
+      "theme": "other",
+      "category": "code",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "page",
+      "id": "D4",
+      "header": "What should phase 1b build first?",
+      "answer": "Feature workflow first",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "other",
+      "category": "scope and phase",
+      "importance": "medium",
+      "trigger": "changes-scope"
+    },
+    {
+      "source": "page",
+      "id": "D5",
+      "header": "Is \"a design file reaches ready\" still the goal?",
+      "answer": "Change the target to: scored, none rework, gaps named",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "other",
+      "category": "spec and design",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Run lock",
+      "question": "Which lock design for running tasks in parallel? Today one lock file per run (runs/<repo>/<run>/lock) is held for the whole run. Tasks of one run already run together (up to concurrency 4) and separate runs already have separate locks. What is actually serial is `factory run --all`, which drives runs one after another, and the max_workers cap, which no code reads.",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "D: keep the lock, fix the two real limits (Recommended)",
+      "category": "spec and design",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Codex",
+      "question": "Do you confirm that a repo may choose Codex, so the old row 'Codex is out of phase 1' in phase-2.md is replaced? The ADR a-repo-may-choose-codex is written; the schema and api.default_workers still refuse codex, and four proofs are still open: same gate evidence on both harnesses, a live Codex smoke run, MCP isolation for Codex, and the router skill from Codex.",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Confirm now, build later as a task (Recommended)",
+      "category": "process and records",
+      "importance": "high",
+      "trigger": "costly-to-reverse"
+    },
+    {
+      "source": "question",
+      "header": "Push",
+      "question": "What should I do with the branch plaktoz/tasks-backlog-2026-11-24 (3 commits, docs only, local)? Note: the standing approval says to merge once checks pass, but GitHub runs no checks on this repo today (decision D1 would add them).",
+      "day": "2026-11-24",
+      "theme": "push, PR and merge approval",
+      "outcome": "followed",
+      "answer": "Push and open a pull request (Recommended)",
+      "category": "process and records",
+      "importance": "high",
+      "trigger": "reopens-decision"
+    }
+  ],
+  "agent_decisions": [
+    {
+      "id": "a-repo-may-choose-codex",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "84f72babd"
+    },
+    {
+      "id": "the-run-lock-is-held-per-task-worktree",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "84f72babd"
+    },
+    {
+      "id": "resume-has-no-force",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "c57c80bcb"
+    },
+    {
+      "id": "issue-sync-limit-and-warning",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "c57c80bcb"
+    },
+    {
+      "id": "allow-codex",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "301bea930"
+    }
+  ],
+  "friction": {
+    "tool_errors": 2,
+    "interrupts": 0,
+    "secret_scans": 4,
+    "slow": []
+  },
+  "hooks": {
+    "SessionStart": 0.1,
+    "PreToolUse": 25.2,
+    "PostToolUse": 17.9,
+    "PostToolBatch": 17.0,
+    "Stop": 0.3,
+    "PostToolUseFailure": 0.1
+  }
+}
