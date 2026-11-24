@@ -617,21 +617,26 @@ def _archive(home: Path, item: GcItem, report: GcReport) -> None:
 
 
 def _run_moved_since_plan(item: GcItem) -> str | None:
-    """Why a worktree must stay, when its run was resumed after the plan was made: the run is no longer ended, or an
-    engine holds its lock. None when the run is still ended and unlocked, or has no folder left on disk."""
+    """Why a worktree or log must stay, when its run was resumed after the plan was made: an engine holds its lock, or
+    the run is no longer ended. None when the run is still ended and unlocked, or has no folder left on disk. The
+    re-read does not take the lock, so an engine that starts in the gap before the removal can still win."""
     if item.run_dir is None or not (item.run_dir / "run.json").is_file():
         return None
     if state.lock_status(item.run_dir) == "live":
-        return "an engine holds the run lock; not removed"
+        return "an engine holds the run lock"
     if _read_json(item.run_dir / "run.json")["status"] not in ENDED:
-        return "the run is no longer ended; not removed"
+        return "the run is no longer ended"
     return None
 
 
 def _apply_worktree(item: GcItem, report: GcReport) -> None:
-    moved = _run_moved_since_plan(item)
+    try:
+        moved = _run_moved_since_plan(item)
+    except (OSError, ValueError, KeyError) as e:
+        report.failed.append(Failed(item.path, f"could not re-read the run before removing its worktree: {e}"))
+        return
     if moved:
-        report.skipped.append(Skipped(item.path, item.run_id, moved))
+        report.skipped.append(Skipped(item.path, item.run_id, f"{moved}; the worktree is kept"))
         return
     out = _remove_worktree_safely(item.cfg, item.path, item.repo, dirty=item.dirty, check_unpushed=item.check_unpushed)
     if out.status == "removed":
@@ -688,9 +693,13 @@ def apply(plan: GcPlan) -> GcReport:
             except OSError as e:
                 report.failed.append(Failed(item.path, f"could not delete the kit: {e}"))
         else:
-            moved = _run_moved_since_plan(item)
+            try:
+                moved = _run_moved_since_plan(item)
+            except (OSError, ValueError, KeyError) as e:
+                report.failed.append(Failed(item.path, f"could not re-read the run before cutting its log: {e}"))
+                continue
             if moved:
-                report.skipped.append(Skipped(item.path, item.run_id, moved.replace("not removed", "log not trimmed")))
+                report.skipped.append(Skipped(item.path, item.run_id, f"{moved}; the log is not cut"))
                 continue
             try:
                 _truncate(item.path, item.keep_bytes)
