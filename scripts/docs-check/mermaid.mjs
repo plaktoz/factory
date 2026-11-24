@@ -3,6 +3,8 @@ const { JSDOM } = await import(NM + "/jsdom/lib/api.js");
 import fs from "node:fs";
 const dom = new JSDOM("<!doctype html><body></body>");
 globalThis.window = dom.window; globalThis.document = dom.window.document;
+// Mermaid 11 reads these as bare globals, so a page with only window and document fails with "Element is not defined".
+for (const k of ["Element", "HTMLElement", "SVGElement", "Node", "DOMParser"]) globalThis[k] = dom.window[k];
 const mermaid = (await import(NM + "/mermaid/dist/mermaid.core.mjs")).default;
 mermaid.initialize({ startOnLoad: false });
 let bad = 0, n = 0;

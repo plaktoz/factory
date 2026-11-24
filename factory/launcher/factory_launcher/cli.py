@@ -141,7 +141,7 @@ def _schedule(args, home: Path) -> int:
     if args.action == "at":
         if not (args.at and args.name):
             raise FactoryError("config.invalid", "schedule at needs --at and --name", hint="factory schedule at --at 2026-11-25T19:43 --name pilot -- <command>")
-        command = args.job[1:] if args.job[:1] == ["--"] else args.job
+        command = args.job
         path = schedule_mod.install_once(args.name, schedule_mod.parse_at(args.at), command, home=home, cwd=Path.cwd())
         _emit(True, "ok", f"installed {path}\nload it: {_load_hint(path)}", "", {"path": str(path), "load": _load_hint(path)}, args.json)
     elif args.name:
@@ -320,7 +320,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     if argv and argv[0] not in MACHINE and argv[0] not in ("-h", "--help"):
         return _engine_passthrough(argv)
+    # argparse rejects `schedule at --at T --name N -- cmd`: it won't hand a positional list after options and `--`.
+    job: list[str] | None = None
+    if argv[:1] == ["schedule"] and "--" in argv:
+        cut = argv.index("--")
+        argv, job = argv[:cut], argv[cut + 1 :]
     args = parser.parse_args(argv)
+    if job is not None:
+        args.job = job
     if args.command is None:
         parser.print_help()
         return 2

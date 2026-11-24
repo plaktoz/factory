@@ -546,3 +546,37 @@ def test_a_gap_where_the_agent_kept_working_is_not_idle(tmp_path):
     ])
     w = s["notify_gaps"]
     assert w["idle"]["n"] == 2
+
+
+def test_a_closing_line_that_asks_for_a_reply_is_asked_even_when_it_does_not_end_in_a_question_mark():
+    k = tr.gap_kind
+    assert k("It changes the contract for every command.\n\nReply with 1, 2 or 3, or your own option, and I'll build it.") == "asked"
+    assert k("Say (a), (b) or (c), and I'll start W0.1.") == "asked"
+    assert k("Open the page and answer the cards. Paste the prompt it builds back here.") == "asked"
+    assert k("Paste the page's prompt back and I will apply your choices.") == "asked"
+    assert k("Tell me which one to take first.") == "asked"
+    assert k("Once you answer, I'll write the ADR.") == "asked"
+
+
+def test_an_offer_the_owner_may_ignore_is_still_a_status():
+    k = tr.gap_kind
+    assert k("The worktree is clean. It can be deleted if you want.") == "status"
+    assert k("I'll start with item 2. Tell me if you'd rather take 33 first.") == "status"
+    assert k("Nothing is committed. I haven't run the suite. Tell me if you want a commit.") == "status"
+
+
+def test_a_finish_that_also_asks_is_asked_not_finished():
+    assert tr.gap_kind("All checks passed. Paste the prompt back when you've answered.") == "asked"
+    assert tr.gap_kind("All checks passed and the work is complete.") == "finished"
+
+
+def test_a_theme_needs_the_thing_not_a_word_it_shares_with_other_things():
+    t = tr.question_theme
+    assert t("Token usage: two bugs in how a usage line is read") == "other"
+    assert t("Item 8: the gateway token was printed into a transcript") == "token and secret rotation"
+    assert t("The merge rule fails review_findings_at_or_above for a run") == "other"
+    assert t("merge.json has no JSON Schema") == "other"
+    assert t("Should I merge the PR now?") == "push, PR and merge approval"
+    assert t("Push once this page is done") == "push, PR and merge approval"
+    assert t("Decision 4: two exit codes differ in module 8") == "other"
+    assert t("The wording of the AGENTS.md pointer") == "spec wording"
