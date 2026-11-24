@@ -177,6 +177,16 @@ def _latest(run_dir: Path, task_id: str, attempt: int) -> dict | None:
     return dict(doc) if doc else None
 
 
+def has_open_attempt(run_dir: Path) -> bool:
+    """True when some attempt of the run is still `started`, so a crashed engine left it open. Reads only."""
+    tasks = run_dir / "tasks"
+    for tdir in sorted(tasks.iterdir()) if tasks.is_dir() else []:
+        latest, _ = _read(run_dir, tdir.name)
+        if any(latest[a]["exit"] == "started" for a in latest):
+            return True
+    return False
+
+
 def close_open_attempts(run_dir: Path) -> list[tuple[str, int]]:
     """Mark every attempt still `started` as `interrupted`, with no token count (a crash cut it off)."""
     closed: list[tuple[str, int]] = []
