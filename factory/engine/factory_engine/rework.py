@@ -7,6 +7,8 @@ run.json (module 6A), so the loop counters and the retrying state survive a rest
 
 from __future__ import annotations
 
+import json
+
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -190,6 +192,13 @@ def _write_records(run_dir: Path, doc: dict, task_ids: list[str], *, max_loops: 
     for task_id in task_ids:
         folder = task_dir(run_dir, task_id) / "feedback"
         folder.mkdir(exist_ok=True)
+        # A retry after a partial write skips a task that already holds this route's record, so no record is written
+        # twice (owner decision, 2026-11-24: a failed write is retried on the next tick).
+        same_route = [p for p in sorted(folder.glob(f"*-{from_stage}-to-{to_stage}.json"))
+                      if json.loads(p.read_text()).get("loop") == doc["loop"]]
+        if same_route:
+            first = first or same_route[0]
+            continue
         n = len(list(folder.glob("*.json"))) + 1
         path = folder / f"{n:03d}-{from_stage}-to-{to_stage}.json"
         write_json_atomic(path, doc)
