@@ -962,3 +962,114 @@ def test_an_archived_worker_log_is_whole_when_no_earlier_gc_cut_it_and_cut_when_
     assert archived_log("never-cut", 8, cut_first=False) == big, "no earlier gc cut it: the archive keeps it whole"
     cut = archived_log("cut-first", 2, cut_first=True)
     assert cut == big[-mb:] and cut.endswith(b"NEWEST"), "an earlier gc cut it: the archive keeps the cut copy"
+
+
+def test_a_run_that_resumes_between_plan_and_apply_keeps_its_worktree(home, repo, cfg, clock):
+    """Module 17: an active run is never touched. The plan sees a failed run and lists its worktree; a run that is
+    resumed before apply is running again, with a live engine, and its worktree must stay."""
+    wt = worktree_for(cfg, repo, "resumed")
+    run_dir = make_run(home, repo, "resumed", status="failed", worktree=wt, ended=days_ago(clock, 20))
+    planned = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "worktree" and i.path == wt for i in planned.items), "the plan lists the worktree"
+
+    # the run is resumed: its status goes back to running and an engine takes the lock
+    lock = state.acquire_lock(run_dir, "engine")
+    run = state.read_run(run_dir)
+    run.status = "running"
+    state.write_run(run_dir, run, lock=lock)
+
+    report = apply(planned)
+
+    assert wt.exists(), "apply re-reads the run before it removes a worktree"
+    assert [s.reason for s in report.skipped if s.path == wt] == ["an engine holds the run lock; the worktree is kept"]
+    state.release(lock)
+
+
+def test_a_run_that_resumes_between_plan_and_apply_keeps_its_worker_log_whole(home, repo, cfg, clock):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt = worktree_for(cfg, repo, "resumed-log")
+    run_dir = make_run(home, repo, "resumed-log", status="done", worktree=wt, tasks=[("backend", "done", None)],
+                       ended=days_ago(clock, 2))
+    log = run_dir / "tasks" / "backend" / "worker.log"
+    log.write_bytes(b"a" * (1024 * 1024) + b"b" * (1024 * 1024) + b"NEWEST")
+    planned = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "worker_log" for i in planned.items), "the plan lists the log"
+
+    lock = state.acquire_lock(run_dir, "engine")
+    run = state.read_run(run_dir)
+    run.status = "running"
+    state.write_run(run_dir, run, lock=lock)
+
+    report = apply(planned)
+
+    assert log.stat().st_size == 2 * 1024 * 1024 + len(b"NEWEST"), "a running task is still writing this log"
+    assert str(log) not in report.trimmed
+    assert [s.reason for s in report.skipped if s.path == log] == ["an engine holds the run lock; the log is not cut"]
+    state.release(lock)
+
+
+def test_a_run_reopened_without_a_lock_keeps_its_worktree(home, repo, cfg, clock):
+    """The re-read also covers a run whose status changed without a lock held: here it is running and nobody holds the lock."""
+    wt = worktree_for(cfg, repo, "reopened")
+    run_dir = make_run(home, repo, "reopened", status="failed", worktree=wt, ended=days_ago(clock, 20))
+    planned = plan(home, cfg, now=clock.now())
+    run = state.read_run(run_dir)
+    run.status = "running"
+    lock = state.acquire_lock(run_dir, "test")
+    state.write_run(run_dir, run, lock=lock)
+    state.release(lock)
+
+    report = apply(planned)
+
+    assert wt.exists()
+    assert [s.reason for s in report.skipped if s.path == wt] == ["the run is no longer ended; the worktree is kept"]
+
+
+def test_an_unreadable_run_json_at_apply_is_reported_and_the_pass_goes_on(home, repo, cfg, clock):
+    wt = worktree_for(cfg, repo, "corrupt")
+    run_dir = make_run(home, repo, "corrupt", status="failed", worktree=wt, ended=days_ago(clock, 20))
+    planned = plan(home, cfg, now=clock.now())
+    (run_dir / "run.json").write_text("{not json")
+
+    report = apply(planned)
+
+    assert wt.exists()
+    assert any(f.path == wt and "could not re-read" in f.message for f in report.failed)
+
+
+def test_a_run_reopened_without_a_lock_keeps_its_worker_log_whole(home, repo, cfg, clock):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt = worktree_for(cfg, repo, "reopened-log")
+    run_dir = make_run(home, repo, "reopened-log", status="done", worktree=wt, tasks=[("backend", "done", None)],
+                       ended=days_ago(clock, 2))
+    log = run_dir / "tasks" / "backend" / "worker.log"
+    log.write_bytes(b"a" * (2 * 1024 * 1024))
+    planned = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "worker_log" for i in planned.items)
+    run = state.read_run(run_dir)
+    run.status = "running"
+    lock = state.acquire_lock(run_dir, "test")
+    state.write_run(run_dir, run, lock=lock)
+    state.release(lock)
+
+    report = apply(planned)
+
+    assert log.stat().st_size == 2 * 1024 * 1024
+    assert [s.reason for s in report.skipped if s.path == log] == ["the run is no longer ended; the log is not cut"]
+
+
+def test_an_unreadable_run_json_at_apply_keeps_the_worker_log_whole(home, repo, cfg, clock):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt = worktree_for(cfg, repo, "corrupt-log")
+    run_dir = make_run(home, repo, "corrupt-log", status="done", worktree=wt, tasks=[("backend", "done", None)],
+                       ended=days_ago(clock, 2))
+    log = run_dir / "tasks" / "backend" / "worker.log"
+    log.write_bytes(b"a" * (2 * 1024 * 1024))
+    planned = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "worker_log" for i in planned.items)
+    (run_dir / "run.json").write_text("{not json")
+
+    report = apply(planned)
+
+    assert log.stat().st_size == 2 * 1024 * 1024
+    assert any(f.path == log and "could not re-read" in f.message for f in report.failed)

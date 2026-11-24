@@ -1,0 +1,36 @@
+{
+  "task": "HEAD",
+  "branch": "HEAD",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 4,
+  "lines": {
+    "product": 149,
+    "spec": 10,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "50fc344d-bdce-40ef-9e29-76527241940f",
+    "gc-recheck-review-fixes-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
