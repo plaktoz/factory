@@ -314,7 +314,11 @@ def _events(args, f) -> _Result:
 
 def _usage(args, f) -> _Result:
     repo = _repo_of_run(args, args.run) if args.run else _repo_here(args)
-    since = date.fromisoformat(args.since) if args.since else None
+    try:
+        since = date.fromisoformat(args.since) if args.since else None
+    except ValueError:
+        raise FactoryError("config.invalid", f"--since {args.since!r} is not a date",
+                           hint="write the date as YYYY-MM-DD, such as 2026-11-01")
     report = api.usage(repo, args.run, since=since)
     data = {"by_model": report.by_model, "by_repo": report.by_repo, "by_day": report.by_day, "total": report.total}
     if args.json:
