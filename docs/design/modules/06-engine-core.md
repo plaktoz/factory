@@ -215,7 +215,7 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 **Lock and recovery**
 
 - One engine owns a run at a time. It takes a non-blocking OS file lock on the run's `lock` file (`flock` on macOS and Linux; on Windows `msvcrt.locking` on one byte past the heartbeat, so the file stays readable) and holds it until the process exits. `lock` also records its owner, its pid and its heartbeat, refreshed every 10 seconds, for display.
-- Another engine, or a `resume`, that cannot take the lock refuses the run. A live holder always refuses a resume: the `force` parameter that `Engine.resume` has in the code never worked, because `acquire_lock` still refuses (decision `resume-has-no-force`; the code change is not made yet). The owner asked on 2026-11-24 for a lock for each task worktree and chose to keep the run lock and fix the two real serial points instead (the row `2026-11-24-the-run-lock-is-held-per-task-worktree` below); nothing in it is built. A crash releases the lock at once; a sleeping or paused process keeps it, so no second engine can start on a run whose first engine is only asleep. `factory resume` continues a run whose lock is free.
+- Another engine, or a `resume`, that cannot take the lock refuses the run. A live holder always refuses a resume, and `Engine.resume` has no `force` parameter (decision `resume-has-no-force`). The run lock stays one OS lock for each run folder (the row `2026-11-24-the-run-lock-is-held-per-task-worktree` below): `Engine.run` drives the runs it is given at the same time, one thread for each, and each run takes its own lock. A lock for each task worktree is not built. A crash releases the lock at once; a sleeping or paused process keeps it, so no second engine can start on a run whose first engine is only asleep. `factory resume` continues a run whose lock is free.
 - Each worker runs in its own process group, recorded in `task.json`. Before a new attempt starts, any recorded group that is still alive is killed, so a worker left over from a crashed engine cannot keep editing the worktree.
 - Write-ahead: an attempt's usage record is written before the worker starts. On takeover, open attempts are closed as `interrupted` and their tasks resume from the last checkpoint as new attempts. Before a new attempt after a crash, timeout or kill, the engine resets the task worktree to the last checkpoint commit (`git reset --hard`, then `git clean -fd` that leaves the git-excluded shims alone), so no half-written edit survives. Edits since the checkpoint are lost, at most `checkpoint_every_minutes` of work; the engine first saves the discarded diff as `tasks/<task>/discarded-<n>.patch` for troubleshooting.
 
@@ -360,7 +360,9 @@ class Engine:
                  clock: Clock = SystemClock(), owner: str | None = None): ...
         # `command` runs every `cmd`, `script` and `python` task; `None` means a CommandAdapter (module 9). `workers` runs the skill tasks.
     def run(self, run_ids: list[str] | None = None, *, poll_seconds: int = 5) -> EngineResult:
-        """Drive runs until each is done, failed, aborted, blocked or awaiting a human. Holds each run's lock."""
+        """Drive the runs at the same time (one thread each) until each is done, failed, aborted, blocked or awaiting a
+        human. Holds each run's lock. A run that raises does not stop the others; the first error, in the order the runs
+        were named, is raised once every run has ended."""
     def tick(self, run_id: str) -> TickResult:
         """One pass: start ready tasks, collect results, checkpoint, deliver notes, join, gate,
         route or advance, raise attention, deliver. Deterministic given the same inputs."""
@@ -402,6 +404,11 @@ Acceptance criteria:
 - [x] Kill the engine mid-task, then `resume`: only unfinished tasks run, the cut-off attempt is `interrupted`, and the task worktree is back at its last checkpoint with the discarded diff saved. (test: factory/engine/tests/engine/test_engine.py::test_kill_the_engine_mid_task_then_resume)
 - [x] After each join, conflict signals are written to `run.json`. (test: factory/engine/tests/engine/test_engine.py::test_after_each_join_conflict_signals_are_written_to_run_json)
 - [x] One command that drives several runs exits 4 if any is blocked, else 3 if any waits on a human, else 1 if any failed, else 0. (test: factory/engine/tests/engine/test_engine.py::test_the_exit_code_for_several_runs_is_blocked_then_waiting_then_failed_then_success)
+- [x] `Engine.run` drives its runs at the same time: two runs each hold a worker in `wait` together, and a run that raises does not stop the others. (test: factory/engine/tests/engine/test_run_concurrency.py::test_two_runs_make_progress_at_the_same_time, ::test_a_run_that_raises_is_reraised_after_the_others_end)
+- [x] The exit code rule holds when the runs are driven together, and `runs` keeps the order the runs were named. (test: factory/engine/tests/engine/test_run_concurrency.py::test_the_exit_code_rule_holds_when_runs_are_driven_together)
+- [x] A seventh worker waits at `max_workers: 6`, and the six are shared by all the runs on the machine. (test: factory/engine/tests/engine/test_run_concurrency.py::test_a_seventh_worker_waits_until_one_of_six_finishes, ::test_max_workers_is_one_cap_for_all_the_runs_together; slots across processes: factory/engine/tests/engine/test_machine_slots.py)
+- [x] `Engine.resume` has no `force` parameter. (test: factory/engine/tests/engine/test_run_concurrency.py::test_resume_has_no_force_parameter)
+- [x] `concurrency` caps one repo across all its runs: two runs of one repo run two workers at once, not two each. (test: factory/engine/tests/engine/test_run_concurrency.py::test_concurrency_caps_one_repo_across_its_runs_together)
 
 ## Decisions
 

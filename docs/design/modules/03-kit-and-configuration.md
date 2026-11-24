@@ -44,7 +44,8 @@ factory/                    the kit: replaced whole on update, never edited
   history.jsonl             one line per finished run
   tick.json                 last tick time and result
   sync/<repo key>.json      last_sync cursor for each repo
-  slots/                    one file per running worker, for the machine-wide worker cap
+  slots/                    `0` to `max_workers - 1`: one lock file for each slot, held by the engine whose worker uses it
+  slots/repo/<repo key>/    `0` to `concurrency - 1`: the same for one repo's cap (the repo key has `/` written as `__`)
   venvs/<lock hash>/        Python environment for each distinct requirements.lock (phase 1b; not built in 1a)
   kits/<kit hash>/          snapshot of factory/ and .factory/config/ taken when a run is created
   plugin-hashes.json        reviewed plugin hashes per repo key, never stored in a repo
@@ -62,7 +63,7 @@ factory/                    the kit: replaced whole on update, never edited
 base_branch: main
 tracker: github                  # file | github
 harness: claude                  # the schema accepts only claude today; Codex is allowed by owner decision 2026-11-24 (not built)
-concurrency: 4                   # parallel workers for this repo; the machine-wide cap is max_workers in the machine file
+concurrency: 4                   # parallel workers for this repo, across all its runs; the machine-wide cap is max_workers in the machine file
 repo_key: null                   # override, such as github.com/acme/report
 notify: {github_mention: author, desktop: true, webhook: null, remind_after_hours: 24}
 retention: {archive_after_days: 7, delete_archive_after_days: 90, keep_failed_days: 14,
@@ -76,7 +77,7 @@ repos: [/work/report, /work/payments-api]
 worktree_root: /home/me/dev/worktree     # default: ~/.factory/worktrees
 worktree_path: "{root}/{repo}/{run_id}"
 dashboard_url: http://127.0.0.1:8765
-max_workers: 6                   # machine-wide cap on running workers, shared by every engine through slots/
+max_workers: 6                   # machine-wide cap on running workers, shared by every engine process through slots/
 ```
 
 **Repo rules.** Some repos have their own rules about what an agent may do. The engine meets three of them without a switch, except `cleanup_check`:
@@ -97,6 +98,8 @@ flowchart LR
 Machine settings (worktree root, tool paths) come from the per-machine file. Notification settings (`notify`, including desktop) come from `factory.yaml`. Repo settings come from `factory.yaml`. The one environment override built is `FACTORY_WORKTREE_ROOT`, which replaces `worktree_root`. No CLI flag changes config yet, and no other key has an environment override (owner decision D6, 2026-11-22: the broad precedence of flag, then environment variable, then file is not built, and a later request adds an override where one is needed).
 
 **Defaults.** These are the values a key takes when its file does not set it. Machine: `max_workers: 6`. Repo: `concurrency: 4`, `infra_wait_hours: 6`, `serialize_overlapping_runs: false`. Any other key has no default and is off until its module reads it.
+
+**`max_workers` and `concurrency`.** Both caps are slots, and a slot is an OS lock on a file (`factory_engine/slots.py`). Before it starts a worker the engine takes slots from the repo's pool (`slots/repo/<repo key>/`, `concurrency` of them) and from the machine pool (`slots/`, `max_workers` of them), all of them or none, and holds them until that worker has ended. So two runs of one repo share `concurrency`, and every run on the machine shares `max_workers`, whichever engine process drives them: the tick starts one engine process for each run, so a count in one process could not cap them. A task that reserves helper slots (module 6) takes all of them at once, and never more than a pool holds. A task with no free slot waits and tries again on the next poll. A crashed engine frees its slots when the kernel closes its files, so no count goes stale and no engine needs to know of another. Changing a limit takes effect on the next slot taken; workers already running keep theirs.
 
 **Missing files.** A missing `~/.factory/config.yaml` is the defaults above, not an error. A missing `.factory/config/factory.yaml` is a repo with no config: `load_config` still loads, with only the repo defaults, and `doctor` reports `repo-config` failed with the fix `factory init`.
 
