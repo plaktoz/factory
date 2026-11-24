@@ -86,3 +86,13 @@ stages:
 ## Source
 
 Facts checked by running or reading the code on 2026-11-24, on this branch: `factory/engine/factory_engine/workflow.py` (`load_workflow`, `KNOWN_CHECKS`); `factory/engine/factory_engine/triage.py` (`TYPE_WORKFLOW`, `KEYWORDS`, `triage_rules`, `triage_candidates`); `factory/engine/factory_engine/engine.py` (`_run_stage`, `_human_stop`, `_join_and_gate`, `_no_test_results`, `_create_run_worktree`, lines 459 and 967); `factory/engine/factory_engine/decisions.py` (`_approval_packet`, `_template`, `request`); `factory/engine/factory_engine/kit.py` (`auto.workflows: []`); `factory/engine/factory_engine/adapters/worker/command.py` (a command task's `out` file); `factory/stages.map.yaml`; `factory/skills/own/*/SKILL.md`; `docs/design/modules/05-workflows-and-plugins.md` (feature row and proposal); `docs/design/modules/11-human-stops.md` (architecture stage, line 17); `docs/design/modules/13-delivery.md` (auto workflows); `plaktoz/test-adapters` issues #32 to #38 and `scripts/check`, read only with `gh`. The draft was loaded from a temp folder outside the repo, not committed.
+
+## Open questions for the owner, besides the stage list
+
+These do not block approving the stage list, but each changes what a feature run does. They were found while drafting it (2026-11-24) and checked against the code and the pilot repo.
+
+1. **Ship as soon as the list is approved?** Keyword triage already sends a request with "add" to `feature`, and the kit has no such workflow, so such a request fails to start today. Shipping the file fixes that, but it is also the first time a feature run can start. Recommended: ship it with the approval.
+2. **The pilot's `scripts/check` writes no JUnit file.** `verify` blocks on the `test-report` gate until it does. That change belongs in `plaktoz/test-adapters`, which the owner owns, and is not made here.
+3. **The `propose` approval shows the generic packet, not the plan.** `bug-fix` has the same gap. Is a plan-specific packet in scope for phase 1b?
+4. **Keyword triage on the pilot issues.** #32, #34 and #35 go to `bug-fix`; #33, #36 and #37 match no keyword; only #38 goes to `feature`. Should the keyword list change before the feature workflow ships?
+5. **A gate on an approval stage never runs** (the engine evaluates none on `propose`), so this draft has no gate there. Is that acceptable, or should the engine change first?
