@@ -170,3 +170,24 @@ def test_a_copy_button_goes_back_to_its_own_label_after_it_copies(home, app, tmp
     assert result["errors"] == []
     assert result["snaps"]["during"] == ["Copied"]
     assert result["snaps"]["after"] == ["Copy path"]
+
+
+# --- a state request that fails or hangs (owner decision, 2026-11-24): keep the old rows, warn, give up after 10 s ---
+
+BANNER = ("function(){var b=document.getElementById('error');"
+          "return {shown:!b.classList.contains('hidden'),text:b.textContent};}")
+
+
+def test_a_state_request_that_hangs_gives_up_after_ten_seconds_and_keeps_the_rows(home, app, tmp_path):
+    """The load's request answers, so rows are drawn. From 100 ms every request hangs. The refresh at 5 s is given up
+    10 s after it started, at 15 s: the warning is off before that and on after it, and the rows stay throughout."""
+    from page_harness import hang
+    make_run(home, make_repo(tmp_path, "payments"), key="github.com/acme/payments", run_id="fix-a-aaaaa")
+    steps = [(100, hang(STATE)), (14000, snap("before", BANNER)), (16000, snap("after", BANNER)),
+             (16000, snap("rows", ROWS))]
+    result = run_page(tmp_path, {STATE: _body(app)}, steps, token=TOKEN, budget_ms=18000)
+    assert result["errors"] == []
+    assert result["snaps"]["before"]["shown"] is False, "no warning while the refresh is still within its 10 s"
+    assert result["snaps"]["after"]["shown"] is True, "the warning shows once the refresh gives up"
+    assert "10" in result["snaps"]["after"]["text"]
+    assert result["snaps"]["rows"] == ["fix-a-aaaaa"], "the last rows stay on screen under the warning"

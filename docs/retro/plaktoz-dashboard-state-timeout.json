@@ -1,0 +1,328 @@
+{
+  "task": "dashboard-state-timeout",
+  "branch": "plaktoz/dashboard-state-timeout",
+  "base": "origin/main",
+  "sessions": [
+    "49d45b31-89eb-4c9f-b387-eb6d734db70a"
+  ],
+  "commits": 1,
+  "lines": {
+    "product": 53,
+    "spec": 1,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "dashboard-timeout-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 7575.7,
+    "buckets": {
+      "agent_think": 45.6,
+      "think_reply": 2253.2,
+      "run_tests": 412.3,
+      "investigate": 295.5,
+      "github": 136.8,
+      "commit_hooks": 12.9,
+      "deliver_chain": 139.1,
+      "records_checks": 108.0,
+      "wait_reply": 1734.3,
+      "mixed_shell": 510.6,
+      "delegate": 93.2,
+      "wait_machine": 266.4,
+      "ask_owner": 26.2,
+      "wait_question": 1535.8,
+      "write_spec": 1.4,
+      "decision_pages": 1.2,
+      "push_hooks": 3.3
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 682,
+      "output": 225411,
+      "cache_creation": 6382653,
+      "cache_read": 72056267
+    },
+    "subagent": {
+      "input": 1722,
+      "output": 2662639,
+      "cache_creation": 6001045,
+      "cache_read": 87491772
+    },
+    "by_activity": {
+      "run_tests": {
+        "new": 1423241,
+        "reread": 24935279
+      },
+      "investigate": {
+        "new": 8852483,
+        "reread": 75489209
+      },
+      "github": {
+        "new": 1252762,
+        "reread": 7649105
+      },
+      "commit_hooks": {
+        "new": 36387,
+        "reread": 2266942
+      },
+      "deliver_chain": {
+        "new": 566162,
+        "reread": 2795263
+      },
+      "records_checks": {
+        "new": 1113785,
+        "reread": 11318660
+      },
+      "think_reply": {
+        "new": 148547,
+        "reread": 6002062
+      },
+      "mixed_shell": {
+        "new": 205813,
+        "reread": 8320766
+      },
+      "delegate": {
+        "new": 260358,
+        "reread": 928141
+      },
+      "wait_machine": {
+        "new": 36534,
+        "reread": 1553913
+      },
+      "ask_owner": {
+        "new": 362794,
+        "reread": 3055241
+      },
+      "write_spec": {
+        "new": 185127,
+        "reread": 2911907
+      },
+      "decision_pages": {
+        "new": 19489,
+        "reread": 281418
+      },
+      "push_hooks": {
+        "new": 3002,
+        "reread": 1139928
+      },
+      "build_product": {
+        "new": 807668,
+        "reread": 10900205
+      }
+    }
+  },
+  "prompts": {
+    "harness": 5,
+    "handoff": 4,
+    "instruction": 8,
+    "deliver": 3,
+    "approve": 3
+  },
+  "owner_decisions": [
+    {
+      "source": "question",
+      "header": "Rework notes",
+      "question": "When you answer `rework` at an approval, module 8 says the run goes back \"with your notes as feedback\". Today the engine routes the run back but throws your notes away (I confirmed this with a test: the stage's feedback folder stays empty). How should the notes reach the stage? (Proposed ADR `2026-11-22-human-rework-notes-reach-the-stage`)",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Feedback record with `notes` (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Usage warning",
+      "question": "Module 14's `start_attempt` runs inside the engine's run lock (`engine.py:606` is under `_start_task`, which holds the lock), so the lock question is already answered in code. The open part is what to do when the `usage_unreadable` event append fails (PR #141's open question). Today the error propagates and the attempt never starts. Which behaviour do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Warn and start anyway (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Repos step",
+      "question": "Appendix A, step 5, says `factory init --github` adds the repo to `repos` in the machine config. The code doesn't: `init --github` only copies the kit, writes `.factory/config/` and creates labels. Nothing reads `repos`, and `factory config init` writes `repos: []` that nothing uses. `tick --all-repos` only finds repos that already have a run, so a new repo is skipped by the scheduler until you start one by hand. Which do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Build it (Recommended)",
+      "category": "code",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Plugin cases",
+      "question": "Module 5's three plugin cases are open: what happens when `srt` is missing for a plugin task, when `plugin-hashes.json` can't be read, and when `requires.skills` names a skill not in `skills.lock`. Module 5 puts plugins in phase 1b, and the code has no plugin loader yet, so none of these is a phase 1a bug. What should the spec say for each?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Fail closed (Recommended)",
+      "category": "spec and design",
+      "importance": "medium",
+      "trigger": "changes-scope"
+    },
+    {
+      "source": "question",
+      "header": "File labels",
+      "question": "The pending signature check shows 12 mismatches. Step 1 of the ADR fixes seven by correcting file labels and parameter lists in the spec (it is safe and no code changes). Step 2 is about three names that exist in the spec but not as public functions in the code: `worktree_path`, `schedule_install` and `dispatch`. Which fix do you want for step 2?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Rename the spec to the code (Recommended)",
+      "category": "process and records",
+      "importance": "high",
+      "trigger": "costly-to-reverse"
+    },
+    {
+      "source": "page",
+      "id": "D1",
+      "header": "Where section 18 says config and kit functions live",
+      "answer": "Spec follows the code (recommended)",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "where it lives",
+      "category": "spec and design",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "page",
+      "id": "D2",
+      "header": "Reviewer request to a pull request's own author",
+      "answer": "Ask nobody when the author opens it (recommended)",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "other",
+      "category": "security and ops",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "PR author method",
+      "question": "To apply D2 (ask nobody when the issue author opens the PR), the engine has to know who opens the PR. The only way is a new method on the pull-request port (`current_user()`, reading `gh api user`). That port is a shared contract in module 7, so it needs your OK. Do you approve adding it?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Approve (Recommended)",
+      "category": "security and ops",
+      "importance": "high",
+      "trigger": "reopens-decision"
+    },
+    {
+      "source": "question",
+      "header": "Bad usage line",
+      "question": "One usage line with a wrong-typed value (for example, a token count written as the word \"lots\") makes `factory usage` crash for the whole report. I reproduced it. Torn lines and lines missing a field are already skipped. What should a whole line with a wrong-typed field do?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Skip it and warn (Recommended)",
+      "category": "security and ops",
+      "importance": "high",
+      "trigger": "costly-to-reverse"
+    },
+    {
+      "source": "question",
+      "header": "Sandbox /tmp",
+      "question": "The sandbox tool (`srt` 0.0.83) always lets a worker command write to `/tmp/claude`, which is outside the task's worktree and work folder. The agent that tested it confirmed this with a real write. Blocking that path closes the hole, but then `go build` fails, because Go writes its work directory there even when told otherwise. What should the factory do?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Keep it open and record the limit (Recommended)",
+      "category": "security and ops",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Blocked run",
+      "question": "When a run is blocked and waits for a person, the spec says it writes a decision file offering retry, goto a stage, skip a skippable gate, and abort. The engine writes no file, so a blocked run has no answer path in the file the spec describes. Which should happen?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Write the file with all four options (Recommended)",
+      "category": "spec and design",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Blocked target",
+      "question": "A blocked run's answer can be goto (which stage to send it to) or skip (which gate to pass). The decision file has no field for the stage or gate name, only a choice like 'goto'. How should the answer carry its target?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Second choice in the same file (Recommended)",
+      "category": "other",
+      "importance": "medium",
+      "trigger": "no-clear-winner"
+    },
+    {
+      "source": "question",
+      "header": "Partial write",
+      "question": "When a rework's feedback is being written to the target stage's tasks and the write fails partway (say, the first task folder gets its record and the second fails), the error stops the tick before the run's route is saved. What should happen on the next tick?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Retry the write on the next tick (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Dashboard errors",
+      "question": "When the dashboard can't reach its server, it shows a red 'Cannot reach the dashboard' banner and keeps the last rows it got. A request that hangs is never given up on. What should the page do?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Keep old rows, warn, and time out at 10 s (Recommended)",
+      "category": "other",
+      "importance": "low",
+      "trigger": "routine"
+    }
+  ],
+  "agent_decisions": [
+    {
+      "id": "dashboard-keeps-rows-and-gives-up-at-10s",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "be83c2fa6"
+    }
+  ],
+  "friction": {
+    "tool_errors": 5,
+    "interrupts": 0,
+    "secret_scans": 26,
+    "slow": [
+      [
+        557,
+        "AskUserQuestion"
+      ],
+      [
+        159,
+        "AskUserQuestion"
+      ],
+      [
+        614,
+        "AskUserQuestion"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 0.4,
+    "PreToolUse": 40.7,
+    "PostToolUse": 37.2,
+    "PostToolBatch": 35.3,
+    "Stop": 2.7,
+    "PostToolUseFailure": 0.6
+  }
+}

@@ -31,11 +31,19 @@ STUB = r"""
   window.__out = out;
   window.__clip = clip;
   window.addEventListener("error", function (e) { out.errors.push(String(e.message)); });
-  window.__set = function (path, body) { responses[path] = body; };
+  var hanging = {};
+  window.__set = function (path, body) { responses[path] = body; delete hanging[path]; };
+  window.__hang = function (path) { hanging[path] = true; };
   window.fetch = function (path, opts) {
     var headers = (opts && opts.headers) || {};
     out.fetches.push({ path: path, method: (opts && opts.method) || "GET",
                        token: headers["X-Factory-Token"] || null, at: performance.now() });
+    if (hanging[path]) {  // a server that never answers: the promise never settles, unless the page aborts it
+      return new Promise(function (resolve, reject) {
+        var signal = opts && opts.signal;
+        if (signal) { signal.addEventListener("abort", function () { reject(new Error("aborted")); }); }
+      });
+    }
     var has = Object.prototype.hasOwnProperty.call(responses, path);
     var body = has ? responses[path] : JSON.stringify({ ok: false, code: "stub", message: "no stub for " + path });
     return Promise.resolve({ ok: has, status: has ? 200 : 404,
@@ -82,14 +90,21 @@ def set_body(path: str, text: str) -> str:
     return f"__set({json.dumps(path)}, {json.dumps(text)})"
 
 
+def hang(path: str) -> str:
+    """From this step on, a request to `path` never answers, as a server that hangs would."""
+    return f"__hang({json.dumps(path)})"
+
+
 def set_clipboard(mode: str) -> str:
     return f"__clip.mode = {json.dumps(mode)}"
 
 
-def run_page(tmp_path: Path, responses: dict[str, str], steps: list[tuple[int, str]], *, token: str) -> dict:
-    """Load the real page with the stub, run the timeline, and return the recorded result."""
+def run_page(tmp_path: Path, responses: dict[str, str], steps: list[tuple[int, str]], *, token: str,
+             budget_ms: int = BUDGET_MS) -> dict:
+    """Load the real page with the stub, run the timeline, and return the recorded result. `budget_ms` is Chrome's
+    virtual clock: a test that waits past the default 12 s (the 10 s state timeout) passes a longer one."""
     timeline = [f"setTimeout(function () {{ {js} }}, {ms});" for ms, js in steps]
-    timeline.append(f"setTimeout(function () {{ __flush(); }}, {BUDGET_MS - 100});")
+    timeline.append(f"setTimeout(function () {{ __flush(); }}, {budget_ms - 100});")
     script = STUB.replace("__RESPONSES__", json.dumps(responses)) + "\n" + "\n".join(timeline)
     script = script.replace("</", "<\\/")  # a response body can never close the script tag
     page_dir = tmp_path / "page"
@@ -101,7 +116,7 @@ def run_page(tmp_path: Path, responses: dict[str, str], steps: list[tuple[int, s
     url = page.as_uri() + "?token=" + token
     out = subprocess.run([str(CHROME), "--headless=new", "--disable-gpu", "--no-sandbox", "--allow-file-access-from-files",
                           "--use-mock-keychain", "--password-store=basic", f"--user-data-dir={profile}",
-                          f"--virtual-time-budget={BUDGET_MS}", "--dump-dom", url],
+                          f"--virtual-time-budget={budget_ms}", "--dump-dom", url],
                          capture_output=True, text=True, timeout=60)
     found = re.search(r'<pre id="__out">(.*?)</pre>', out.stdout, re.S)
     if found is None:

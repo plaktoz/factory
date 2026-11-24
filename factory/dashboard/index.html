@@ -90,11 +90,18 @@ pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-
   }
   function el(id) { return document.getElementById(id); }
 
+  // A request that does not answer in 10 s is given up, so a hung server shows the warning instead of waiting forever
+  // (owner decision, 2026-11-24). The rows already on screen are kept.
+  var REQUEST_TIMEOUT_MS = 10000;
+
   function api(path, opts) {
     opts = opts || {};
     var headers = { "X-Factory-Token": TOKEN || "" };
     if (opts.body !== undefined) { headers["Content-Type"] = "application/json"; }
+    var controller = typeof AbortController === "function" ? new AbortController() : null;
+    var timer = controller ? setTimeout(function () { controller.abort(); }, REQUEST_TIMEOUT_MS) : null;
     return fetch(path, { method: opts.method || "GET", headers: headers,
+      signal: controller ? controller.signal : undefined,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body) })
       .then(function (r) {
         return r.text().then(function (t) {
@@ -102,7 +109,8 @@ pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-
           try { doc = JSON.parse(t); } catch (e) { doc = null; }
           return { ok: r.ok, status: r.status, text: t, doc: doc };
         });
-      });
+      })
+      .finally(function () { if (timer) { clearTimeout(timer); } });
   }
 
   function copyButton(text, label) {
@@ -226,7 +234,9 @@ pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-
       el("error").classList.add("hidden");
       renderState(r.doc);
       if (selectedRun) { openRun(selectedRun, true); }
-    }).catch(function (e) { showError("Cannot reach the dashboard: " + e); });
+    }).catch(function (e) {
+      showError("Cannot reach the dashboard (no answer within " + REQUEST_TIMEOUT_MS / 1000 + " s, or the connection failed): " + e);
+    });
   }
 
   function openRun(runId, quiet) {
