@@ -8,7 +8,7 @@ Every source is converted into the same `request.json` at pick-up, before the ru
 | --- | --- | --- |
 | CLI | `factory add "title" --type bug --body file.md` | Immediately |
 | Markdown | A file dropped in `.factory/inbox/` | `factory sync` or `factory watch` |
-| GitHub issue | An open issue with the `factory` label (at most 30 are read today; see module 7, Read GitHub requests) | `factory sync` or `factory watch`, via `gh issue list` |
+| GitHub issue | An open issue with the `factory` label (at most 200 are read per sync; see module 7, Read GitHub requests, and the `sync_limit_reached` warning there) | `factory sync` or `factory watch`, via `gh issue list` |
 
 ```json
 {
@@ -93,9 +93,9 @@ def read_sources(repo: Path, cfg: Config, tracker: TrackerAdapter,
                  kinds: tuple[str, ...] = ("github", "markdown")) -> list[Source]
 def normalize(source: Source, cfg: Config) -> Request         # FactoryError("intake.invalid") with reason
 def create_run(repo: Path, cfg: Config, request: Request, tracker: TrackerAdapter) -> RunRef
-    """dedupe (runs, archive, history) -> run id -> kit snapshot (7) -> state in the factory home (6A), with the worktree path reserved
+    """dedupe (runs, archive; `history.jsonl` holds no source ref) -> run id -> kit snapshot (7) -> state in the factory home (6A), with the worktree path reserved
     but not created (6B creates it when triage ends) -> status back to source."""
-def sync(repo: Path, cfg: Config, tracker: TrackerAdapter) -> SyncReport   # created, invalid, duplicates
+def sync(repo: Path, cfg: Config, tracker: TrackerAdapter) -> SyncReport   # created, invalid, duplicates, changed
 def add(repo: Path, cfg: Config, title: str, *, type: str | None = None,
         body: str | None = None, files: list[Path] | None = None) -> RunRef
 # triage.py
@@ -108,16 +108,16 @@ def check_type_resolved(spec: GateSpec, ctx: GateContext) -> GateResult      # u
 ```
 
 - **Run and test:** `pytest factory/engine/tests/intake` with `FakeTracker` and a temp git repo; `factory sync --json`.
-- **Errors:** an invalid request creates no run and its source gets the reason; `gh` errors use transient retry; a duplicate is skipped; an edit mid-run logs `request_changed`.
+- **Errors:** an invalid request creates no run and its source gets the reason; `gh` errors use transient retry; a duplicate is skipped; an edit mid-run logs `request_changed`. A crash after the run folder is written and before the source is marked leaves a run and an unmarked source: the next `sync` finds the run as a duplicate, marks the source `factory:queued`, logs `request_duplicate`, and creates no second run.
 
 Acceptance criteria:
 
 - [x] An inbox folder with three markdown files gives one run; a loose file gives one run; `add --files` gives one run. (test: factory/engine/tests/intake/test_intake.py::test_inbox_folder_of_three_files_gives_one_run, ::test_loose_markdown_file_gives_one_run, ::test_add_with_files_gives_one_run)
 - [x] A folder still receiving files is not picked up until 10 seconds without new files. (test: factory/engine/tests/intake/test_intake.py::test_folder_still_receiving_files_waits_for_ten_quiet_seconds)
-- [ ] The same source ref and body hash never creates a second run. (not ticked: test_same_source_ref_and_body_never_creates_a_second_run and test_a_duplicate_found_in_the_archive_is_skipped cover a repeat sync and an archived duplicate, but no test syncs the same ref with a changed body and checks the body-hash half; `find_by_source` is only tested for a changed body in state, not through intake)
+- [x] The same source ref and body hash never creates a second run. (test: factory/engine/tests/intake/test_intake.py::test_same_source_ref_and_body_never_creates_a_second_run, ::test_a_duplicate_found_in_the_archive_is_skipped, ::test_the_same_ref_with_a_changed_body_never_starts_a_second_run_through_intake; a changed body on an active run logs `request_changed` and starts no run (test: ::test_a_changed_body_logs_request_changed_once))
 - [x] A request with no title gets `factory:invalid` and a comment (GitHub) or `factory_error` (markdown), and no run. (test: factory/engine/tests/intake/test_intake.py::test_github_request_without_title_is_labelled_and_creates_no_run, ::test_markdown_request_without_title_gets_factory_error_and_no_run)
 - [x] The run id is a hyphen slug plus 5 characters and never matches an existing branch or run folder. (test: factory/engine/tests/intake/test_intake.py::test_run_id_format_is_slug_then_five_characters, ::test_run_id_avoids_an_existing_branch, ::test_run_id_never_matches_an_existing_run_folder)
-- [ ] A created run has request.json, run.json with its reserved paths, a run folder in the factory home and the `factory:queued` label; its worktree, shims and branch appear only after triage. (not ticked: test_created_run_has_request_run_json_paths_and_the_queued_label and test_worktree_and_branch_are_not_created_until_triage cover the files, label, worktree and branch; no test checks the shims are absent before triage, because shims are generated only in a worktree that intake never creates)
+- [x] A created run has request.json, run.json with its reserved paths, a run folder in the factory home and the `factory:queued` label; its worktree, shims and branch appear only after triage. (test: factory/engine/tests/intake/test_intake.py::test_created_run_has_request_run_json_paths_and_the_queued_label, ::test_worktree_and_branch_are_not_created_until_triage, ::test_no_skill_shims_exist_before_triage_because_no_worktree_does)
 - [x] `triage_rules` follows the order explicit, label, front matter, keyword, and records `type_source`. (test: factory/engine/tests/intake/test_intake.py::test_explicit_type_wins_over_every_other_rule, ::test_a_type_label_wins_over_front_matter_and_keywords, ::test_front_matter_type_wins_over_keywords, ::test_keyword_rule_records_its_source_and_workflow)
 
 ## Decisions

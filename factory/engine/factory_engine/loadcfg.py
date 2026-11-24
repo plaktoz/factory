@@ -7,6 +7,8 @@ Config(machine, repo) is the one configuration type (section 18). With repo=None
 from __future__ import annotations
 
 import os
+import stat
+import warnings
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -14,7 +16,7 @@ from typing import Any
 from .adapters.worker.base import HarnessConfig
 from .config import Config
 from .errors import FactoryError
-from .interpolate import resolve
+from .interpolate import is_reference, resolve
 from .repo_rules import check_cleanup_check, refuse_literal_env
 from .validate import validate
 from .yamlio import load_yaml
@@ -44,6 +46,7 @@ def load_config(repo: Path | None, *, env: Mapping[str, str] = os.environ) -> Co
     machine = {**MACHINE_DEFAULTS, **_read(machine_file)}
     # The machine file has no JSON Schema in module 3's list, so it is read but not schema-checked here.
     # Its keys are checked where they are used (harnesses in resolve_harness; the rest in their modules).
+    _warn_literal_env_readable_by_others(machine_file, machine)
     if env.get("FACTORY_WORKTREE_ROOT"):
         machine["worktree_root"] = env["FACTORY_WORKTREE_ROOT"]
     if repo is None:
@@ -55,8 +58,15 @@ def load_config(repo: Path | None, *, env: Mapping[str, str] = os.environ) -> Co
         validate(raw, "factory-config", file=str(repo_file))
         refuse_literal_env(_flatten_env(raw), file=str(repo_file))
     check_cleanup_check(raw.get("cleanup_check"), file=str(repo_file))
+    _check_merge_policy(repo / ".factory" / "config" / "merge-policy.yaml")
     rep = {**REPO_DEFAULTS, **raw}
     return Config(machine=machine, repo=rep)
+
+
+def _check_merge_policy(path: Path) -> None:
+    """merge-policy.yaml is checked against its schema at load, so a bad file fails here and not at first delivery."""
+    if path.is_file():
+        validate(load_yaml(path.read_text(), file=str(path)), "merge-policy", file=str(path))
 
 
 def _flatten_env(doc: dict) -> dict[str, str]:
@@ -64,6 +74,17 @@ def _flatten_env(doc: dict) -> dict[str, str]:
     for harness in (doc.get("harnesses") or {}).values() if isinstance(doc.get("harnesses"), dict) else []:
         out.update({k: str(v) for k, v in (harness.get("env") or {}).items()})
     return out
+
+
+def _warn_literal_env_readable_by_others(path: Path, machine: dict) -> None:
+    """A literal value under harnesses.<name>.env is allowed in the machine file, but the engine warns when another
+    user can read that file (module 3, module 9). Checked on the file's real mode; a missing file is not read."""
+    literal = any(not is_reference(str(v)) for h in (machine.get("harnesses") or {}).values()
+                  if isinstance(h, dict) for v in (h.get("env") or {}).values())
+    if literal and path.is_file() and path.stat().st_mode & (stat.S_IRGRP | stat.S_IROTH):
+        warnings.warn(f"{path} holds a literal value under env and is readable by other users; "
+                      f"run chmod 600 {path}, or move the value to ${{NAME}} with the secret in {path.parent / 'env'}",
+                      UserWarning, stacklevel=3)
 
 
 def resolve_harness(cfg: Config, harness: str, *, env: Mapping[str, str] = os.environ, stage_model: str | None = None,

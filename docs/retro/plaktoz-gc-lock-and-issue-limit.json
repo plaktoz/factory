@@ -1,0 +1,48 @@
+{
+  "task": "gc-lock-and-issue-limit",
+  "branch": "plaktoz/gc-lock-and-issue-limit",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 2,
+  "lines": {
+    "product": 266,
+    "spec": 4,
+    "process": 2
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-57-gc-lock-issue-limit"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "issue-sync-limit-and-warning",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "b5f1d808f"
+    },
+    {
+      "id": "gc-takes-the-run-lock-before-removing-a-worktree",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "ce882c17b"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

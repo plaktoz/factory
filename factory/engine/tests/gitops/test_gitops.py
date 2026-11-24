@@ -229,6 +229,22 @@ def test_the_engine_pushes_with_repo_hooks_and_a_failing_pre_push_hook_stops_the
     assert not any(r == "refs/heads/run-1" for r in ls_remote(repo))  # nothing reached the remote
 
 
+def test_a_failing_pre_push_hook_is_git_hook_failed_with_its_output(repo, cfg):
+    """Module 7: `push` raises git.hook_failed when a repo hook rejects the push, so rework routes it (module 8)."""
+    rw = start_run(repo, cfg)
+    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    a = TaskBranch("a", "run-1--a", run(rw, "rev-parse", "HEAD"))
+    assert gitops.join(rw, [a], regenerate=[], join_cmd=None).ok
+    hooks = Path(run(rw, "rev-parse", "--path-format=absolute", "--git-path", "hooks"))
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-push").write_text("#!/bin/sh\necho 'pre-push: blocked by policy' >&2\nexit 1\n")
+    (hooks / "pre-push").chmod(0o755)
+    with pytest.raises(FactoryError) as e:
+        gitops.push(rw, "run-1")
+    assert e.value.code == "git.hook_failed"
+    assert "blocked by policy" in e.value.message
+
+
 def test_checkpoint_never_commits_shims_or_anything_in_the_task_folder(repo, cfg, tmp_path):
     from factory_engine import shims
     from factory_engine.skills import SkillRef

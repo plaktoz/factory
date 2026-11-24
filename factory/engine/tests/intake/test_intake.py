@@ -176,6 +176,20 @@ def test_a_changed_body_while_the_run_is_active_logs_and_raises_attention(repo, 
     assert run.status == "pending"
 
 
+def test_the_same_ref_with_a_changed_body_never_starts_a_second_run_through_intake(repo, cfg, tracker, home):
+    """Module 4: a repeat sync of the same source ref and body hash never creates a second run. A changed body is not a
+    duplicate: while its run is active it is logged, and no second run starts; the body-hash half is checked here."""
+    tracker.add(issue())
+    first = intake.sync(repo, cfg, tracker).created[0]
+    original_sha = state.read_run(first.run_dir).request.body_sha
+    tracker.items[0] = issue(body="A different body after an edit.")
+    second = intake.sync(repo, cfg, tracker)
+    assert second.created == [] and second.duplicates == []
+    assert runs_in(home) == [first.run_id]
+    assert state.read_run(first.run_dir).request.body_sha == original_sha  # the run keeps the body it started with
+    assert intake.normalize(issue(body="A different body after an edit."), cfg).body_sha != original_sha
+
+
 def test_a_changed_body_logs_request_changed_once(repo, cfg, tracker, home):
     tracker.add(issue())
     run_id = intake.sync(repo, cfg, tracker).created[0].run_id
@@ -312,6 +326,20 @@ def test_worktree_and_branch_are_not_created_until_triage(repo, cfg, tracker, ho
     branches = subprocess.run(["git", "-C", str(repo), "branch", "--list", ref.run_id],
                               capture_output=True, text=True).stdout
     assert branches.strip() == ""
+
+
+def test_no_skill_shims_exist_before_triage_because_no_worktree_does(repo, cfg, tracker, home):
+    """Shims are generated only inside a worktree, and intake never creates one, so nothing shim-shaped exists yet:
+    no `factory-*` link under the reserved worktree and no shim exclude pattern written to the repo (module 10)."""
+    tracker.add(issue())
+    ref = intake.sync(repo, cfg, tracker).created[0]
+    run = state.read_run(ref.run_dir)
+    assert not run.worktree.exists()
+    shims = [p for p in repo.rglob("factory-*") if ".git" not in p.parts]
+    assert shims == [], f"intake made shim-shaped folders before triage: {shims}"
+    assert not (run.worktree / ".claude" / "skills").exists()
+    exclude = repo / ".git" / "info" / "exclude"
+    assert not exclude.exists() or ".claude/skills/factory-*" not in exclude.read_text()
 
 
 def test_markdown_request_file_gets_factory_run_front_matter(repo, cfg, tracker, home):
