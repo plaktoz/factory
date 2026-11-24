@@ -131,3 +131,18 @@ def test_schedule_at_needs_a_time_and_a_name(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "home"))
     assert cli.main(["schedule", "at", "--json", "--", "python3"]) == 2
     assert "config.invalid" in capsys.readouterr().out
+
+
+def test_schedule_at_takes_a_command_after_options_and_double_dash(tmp_path, monkeypatch):
+    monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "home"))
+    seen = {}
+
+    def fake_install_once(name, when, command, home, cwd):
+        seen.update(name=name, command=command)
+        return tmp_path / "job"
+
+    monkeypatch.setattr(cli.schedule_mod, "install_once", fake_install_once)
+    rc = cli.main(["schedule", "at", "--at", "2026-11-25T19:43", "--name", "pilot", "--", "python3", "-c", "1"])
+
+    assert rc == 0
+    assert seen == {"name": "pilot", "command": ["python3", "-c", "1"]}
