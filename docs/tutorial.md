@@ -15,7 +15,103 @@ You need:
 - The Claude Code CLI (`claude`) on your `PATH`. The factory starts it for each worker task. Install it from Anthropic's Claude Code documentation, then check it with `claude --version`. The runs on this page used 2.1.330.
 - Python 3.10 or newer.
 - Credentials for Claude: `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`. A login session does not work in phase 1.
-- The factory source: a checkout of this repo. Set `FACTORY_SRC` to its path, for example `export FACTORY_SRC=~/src/factory`. Every `$FACTORY_SRC` below uses it.
+- The factory source: a checkout of this repo, in any folder you like. Set `FACTORY_SRC` to its path, for example `export FACTORY_SRC=~/Developer/factory`. Every `$FACTORY_SRC` below uses it. It is a name used on this page only, and the factory does not read it. It is **not** `~/.factory`: that is the factory home, a different folder (see the next section).
+
+**Windows.** Phase 1 does not run on native Windows. See [Windows](#windows) before you start.
+
+## Where things live
+
+Four places are involved. Keep them apart.
+
+| What | Default path | Made by | Notes |
+| --- | --- | --- | --- |
+| The source checkout (`$FACTORY_SRC`) | where you cloned this repo | you | Do not move or delete it. `factory init` copies the kit from its `factory/` folder, because the install in part 1, step 1 is editable. |
+| The `factory` command | `~/factory-venv/bin/factory` | step 1 of part 1 | A Python virtual environment that holds the program only, not run state. It is an editable install of `$FACTORY_SRC/factory/launcher`, so it stops working if you move or delete the checkout. The folder name is your choice if its `bin` folder is on the `PATH`. It is separate from your project's own `.venv` in part 3. |
+| The factory home | `~/.factory`, or `$FACTORY_HOME` if you set it | the factory, on first use | Run state (`runs/`), kit snapshots (`kits/`), `dashboard.json`, `config.yaml` (machine settings), `history.jsonl` and logs. |
+| Worktrees | `~/.factory/worktrees/` | each run | One working copy per run. |
+| Your repo | the folder you made or cloned | you | Holds `factory/` (the kit) and `.factory/config/` (your settings). Commit both. |
+
+**There is one factory home per machine, shared by every repo.** Runs from every repo you add are kept side by side under `runs/<repo key>/`. One `factory status`, one dashboard and one `tick` or `schedule` cover all of them, and the clean-up commands at the end act on all of them. What is per repo is the kit and `.factory/config/`.
+
+To keep a trial run apart from your real runs, set `FACTORY_HOME` to a new folder in the shell before the first `factory` command, for example `export FACTORY_HOME=~/factory-home-try`. This is read from the code, and the tutorial runs did not use it. It moves the runs, kits and `dashboard.json`, but not the worktrees: their root stays `~/.factory/worktrees` until you set `worktree_root` in `$FACTORY_HOME/config.yaml`. Run `factory config init` once to create that file.
+
+### The final layout
+
+This is the tree you should have after parts 1 and 2, with the default paths. The factory home part and the worktree part were listed from a real `~/.factory` on 2026-11-24. Run ids, kit hashes and file counts differ on your machine.
+
+```text
+~/Developer/factory/               # $FACTORY_SRC: your checkout of this repo (not touched by runs)
+~/factory-venv/                    # the `factory` command; bin/ is on your PATH
+
+~/scratch/                         # your repo (any folder); also the git repo you pushed
+├── src/hello.py
+├── tests/test_hello.py            # part 2: written by the reproduce task, merged by the pull request
+├── scripts/
+│   ├── check                      # part 1: the verify step
+│   └── repro-fails.sh             # part 2: the reproduce gate
+├── factory/                       # the kit, copied by `factory init` (131 files). Commit it.
+└── .factory/
+    ├── .gitignore                 # ignores everything here except config/
+    ├── config/                    # your settings. Commit this.
+    │   ├── factory.yaml           # base_branch, tracker, harness
+    │   ├── merge-policy.yaml
+    │   └── workflows/bug-fix.yaml # part 2 (the other folders, plugins/ and overrides/, start empty)
+    └── inbox/                     # markdown requests; stays empty and uncommitted here
+
+~/.factory/                        # the factory home ($FACTORY_HOME). One per machine.
+├── runs/
+│   └── github.com/you/factory-scratch/          # the repo key: host/owner/repo
+│       └── greet-with-an-exclamation-mark-zavus/   # one folder per run
+│           ├── request.json  run.json  events.jsonl  lock
+│           ├── merge.json  summary.md              # appear when the run reaches delivery
+│           └── tasks/
+│               └── <task>/                         # triage's rules and classify, implement's change, verify's check
+│                   └── task.json  worker.log  usage.jsonl  work/
+├── worktrees/
+│   └── scratch/                                    # your repo's folder name, not the repo key
+│       ├── greet-with-an-exclamation-mark-zavus/   # the run's working copy (a full checkout)
+│       └── greet-with-an-exclamation-mark-zavus--check/   # a task's own working copy
+├── kits/<hash>/                                    # a snapshot of factory/ + .factory/config/ taken when a run is created
+├── logs/                                           # engine-<run>.log for each run, tick.log
+├── tmp/                                            # scratch folders for workers
+├── tick.json  tick.lock                            # written by `factory tick`
+└── dashboard.json                                  # written by `factory dashboard`: pid, port, token
+```
+
+A repo with no GitHub remote uses `runs/local/<folder>/` instead of `runs/github.com/<owner>/<repo>/`. Some files in the home do not exist until you use them. `config.yaml` (machine settings) appears after `factory config init`, `history.jsonl` and `archive/` after the first cleanup, and `intake/` and `kits/` only once a request or run needs them. The `.factory/inbox/` folder and the empty config folders exist on disk after `factory init`, but git does not commit an empty folder, so a fresh clone does not have them.
+
+The run folder and the worktree folder have the same run id and are different things. The run folder is the factory's record (state, events, logs), and you read it with `factory where <run>` and `factory events`. The worktree is a checkout of your repo where the worker edits files. Nothing in `~/.factory` is part of your repo, and nothing in your repo is part of `~/.factory`, except the kit snapshot under `kits/`, which is a copy.
+
+### When several repos use the factory
+
+Add a second repo the same way as the first: `factory init`, commit the kit, `factory init --github`. The factory home does not change. Each repo gets its own folders under it, and the machine-wide commands see all of them. This section was read from the code (`tick.py`, `cli.py`, `state.py`, `gitops.py`). The tutorial runs used one repo at a time, so none of it was run with two.
+
+**What is shared on the machine**
+
+| Thing | What to expect |
+| --- | --- |
+| `factory inbox`, the dashboard | Show runs from every repo, one row each, with the repo named. |
+| `factory tick`, `factory schedule install` | One tick covers all repos, and only one tick runs at a time: a second tick that starts while one is running exits at once (`tick.lock`). |
+| Run ids | Unique across the whole home, so two repos never share a run id. |
+| `~/.factory/kits/`, `logs/`, `tmp/` | One folder each for the whole machine. |
+
+**What is per repo**
+
+| Thing | What to expect |
+| --- | --- |
+| `factory status`, `events`, `where`, `add`, `sync`, `init` | Work on the repo in the current folder, or on `--repo <path>`. `factory status` in repo A does not list repo B's runs. A command that takes a run id (`retry`, `abort`, `where`) finds the run's repo from the id, so it works from any folder. |
+| The kit and `.factory/config/` | Each repo has its own, committed in that repo, so the repos can use different workflows, merge policies and kit versions. A run keeps the kit snapshot it was created with. |
+| Run folder | `runs/<repo key>/<run id>/`, for example `runs/github.com/you/repo-a/...` and `runs/github.com/you/repo-b/...`. |
+| Concurrency | The `concurrency` setting in `.factory/config/factory.yaml` (default 4) limits tasks running at once inside one run. No code limits the total number of runs, or of Claude workers, across repos. |
+
+**Four things that surprise people**
+
+1. **A new repo is not picked up by a scheduled tick until it has a run.** `tick --all-repos`, which `factory schedule install` uses, syncs issues only for repos that already have a run. After `init`, run `factory sync` or `factory add` once in the new repo. After that, the tick finds its labelled issues. The `repos:` list that `factory config init` writes into `config.yaml` is not read by any code, so adding a repo there does nothing.
+2. **Worktrees are grouped by the repo's folder name, not its repo key.** Two repos whose folders are both called `app` (`~/work/app` and `~/personal/app`) share `~/.factory/worktrees/app/`. The run ids differ, so the folders do not collide, but you cannot tell the repos apart by that folder. Use `factory where <run>` to see which repo a worktree belongs to.
+3. **Two repos with the same remote share one run folder.** The repo key comes from the `origin` URL. Two clones of the same GitHub repo have the same key, so their runs mix under one `runs/<key>/` folder. A repo with no remote uses `runs/local/<folder>/`, so two such repos with the same folder name also mix. Set `repo_key` in `.factory/config/factory.yaml` to give each one its own key.
+4. **A deleted or moved repo leaves its runs behind.** The tick reports a run whose repo folder is gone as `repo_missing` and skips it. Abort those runs, or clean up the repo's folder under `runs/`, as in "Clean up".
+
+Which repo a command acts on is the first thing to check when output looks wrong: run it from the repo's folder, or pass `--repo`.
 
 ## Part 1. A new project
 
@@ -394,6 +490,19 @@ created run test-that-a-non-empty-prompt-is-refused-mmk74
 
 The real project is public, and its `AGENTS.md` asks for approval before any push, so this part did not push to it. The run used a private copy of the project in its own GitHub repo. The first try of the pull request step failed on a local folder remote, with `git.auth_expired: ... none of the git remotes configured for this repository point to a known GitHub host`. After `origin` pointed at the GitHub copy, `factory run <run>` finished that step without any repair. Pull request #1 opened with one changed file, `tests/test_precheck.py`, and was merged, and `factory tick` ended the run. What was not tried: a repo with branch protection or required CI checks, so the merge-policy side of a pull request is shown only in parts 1 and 2.
 
+## Windows
+
+Phase 1 supports macOS and Linux only. Windows is phase 2 (`docs/design/phase-2.md`, P2-2). The code marks it: `factory schedule install` writes a launchd entry on macOS and a systemd user timer on Linux, and has nothing for Windows. So **do not run this tutorial in PowerShell or `cmd`.** Use WSL2, which gives you a Linux machine inside Windows. No part of this tutorial was run on Windows or WSL2, so treat the steps below as the expected path, not a checked one.
+
+1. In an administrator PowerShell, run `wsl --install -d Ubuntu`, restart, and open the Ubuntu terminal.
+2. Do everything in this tutorial **inside** that Ubuntu terminal: install `git`, `gh`, `uv`, Node, `claude` and `srt` there, not on the Windows side. A tool installed on Windows is not on the Linux `PATH`.
+3. Keep the checkout, the scratch repo and the copy from part 3 in the Linux home folder (`~/Developer/factory`, `~/scratch`). Do not put them under `/mnt/c/...`. That is the Windows disk seen through a bridge: it is slow, and file modes such as the executable bit on `scripts/check` may not behave.
+4. The factory home is then `~/.factory` in Linux, which Windows sees as `\\wsl$\Ubuntu\home\<you>\.factory`. Open the dashboard from a Windows browser at the URL the command prints. WSL2 normally forwards `127.0.0.1` ports to Windows.
+5. `factory schedule install` needs systemd running in WSL2. If it is not, run `factory watch` in a terminal you leave open, which does the same job in the foreground.
+6. `srt` on Linux needs a few system packages that its own install notes list. `factory doctor` names a missing one. If the check fails, fix it before part 1, step 5.
+
+If you want to run the factory natively on Windows, that needs the phase 2 work: Task Scheduler install, `.bat` and `.ps1` handling, retrying atomic replaces, and `%USERPROFILE%` paths. The file lock already has a Windows branch (`msvcrt`), but nothing else has been tried there.
+
 ## Clean up
 
 Do these in order. The run state and the schedule live outside your repo, so deleting the repo does not remove them.
@@ -407,5 +516,5 @@ gh repo delete you/factory-scratch --yes
 rm -rf scratch factory-try                 # the scratch repo and the copy from part 3
 ```
 
-`factory schedule remove` prints `removed`, or `nothing to remove` when no schedule was installed. Use `kill <pid>`, not `pkill -f factory`, which can stop an unrelated process whose command line contains the word. The finished runs and their worktrees stay under the factory home (`~/.factory` by default); remove a worktree folder only after `git status` in it shows a clean tree.
+`factory schedule remove` prints `removed`, or `nothing to remove` when no schedule was installed. Use `kill <pid>`, not `pkill -f factory`, which can stop an unrelated process whose command line contains the word. The finished runs and their worktrees stay under the factory home (`~/.factory` by default); remove a worktree folder only after `git status` in it shows a clean tree. The factory home is shared by every repo on the machine, so do not delete `~/.factory` as a whole unless this tutorial's runs are the only ones in it. If you used a separate `FACTORY_HOME` for the tutorial, that folder is yours to remove, and the worktrees stay in `~/.factory/worktrees` unless you set `worktree_root`. The source checkout (`$FACTORY_SRC`) and `~/factory-venv` are not removed by anything above. Delete `~/factory-venv` once you no longer use the `factory` command, and keep the checkout while any repo still uses it, because the install points at it.
 

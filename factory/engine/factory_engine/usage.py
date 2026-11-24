@@ -129,12 +129,16 @@ def _read(run_dir: Path, task_id: str) -> tuple[dict[int, dict], list[tuple[int,
 
 def _warn_unreadable(run_dir: Path, task_id: str, unreadable: list[tuple[int, int | None]]) -> None:
     """One `usage_unreadable` event per unreadable line, with the task id and line number. A line already reported
-    is not reported again, so the event is written once however many attempts start after it."""
+    is not reported again, so the event is written once however many attempts start after it. If the write fails, the
+    warning is skipped and the attempt goes on."""
     reported = {e.data.get("line") for e in read_events(run_dir)
                 if e.type == "usage_unreadable" and e.data.get("task_id") == task_id}
     for no, _ in unreadable:
         if no not in reported:
-            append_event(run_dir, "usage_unreadable", task_id=task_id, line=no)
+            try:
+                append_event(run_dir, "usage_unreadable", task_id=task_id, line=no)
+            except OSError:
+                return  # a warning must not stop an attempt; the next start_attempt finds the line unreported and tries again
 
 
 def start_attempt(run_dir: Path, run: Run, task_id: str, *, stage: str, harness: str, model_requested: str | None) -> int:
