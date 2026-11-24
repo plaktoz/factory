@@ -1,0 +1,103 @@
+{
+  "task": "close-item-24",
+  "branch": "plaktoz/close-item-24",
+  "base": "origin/main",
+  "sessions": [
+    "49d45b31-89eb-4c9f-b387-eb6d734db70a"
+  ],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 0,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "close-item-24-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 739.8,
+    "buckets": {
+      "agent_think": 1.0,
+      "think_reply": 199.9,
+      "run_tests": 38.9,
+      "investigate": 20.1,
+      "github": 52.7,
+      "commit_hooks": 5.0,
+      "deliver_chain": 32.0,
+      "records_checks": 9.6,
+      "wait_reply": 359.7,
+      "mixed_shell": 20.8
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 72,
+      "output": 18586,
+      "cache_creation": 107025,
+      "cache_read": 1926919
+    },
+    "subagent": {
+      "input": 0,
+      "output": 0,
+      "cache_creation": 0,
+      "cache_read": 0
+    },
+    "by_activity": {
+      "run_tests": {
+        "new": 37354,
+        "reread": 129209
+      },
+      "investigate": {
+        "new": 15154,
+        "reread": 600219
+      },
+      "github": {
+        "new": 50897,
+        "reread": 442225
+      },
+      "commit_hooks": {
+        "new": 1579,
+        "reread": 51509
+      },
+      "deliver_chain": {
+        "new": 10376,
+        "reread": 255643
+      },
+      "records_checks": {
+        "new": 3701,
+        "reread": 185249
+      },
+      "think_reply": {
+        "new": 3078,
+        "reread": 113098
+      },
+      "mixed_shell": {
+        "new": 3544,
+        "reread": 149767
+      }
+    }
+  },
+  "prompts": {
+    "harness": 1,
+    "handoff": 1,
+    "instruction": 1,
+    "deliver": 1
+  },
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 1,
+    "interrupts": 0,
+    "secret_scans": 5,
+    "slow": []
+  },
+  "hooks": {
+    "SessionStart": 0.4,
+    "PreToolUse": 4.5,
+    "PostToolUse": 3.8,
+    "PostToolBatch": 3.7,
+    "Stop": 0.3,
+    "PostToolUseFailure": 0.1
+  }
+}
