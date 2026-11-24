@@ -2,6 +2,8 @@
 and exits with a shared code. The engine's rows are in factory/engine/tests/drivers/test_command_table.py.
 
 The machine rows are `tick`, `watch`, `schedule` (install, remove, at), `dashboard`, `inbox`, `doctor` and `config init`.
+Most have a success case and an error case. `inbox` has only its success case, and `tick` has a success case and a
+lock-held case.
 Every OS and network effect is replaced: the scheduler writes into a temporary folder, the dashboard server and its
 detached child are recorders, and the tick is a recorder, so no process starts and nothing is loaded.
 """

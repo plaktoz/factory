@@ -2,8 +2,9 @@
 
 One row per command of the table, driven through `cli.main()` with fakes, so no worker, network or engine process
 starts. The table is checked two ways: every row answers a bad flag with the shared shape and exit 2 (the parser),
-and every row has a success case and one error case of its own. `factory plugins enable|disable` is phase 1b and is
-left out, as the criterion says. The `factory` launcher's rows are in factory/launcher/tests/test_command_table.py.
+and most rows have a success case and an error case of their own. Here `resume` has only its lock refusal, and
+`retry`, `goto` and `skip` are tested in test_cli.py. `factory plugins enable|disable` is phase 1b and is left out, as
+the criterion says. The `factory` launcher's rows are in factory/launcher/tests/test_command_table.py.
 """
 
 import json
