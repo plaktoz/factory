@@ -66,7 +66,7 @@ Counters above the table: Running, Needs you, Blocked, Conflict warnings, Done t
 **Module contract: 15 Dashboard**
 
 - **Depends on:**
-  - 6A: `factory_home`, `RunScanner`, `find_run`, `read_run`, `read_events`, `lock_status`
+  - 6A: `factory_home`, `find_run`, `read_run`, `read_events`, `lock_status` (not `RunScanner`; see step 1 above)
   - 11: the decision page files
   - 12: `tail_log`
   - 14: `summarize`

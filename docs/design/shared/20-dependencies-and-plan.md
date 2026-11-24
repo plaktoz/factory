@@ -108,7 +108,7 @@ There are no import cycles:
   - 16 adds `factory where` and writes `tick.json`
 - **Consumers checked:**
   - 4 needs `repo_key` and `init_run(home, ...)`
-  - 15 needs `RunScanner` and `find_run`
+  - 15 needs `find_run`; it keeps its own run index instead of `RunScanner` (module 15, "How the dashboard finds runs")
   - 16 needs `list_runs`, `find_run` and `lock_status`
   - 17 needs `list_runs` and `paths`
 
@@ -179,7 +179,7 @@ The pilot starts in phase 1a with one chore or bug-fix issue and a human merge. 
 - [ ] Two overlapping ticks: the second exits and no run starts twice.
 - [ ] Two repos on different kit versions on one dashboard (1a); a decision submitted on the page resumes the right run (1b).
 - [ ] A live smoke test on Claude with `FACTORY_LIVE=1`: a seeded request passes every gate.
-- [ ] Pilot (1a): a live run on one `factory`-labelled chore or bug-fix issue in `plaktoz/test-adapters` ends with `scripts/check` exit 0 and waits at human merge review. In that run no model flag is sent, the attempt records the observed model, no `wip(...)` commit or task branch reaches the remote, and a worktree that is not clean is kept unless `cleanup_check` passes.
+- [ ] Pilot (1a): a live run on one small `factory`-labelled chore issue that the owner writes and approves (owner decision 2026-11-24) in `plaktoz/test-adapters` ends with `scripts/check` exit 0 and waits at human merge review. In that run no model flag is sent, the attempt records the observed model, no `wip(...)` commit or task branch reaches the remote, and a worktree that is not clean is kept unless `cleanup_check` passes.
 - [ ] Stop an engine with SIGSTOP past the old 60-second limit while ticks run: no second engine starts. Kill it with SIGKILL: the next tick resumes it and any left-over worker is ended.
 - [ ] Edit `factory/workflows/` in the main checkout while a run is active: the run keeps using its snapshot.
 - [ ] Fail the GitHub stub for longer than one tick: the run is `retrying`, recovers when the stub does, and is blocked only after `infra_wait_hours`.

@@ -25,7 +25,7 @@ Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-
 **What phase 1 keeps so Codex is cheap to add.**
 
 - `WorkerAdapter` ([module 9](modules/09-worker-adapters-and-governed-helpers.md)) is harness-neutral. A Codex adapter implements `check`, `start`, `wait` and `stop` and declares `capabilities`.
-- `harness:` in `factory.yaml`, `routing:` per stage and the `harnesses:` map in the machine file stay. Phase 1 accepts only `claude` and fails fast on any other value with "Codex is phase 2".
+- `harness:` in `factory.yaml`, `routing:` per stage and the `harnesses:` map in the machine file stay. Phase 1 accepts only `claude` and fails fast on any other value with "Codex is phase 2". The owner decided on 2026-11-24 that a repo may choose Codex (the row `2026-11-24-allow-codex` in [How this repo is built](../process.md), which supersedes the row below); the schema and `api.default_workers` do not accept it yet, so this sentence still describes the code.
 - Workflows never name a harness, so adding one changes no workflow file.
 - The helper policy is stated in plain words in every prompt ([module 9](modules/09-worker-adapters-and-governed-helpers.md)), which Codex needs because it delegates only when asked.
 - `generate_shims` takes a list of harnesses; phase 1 passes `["claude"]`.

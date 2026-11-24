@@ -18,7 +18,6 @@ factory/                    the kit: replaced whole on update, never edited
                             (12 are written in wave 0. `stage-report`, `test-report`, `source-notes` and `review-findings` had no fields in the
                             spec; the owner accepted the wave 3 drafts as the phase 1 schemas, see
                             [module 5](05-workflows-and-plugins.md#report-schemas)). `merge` is checked by `factory/schemas/merge.schema.json`, written by hand because module 13 builds the file from a dict; its tests are in `tests/delivery/test_delivery.py`)
-  policies/                 default scope and protected-path rules
   engine/                   Python engine and the factory CLI (copied by init and upgrade without its tests/ folder, so each snapshot carries it)
   adapters/tracker/         file, github
   adapters/worker/          claude, command, fake
@@ -62,7 +61,7 @@ factory/                    the kit: replaced whole on update, never edited
 # .factory/config/factory.yaml   (in the repo, committed)
 base_branch: main
 tracker: github                  # file | github
-harness: claude                  # phase 1 accepts only claude; others fail fast (Codex is phase 2)
+harness: claude                  # the schema accepts only claude today; Codex is allowed by owner decision 2026-11-24 (not built)
 concurrency: 4                   # parallel workers for this repo; the machine-wide cap is max_workers in the machine file
 repo_key: null                   # override, such as github.com/acme/report
 notify: {github_mention: author, desktop: true, webhook: null, remind_after_hours: 24}
