@@ -22,6 +22,7 @@ from factory_engine import api, state
 from factory_engine.errors import FactoryError
 from factory_engine.loadcfg import load_config
 
+from . import repos as repos_mod
 from . import schedule as schedule_mod
 from . import tick as tick_mod
 
@@ -76,8 +77,23 @@ def _dispatch(argv: list[str], repo: Path, home: Path, *, run_id: str | None = N
     env = {**os.environ, "FACTORY_HOME": str(home)}
     if not installed and argv and argv[0] not in KIT_COMMANDS:
         env = api.run_engine_env(run_id, home=home, env=env) if run_id else _repo_engine_env(repo, env)
-    proc = subprocess.run(_engine_argv(argv, repo), cwd=str(repo), env=env, check=False)
-    return proc.returncode
+    code = _dispatch_engine(argv, repo, env)
+    if code == 0 and argv[:1] == ["init"] and "--github" in argv:
+        _register_repo(home, repo)
+    return code
+
+
+def _dispatch_engine(argv: list[str], repo: Path, env: dict[str, str]) -> int:
+    return subprocess.run(_engine_argv(argv, repo), cwd=str(repo), env=env, check=False).returncode
+
+
+def _register_repo(home: Path, repo: Path) -> None:
+    """After `init --github`, list the repo in the machine config so `tick --all-repos` finds it. A failure is a warning:
+    the kit is already in place, and the repo is still found once it has a run."""
+    try:
+        repos_mod.register(home, repo)
+    except (OSError, FactoryError) as e:
+        print(f"warning: could not add {repo} to repos in {home / 'config.yaml'}: {e}", file=sys.stderr)
 
 
 def _repo_engine_env(repo: Path, env: dict[str, str]) -> dict[str, str]:
@@ -92,7 +108,8 @@ def _repo_engine_env(repo: Path, env: dict[str, str]) -> dict[str, str]:
 def _tick_repos(args, home: Path) -> list[Path]:
     repos = [Path(r).resolve() for r in (args.repo or [])]
     if args.all_repos:
-        repos = sorted({ref.repo for ref in state.list_runs(home)}, key=str)
+        listed = {r.resolve() for r in repos_mod.registered(home) if r.is_dir()}
+        repos = sorted(listed | {ref.repo for ref in state.list_runs(home)}, key=str)
     return repos
 
 
@@ -274,14 +291,14 @@ def _parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", metavar="<command>")
 
     t = sub.add_parser("tick", help="one scheduled pass")
-    t.add_argument("--all-repos", action="store_true", help="sync every repo that has a run")
+    t.add_argument("--all-repos", action="store_true", help="sync every repo in the machine config and every repo that has a run")
     t.add_argument("--repo", action="append", dest="repo", help="a repo to sync (repeatable)")
     t.add_argument("--env-file", help="variables for the scheduler's environment (read by the harness, not here)")
     t.add_argument("--json", action="store_true")
 
     w = sub.add_parser("watch", help="run tick in a foreground loop")
     w.add_argument("--every", default="10m", help="interval between ticks, such as 10m")
-    w.add_argument("--all-repos", action="store_true", help="sync every repo that has a run")
+    w.add_argument("--all-repos", action="store_true", help="sync every repo in the machine config and every repo that has a run")
     w.add_argument("--repo", action="append", dest="repo", help="a repo to sync (repeatable)")
     w.add_argument("--json", action="store_true")
 

@@ -1,0 +1,181 @@
+{
+  "task": "init-github-registers-the-repo",
+  "branch": "plaktoz/init-github-registers-the-repo",
+  "base": "origin/main",
+  "sessions": [
+    "49d45b31-89eb-4c9f-b387-eb6d734db70a"
+  ],
+  "commits": 1,
+  "lines": {
+    "product": 175,
+    "spec": 2,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "init-registers-repo-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 3223.9,
+    "buckets": {
+      "agent_think": 33.5,
+      "think_reply": 759.6,
+      "run_tests": 172.2,
+      "investigate": 77.6,
+      "github": 99.1,
+      "commit_hooks": 5.0,
+      "deliver_chain": 82.2,
+      "records_checks": 21.6,
+      "wait_reply": 721.9,
+      "mixed_shell": 263.4,
+      "delegate": 33.0,
+      "wait_machine": 175.3,
+      "ask_owner": 7.4,
+      "wait_question": 772.4
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 242,
+      "output": 76436,
+      "cache_creation": 1056232,
+      "cache_read": 10750870
+    },
+    "subagent": {
+      "input": 368,
+      "output": 542889,
+      "cache_creation": 893733,
+      "cache_read": 12043291
+    },
+    "by_activity": {
+      "run_tests": {
+        "new": 136749,
+        "reread": 2460443
+      },
+      "investigate": {
+        "new": 1315447,
+        "reread": 9814158
+      },
+      "github": {
+        "new": 418923,
+        "reread": 3357692
+      },
+      "commit_hooks": {
+        "new": 4730,
+        "reread": 201677
+      },
+      "deliver_chain": {
+        "new": 182320,
+        "reread": 826270
+      },
+      "records_checks": {
+        "new": 280546,
+        "reread": 1410543
+      },
+      "think_reply": {
+        "new": 45594,
+        "reread": 1131105
+      },
+      "mixed_shell": {
+        "new": 58693,
+        "reread": 1933290
+      },
+      "delegate": {
+        "new": 10001,
+        "reread": 190670
+      },
+      "wait_machine": {
+        "new": 4218,
+        "reread": 93962
+      },
+      "ask_owner": {
+        "new": 13753,
+        "reread": 439045
+      },
+      "build_product": {
+        "new": 80888,
+        "reread": 920642
+      },
+      "decision_pages": {
+        "new": 18038,
+        "reread": 14664
+      }
+    }
+  },
+  "prompts": {
+    "harness": 3,
+    "handoff": 2,
+    "instruction": 2,
+    "deliver": 2,
+    "approve": 2
+  },
+  "owner_decisions": [
+    {
+      "source": "question",
+      "header": "Rework notes",
+      "question": "When you answer `rework` at an approval, module 8 says the run goes back \"with your notes as feedback\". Today the engine routes the run back but throws your notes away (I confirmed this with a test: the stage's feedback folder stays empty). How should the notes reach the stage? (Proposed ADR `2026-11-22-human-rework-notes-reach-the-stage`)",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Feedback record with `notes` (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Usage warning",
+      "question": "Module 14's `start_attempt` runs inside the engine's run lock (`engine.py:606` is under `_start_task`, which holds the lock), so the lock question is already answered in code. The open part is what to do when the `usage_unreadable` event append fails (PR #141's open question). Today the error propagates and the attempt never starts. Which behaviour do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Warn and start anyway (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Repos step",
+      "question": "Appendix A, step 5, says `factory init --github` adds the repo to `repos` in the machine config. The code doesn't: `init --github` only copies the kit, writes `.factory/config/` and creates labels. Nothing reads `repos`, and `factory config init` writes `repos: []` that nothing uses. `tick --all-repos` only finds repos that already have a run, so a new repo is skipped by the scheduler until you start one by hand. Which do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Build it (Recommended)",
+      "category": "code",
+      "importance": "low",
+      "trigger": "routine"
+    }
+  ],
+  "agent_decisions": [
+    {
+      "id": "init-github-registers-the-repo",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "1eeae9d16"
+    }
+  ],
+  "friction": {
+    "tool_errors": 4,
+    "interrupts": 0,
+    "secret_scans": 11,
+    "slow": [
+      [
+        557,
+        "AskUserQuestion"
+      ],
+      [
+        159,
+        "AskUserQuestion"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 0.4,
+    "PreToolUse": 15.4,
+    "PostToolUse": 12.6,
+    "PostToolBatch": 11.6,
+    "Stop": 1.1,
+    "PostToolUseFailure": 0.4
+  }
+}
