@@ -53,6 +53,8 @@ def _repo(tmp_path: Path, name="repo") -> Path:
     ("awaiting_approval", "live", True, False, tick_mod.NOTHING),
     ("retrying", "free", True, False, tick_mod.START),
     ("blocked", "free", True, False, tick_mod.NOTHING),
+    ("blocked", "free", True, True, tick_mod.START),
+    ("blocked", "live", True, True, tick_mod.NOTHING),
     ("done", "free", True, False, tick_mod.NOTHING),
     ("pending", "free", False, False, tick_mod.MISSING),
 ])
@@ -345,6 +347,109 @@ def test_reminders_off_and_a_failed_tracker_are_both_quiet_for_the_tick(stopped,
     _told_at(stopped.run_dir, "2026-11-22T10:00:00+00:00")
     report = _tick_at(home, Down(), "2026-11-23T10:00:00+00:00", monkeypatch=monkeypatch)
     assert report.skipped_tick is False and any("could not tell tracker" in e for e in report.errors)
+
+
+# ---- a blocked run answered in its decision file (module 6 tick table; module 11; item 47 follow-up) ----------------
+
+@pytest.fixture
+def blocked(stopped):
+    """The `stopped` run, blocked at implement, with the decision file a blocked stop writes (still pending)."""
+    from factory_engine import decisions
+
+    run = state.read_run(stopped.run_dir)
+    run.status = "blocked"
+    lock = acquire_lock(stopped.run_dir, "test")
+    state.write_run(stopped.run_dir, run, lock=lock)
+    release(lock)
+    sha = decisions.request(stopped.run_dir, "implement", 1, kind="blocked")
+    return stopped, sha
+
+
+def _answer_blocked(ref, sha, choices=None):
+    from factory_engine import decisions
+
+    decisions.record(ref.run_dir, "implement", 1, packet_sha=sha, choices=choices or {"D1": "retry"}, by="me", channel="cli")
+
+
+def _tick_blocked(home, started):
+    from factory_engine.adapters.tracker.fake import FakeTracker
+    return tick_mod.tick(load_config(None, env={"FACTORY_HOME": str(home)}), repos=[], home=home,
+                         spawn=lambda r, rid: started.append(rid) or 1, tracker_for=lambda repo: FakeTracker())
+
+
+def test_an_answered_blocked_run_with_a_free_lock_starts_an_engine(blocked, home):
+    ref, sha = blocked
+    _answer_blocked(ref, sha)
+    started: list[str] = []
+    report = _tick_blocked(home, started)
+    assert started == ["bump-q1w2e"] and report.started == ["bump-q1w2e"] and report.errors == []
+
+
+def test_a_pending_blocked_run_gets_a_reminder_and_no_engine(blocked, home, monkeypatch):
+    from factory_engine.adapters.tracker.fake import FakeTracker
+    ref, _ = blocked
+    tracker, started = FakeTracker(), []
+    _told_at(ref.run_dir, "2026-11-20T10:00:00+00:00")
+    report = _tick_at(home, tracker, "2026-11-23T10:00:00+00:00", started, monkeypatch)
+    assert started == [] and report.started == [] and report.reminded == ["bump-q1w2e"]
+
+
+def test_a_blocked_run_with_no_decision_file_gets_no_engine(stopped, home):
+    """A real block writes no decision file today (module 11, line 214), so there is nothing to read."""
+    run = state.read_run(stopped.run_dir)
+    run.status = "blocked"
+    lock = acquire_lock(stopped.run_dir, "test")
+    state.write_run(stopped.run_dir, run, lock=lock)
+    release(lock)
+    started: list[str] = []
+    report = _tick_blocked(home, started)
+    assert started == [] and report.started == [] and report.errors == []
+
+
+def test_an_answered_blocked_run_with_a_live_lock_starts_no_second_engine(blocked, home):
+    ref, sha = blocked
+    _answer_blocked(ref, sha)
+    held = acquire_lock(ref.run_dir, "engine")
+    started: list[str] = []
+    try:
+        report = _tick_blocked(home, started)
+    finally:
+        release(held)
+    assert started == [] and report.started == []
+
+
+def test_an_unreadable_blocked_file_is_reported_and_starts_nothing(blocked, home):
+    ref, sha = blocked
+    _answer_blocked(ref, sha)
+    path = ref.run_dir / "decisions" / "implement.1.yaml"
+    path.write_text("packet: [this is not a decision file\n")
+    started: list[str] = []
+    report = _tick_blocked(home, started)
+    assert started == [] and report.started == []
+    assert any("bump-q1w2e" in e and "decision" in e for e in report.errors)
+    assert path.read_text() == "packet: [this is not a decision file\n"      # the run was left alone
+
+
+def test_an_answer_the_engine_already_applied_starts_no_engine_again(blocked, home):
+    """The engine logs each applied or refused answer by the hash of the file; a tick must not respawn for it."""
+    import hashlib
+    ref, sha = blocked
+    _answer_blocked(ref, sha)
+    path = ref.run_dir / "decisions" / "implement.1.yaml"
+    content = hashlib.sha256(path.read_bytes()).hexdigest()
+    state.append_event(ref.run_dir, "blocked_answer_refused", stage="implement", visit=1, content=content,
+                       answer="goto", code="config.invalid", reason="no such stage")
+    started: list[str] = []
+    assert _tick_blocked(home, started).started == [] and started == []
+
+
+def test_a_blocked_run_whose_packet_was_edited_after_the_answer_starts_no_engine(blocked, home):
+    ref, sha = blocked
+    _answer_blocked(ref, sha)
+    path = ref.run_dir / "decisions" / "implement.1.yaml"
+    path.write_text(path.read_text().replace("Retry", "Retry it", 1))
+    started: list[str] = []
+    assert _tick_blocked(home, started).started == [] and started == []
 
 
 def test_a_tick_that_dies_holding_the_lock_releases_it_for_the_next_tick(home):
