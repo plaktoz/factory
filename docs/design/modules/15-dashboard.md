@@ -78,7 +78,7 @@ The server is part of the machine launcher, not a repo's kit. It reads files dir
 
 | Endpoint | Calls | Returns |
 | --- | --- | --- |
-| `GET /api/state.json` | `RunScanner.scan`, then `read_run` for changed runs | All runs, attention items, signals, last tick |
+| `GET /api/state.json` | The server's run index: a listing of `run.json` files, then `read_run` for changed runs (not `RunScanner.scan`, see "How the dashboard finds runs") | All runs, attention items, signals, last tick |
 | `GET /api/runs/<id>` | `find_run`, `read_run`, decision files, `merge.json`, `summary.md` | One run, with its paths |
 | `GET /api/runs/<id>/tasks/<task>/log` | `tail_log` | Text |
 | `GET /runs/<id>/decisions/<stage>.<n>.html` | The file | The page, with a content security policy header |
@@ -86,7 +86,7 @@ The server is part of the machine launcher, not a repo's kit. It reads files dir
 | `POST /api/runs/<id>/note` | `factory note <id>/<task> ... --json` | CLI JSON |
 | `POST /api/runs/<id>/retry` (`goto`, `skip`, `abort`) | `factory retry <id> --json` and so on | CLI JSON |
 
-- **Run and test:** API tests `pytest factory/launcher/tests/server` against fixture run folders; UI tests with Playwright against the same fixtures; `factory dashboard --port 8765`.
+- **Run and test:** API tests `pytest factory/launcher/tests/server` against fixture run folders; UI tests against the same fixtures, run as `factory/launcher/tests/server/test_page_ui.py`: headless Chrome loads the real `factory/dashboard/index.html` with a stub `fetch` and clipboard (no Playwright, so no new dependency), and the tests skip when Chrome is absent; `factory dashboard --port 8765`.
 - **Errors:** a missing or invalid file shows as an unreadable row. Bad API input gets HTTP 400 with the reason. A port already in use fails fast. A failed CLI call returns its JSON error to the page.
 
 Acceptance criteria:
