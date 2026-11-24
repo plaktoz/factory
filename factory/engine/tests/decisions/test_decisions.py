@@ -436,13 +436,27 @@ def test_a_blocked_packet_offers_retry_goto_skip_and_abort(run):
     assert ids == ["retry", "goto", "skip", "abort"]
 
 
-def test_a_blocked_goto_answer_routes_to_the_named_stage(run):
+def test_a_blocked_goto_answer_needs_the_stage_it_sends_the_run_to(run):
     sha = D.request(run.run_dir, "verify", 1, kind="blocked")
-    out = answer(run, sha, {"D1": "goto"}, stage="verify")
-    assert out.status == "goto"
+    with pytest.raises(FactoryError) as e:
+        answer(run, sha, {"D1": "goto"}, stage="verify")
+    assert e.value.code == "decision.bad_choice" and "target" in str(e.value)
 
 
-def test_a_blocked_skip_answer_routes_to_skip(run):
+def test_a_blocked_goto_answer_with_its_stage_is_recorded_with_that_stage(run):
     sha = D.request(run.run_dir, "verify", 1, kind="blocked")
-    out = answer(run, sha, {"D1": "skip"}, stage="verify")
-    assert out.status == "skip"
+    out = answer(run, sha, {"D1": "goto", "D1.target": "fix"}, stage="verify")
+    assert out.choices == {"D1": "goto", "D1.target": "fix"}
+
+
+def test_a_blocked_skip_answer_needs_the_gate_it_passes(run):
+    sha = D.request(run.run_dir, "verify", 1, kind="blocked")
+    with pytest.raises(FactoryError) as e:
+        answer(run, sha, {"D1": "skip"}, stage="verify")
+    assert e.value.code == "decision.bad_choice" and "gate" in str(e.value)
+
+
+def test_a_blocked_skip_answer_with_its_gate_is_recorded_with_that_gate(run):
+    sha = D.request(run.run_dir, "verify", 1, kind="blocked")
+    out = answer(run, sha, {"D1": "skip", "D1.gate": "helpers-ledger"}, stage="verify")
+    assert out.choices == {"D1": "skip", "D1.gate": "helpers-ledger"}

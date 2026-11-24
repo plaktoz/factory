@@ -257,17 +257,42 @@ def _render(run_dir: Path, stage: str, visit: int) -> str | None:
     return None
 
 
+# A blocked run's goto and skip answers carry their target as a second choice in the same file (owner decision,
+# 2026-11-24): `D1.target` names the stage a goto sends the run to, `D1.gate` the gate a skip passes.
+TARGET_KEYS = {"goto": "target", "skip": "gate"}
+
+
 def _choice_problems(packet: Packet, choices: dict[str, str], *, require_all: bool) -> list[str]:
     ids = [d["id"] for d in packet["decisions"]]
     problems = []
-    for decision_id, option in choices.items():
+    for key, value in choices.items():
+        decision_id, _, sub = key.partition(".")
         if decision_id not in ids:
             problems.append(f"{decision_id} is not a decision in this packet")
-        elif option not in _options(packet, decision_id):
-            problems.append(f"{decision_id}: {option!r} is not one of its options")
+        elif sub:
+            problems += _target_problem(packet, decision_id, sub, value, choices)
+        elif value not in _options(packet, decision_id):
+            problems.append(f"{decision_id}: {value!r} is not one of its options")
     if require_all:
         problems += [f"{i}: no choice" for i in ids if i not in choices]
+    for d in packet["decisions"]:
+        pick = choices.get(d["id"])
+        need = TARGET_KEYS.get(pick) if BLOCKED_OPTIONS == {o["id"] for o in d["options"]} else None
+        if need and f"{d['id']}.{need}" not in choices:
+            problems.append(f"{d['id']}: {pick} needs its {need}, as {d['id']}.{need}")
     return problems
+
+
+def _target_problem(packet: Packet, decision_id: str, sub: str, value: str, choices: dict[str, str]) -> list[str]:
+    """`D1.target` and `D1.gate` are accepted only on a blocked decision, only with the goto or skip that uses them."""
+    d = next(x for x in packet["decisions"] if x["id"] == decision_id)
+    if {o["id"] for o in d["options"]} != BLOCKED_OPTIONS:
+        return [f"{decision_id}.{sub} is only for a blocked run"]
+    if TARGET_KEYS.get(choices.get(decision_id)) != sub:
+        return [f"{decision_id}.{sub} needs {decision_id} to be {'goto' if sub == 'target' else 'skip'}"]
+    if not value.strip():
+        return [f"{decision_id}.{sub} is empty"]
+    return []
 
 
 def record(run_dir: Path, stage: str, visit: int, *, packet_sha: str, choices: dict[str, str] | None = None,
