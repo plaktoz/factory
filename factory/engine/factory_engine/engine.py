@@ -17,8 +17,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import (decisions, delivery, gates, gitops, housekeeping, notes, notify, rework, shims, skills, state, summary,
-               toolchains, triage)
+from . import (decisions, delivery, gates, gitops, housekeeping, loadcfg, notes, notify, rework, shims, skills,
+               state, summary, toolchains, triage)
+from . import slots as machine_slots
 from . import usage as usage_mod
 from . import workflow as wf_mod
 from .adapters.worker.base import AttemptResult, HarnessConfig, TaskContext, WorkerAdapter
@@ -56,12 +57,15 @@ class EngineResult:
 
 @dataclass
 class _Running:
-    """One worker the engine is supervising: its task, its handle, the thread waiting on it, and its result."""
+    """One worker the engine is supervising: its task, its handle, the thread waiting on it, and its result. `slots` are
+    the machine slots it holds (module 3, max_workers). Only the engine's main thread takes or gives back slots, and it
+    does so after the thread has ended, so a restart keeps them and no slot is released while its worker still runs."""
 
     spec: TaskSpec
     harness: str
     handle: object
     ts: TaskState
+    slots: list[int] = field(default_factory=list)
     thread: threading.Thread = field(default=None)  # type: ignore[assignment]
     outcome: AttemptResult | None = None
     restart_for_note: bool = False
@@ -86,9 +90,28 @@ class Engine:
     # ---- public --------------------------------------------------------------------------------------------------
 
     def run(self, run_ids: list[str] | None = None, *, poll_seconds: int = 5) -> EngineResult:
-        """Drive each run until it is done, failed, aborted, blocked or awaiting a human. Holds each run's lock."""
-        targets = run_ids or [r.run_id for r in state.list_runs(self.home, key=self.key)]
-        statuses: dict[str, RunStatus] = {rid: self._drive(rid) for rid in targets}
+        """Drive the runs at the same time, one thread each, until each is done, failed, aborted, blocked or awaiting a
+        human. Each run holds its own lock. A run that raises does not stop the others: they all end, then the first
+        error (in the order the runs were named) is raised."""
+        targets = list(dict.fromkeys(run_ids or [r.run_id for r in state.list_runs(self.home, key=self.key)]))
+        found: dict[str, RunStatus] = {}
+        errors: dict[str, BaseException] = {}
+
+        def drive(rid: str) -> None:
+            try:
+                found[rid] = self._drive(rid)
+            except BaseException as e:  # noqa: BLE001  re-raised below, once every run has ended
+                errors[rid] = e
+
+        threads = [threading.Thread(target=drive, args=(rid,), name=f"run-{rid}", daemon=True) for rid in targets]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        for rid in targets:
+            if rid in errors:
+                raise errors[rid]
+        statuses = {rid: found[rid] for rid in targets}
         values = set(statuses.values())
         code = 4 if "blocked" in values else 3 if "awaiting_approval" in values else 1 if "failed" in values else 0
         return EngineResult(runs=statuses, exit_code=code)
@@ -102,13 +125,14 @@ class Engine:
         finally:
             state.release(lock)
 
-    def resume(self, run_id: str, *, force: bool = False) -> None:
-        """Continue a run whose lock is free (module 6B recovery). A live lock refuses, unless `force` is set.
+    def resume(self, run_id: str) -> None:
+        """Continue a run whose lock is free (module 6B recovery). A live lock always refuses (decision
+        `resume-has-no-force`).
 
         Open attempts are closed as interrupted, each interrupted task's worktree goes back to its last checkpoint, and
         the diff that was discarded is saved as `discarded-<n>.patch`."""
         run_dir = self._run_dir(run_id)
-        if not force and state.lock_status(run_dir) == "live":
+        if state.lock_status(run_dir) == "live":
             raise FactoryError("state.locked", f"run {run_id} is held by a live engine",
                                hint="wait for that engine, or stop it, then resume")
         lock = state.acquire_lock(run_dir, self.owner)
@@ -559,29 +583,43 @@ class Engine:
         checkpoints, and restarts a worker when a note is queued (module 12). The threads only call `wait`."""
         specs = self._specs(stage, run_dir)
         running: dict[str, _Running] = {}
-        while True:
-            statuses = {s.id: self._status_of(run_dir, s.id) for s in specs}
-            if not any(st == "failed" for st in statuses.values()):
-                self._start_ready(run, run_dir, lock, wf, stage, specs, statuses, running)
-            if not running:
-                return
-            for task_id in list(running):
-                job = running[task_id]
-                if job.thread.is_alive():
-                    self._maybe_restart(run_dir, lock, job)
-                    continue
-                job.thread.join()
-                del running[task_id]
-                self._record_result(run_dir, lock, job, result)
-                if job.restart_for_note and job.outcome is not None:
-                    running[task_id] = self._launch(run, run_dir, lock, wf, stage, job.spec)
-            if running:
+        try:
+            while True:
+                statuses = {s.id: self._status_of(run_dir, s.id) for s in specs}
+                waiting = False
+                if not any(st == "failed" for st in statuses.values()):
+                    waiting = self._start_ready(run, run_dir, lock, wf, stage, specs, statuses, running)
+                if not running and not waiting:
+                    return
+                for task_id in list(running):
+                    job = running[task_id]
+                    if job.thread.is_alive():
+                        self._maybe_restart(run_dir, lock, job)
+                        continue
+                    job.thread.join()
+                    del running[task_id]
+                    self._record_result(run_dir, lock, job, result)
+                    if job.restart_for_note and job.outcome is not None:
+                        running[task_id] = self._launch(run, run_dir, lock, wf, stage, job.spec, slots=job.slots)
+                    else:
+                        self._give_back(job)
                 self.clock.sleep(POLL_SECONDS) if hasattr(self.clock, "advance") else threading.Event().wait(POLL_SECONDS)
+        finally:
+            # The loop can end with workers still in `running` (a failed state write). No restart follows, so their
+            # machine slots go back once each worker has ended, on a thread that only waits for it.
+            for job in running.values():
+                threading.Thread(target=self._release_when_ended, args=(job,), daemon=True).start()
+
+    @staticmethod
+    def _release_when_ended(job: "_Running") -> None:
+        job.thread.join()
+        Engine._give_back(job)
 
     def _start_ready(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, specs: list[TaskSpec],
-                     statuses: dict[str, str], running: dict[str, "_Running"]) -> None:
+                     statuses: dict[str, str], running: dict[str, "_Running"]) -> bool:
         """Launch every task whose needs are done while slots remain. A task that does not hold (`when`) is skipped,
-        which can make its dependents ready, so this repeats until nothing more can start."""
+        which can make its dependents ready, so this repeats until nothing more can start. A task takes its machine
+        slots (module 3, `max_workers`) all at once or waits. True when a ready task waits for machine slots."""
         while True:
             done = {t for t, st in statuses.items() if st == "done"}
             ready = [s for s in specs if statuses[s.id] in ("none", "pending", "interrupted")
@@ -592,13 +630,29 @@ class Engine:
                 statuses[spec.id] = "done"
             if skipped:
                 continue
-            used = sum(self._slots(j.spec) for j in running.values())
             for spec in ready:
-                if running and used + self._slots(spec) > self._concurrency():
-                    break
-                running[spec.id] = self._launch(run, run_dir, lock, wf, stage, spec)
-                used += self._slots(spec)
-            return
+                held = self._take_slots(self._slots(spec))
+                if held is None:
+                    return True  # the repo or the machine has no free slot: wait for one to end
+                running[spec.id] = self._launch(run, run_dir, lock, wf, stage, spec, slots=held)
+            return False
+
+    def _take_slots(self, count: int) -> list[int] | None:
+        """Take `count` slots from this repo's pool (`concurrency`) and from the machine pool (`max_workers`), all or none.
+        A task that reserves more slots than a pool holds takes the whole pool, so a helper task still runs when the cap
+        is small. Returns the descriptors of both pools, which `_give_back` releases."""
+        repo_limit = self._concurrency()
+        machine_limit = self._max_workers()
+        if repo_limit < 1 or machine_limit < 1:
+            return None  # a cap of 0 means no worker may start; it must not read as "no cap"
+        repo = machine_slots.acquire(machine_slots.repo_pool(self.home, self.key), repo_limit, min(count, repo_limit))
+        if repo is None:
+            return None
+        machine = machine_slots.acquire(machine_slots.machine_pool(self.home), machine_limit, min(count, machine_limit))
+        if machine is None:
+            machine_slots.release_all(repo)
+            return None
+        return repo + machine
 
     def _when_holds(self, spec: TaskSpec, run_dir: Path) -> bool:
         """The task's `when` condition (module 5). `confidence_below` reads triage.json; other forms always hold here."""
@@ -743,9 +797,16 @@ class Engine:
                                hint="name the artifact an earlier task writes with `out`, and give it a unique name")
         return found[0]
 
-    def _launch(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, spec: TaskSpec) -> "_Running":
-        spec_, (harness, handle), ts = self._start_task(run, run_dir, lock, wf, stage, spec)
-        job = _Running(spec=spec_, harness=harness, handle=handle, ts=ts)
+    def _launch(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, spec: TaskSpec, *,
+                slots: list[int]) -> "_Running":
+        """Start the task's worker and its waiting thread. `slots` are the machine slots the task holds; they are given
+        back if the start fails, and otherwise by `_give_back` once the worker has ended."""
+        try:
+            spec_, (harness, handle), ts = self._start_task(run, run_dir, lock, wf, stage, spec)
+        except BaseException:
+            machine_slots.release_all(slots)
+            raise
+        job = _Running(spec=spec_, harness=harness, handle=handle, ts=ts, slots=slots)
 
         def wait() -> None:
             job.outcome = self._adapter_named(harness).wait(handle, spec_.timeout_minutes * 60)
@@ -753,6 +814,17 @@ class Engine:
         job.thread = threading.Thread(target=wait, name=f"worker-{spec_.id}", daemon=True)
         job.thread.start()
         return job
+
+    @staticmethod
+    def _give_back(job: "_Running") -> None:
+        """Release the machine slots of a worker that has ended. A slot of a worker still running stays held."""
+        if job.slots and not job.thread.is_alive():
+            machine_slots.release_all(job.slots)
+            job.slots = []
+
+    def _max_workers(self) -> int:
+        """The machine-wide cap on running workers (module 3): `max_workers` in the machine file, 6 by default."""
+        return int((self.cfg.machine or {}).get("max_workers", loadcfg.MACHINE_DEFAULTS["max_workers"]))
 
     def _maybe_restart(self, run_dir: Path, lock: Lock, job: "_Running") -> None:
         """A note is queued for a running task: at a checkpoint the engine stops the worker so it restarts with the note
