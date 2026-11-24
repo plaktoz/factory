@@ -71,6 +71,10 @@ In phase 1a this module builds loading, validation, `expand_tasks_from` and `exp
 name: bug-fix
 type: bug
 sink: pull_request
+policy:
+  write: true                     # without this the file's policy.write is false: a detached worktree and no branch
+  deny_paths: [".github/**"]
+defaults: {retries: 2, timeout_minutes: 30, checkpoint_every_minutes: 10, max_restarts: 3}   # the values a file gets when it omits the key
 stages:
   - id: reproduce
     tasks: [{id: repro, skill: reproduce, out: repro.json}]
@@ -93,6 +97,7 @@ stages:
     join: all
     gate: [{cmd: [make, build]}, {check: scope-diff}, {check: helpers-ledger}]
     on_fail: {goto: root-cause, max: 2}
+    on_conflict: {goto: fix, max: 1}
   - id: verify
     needs: [fix]
     tasks:
