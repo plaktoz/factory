@@ -2,6 +2,7 @@
 
 import json
 import re
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,8 +11,9 @@ from factory_engine import decisions, delivery, gitops, notes, state, usage
 from factory_engine.adapters.tracker.fake import FakeTracker
 from factory_engine.errors import FactoryError
 from factory_engine.fake_prs import FakePullRequests
+from factory_engine.gh import GitHubPullRequests
 from factory_engine.state import read_run
-from factory_engine.types import StageState
+from factory_engine.types import PrRef, StageState
 from factory_engine.summary import render_summary
 from factory_engine.yamlio import load_yaml
 
@@ -242,6 +244,25 @@ def test_a_merge_refused_by_branch_protection_needs_a_human(home, tmp_path, cfg)
     with pytest.raises(FactoryError) as e:
         delivery.merge_or_request_review(pr, evaluate(run_dir, cfg, wt), prs, reviewers=[])
     assert e.value.code == "delivery.merge_blocked" and e.value.kind == "human"
+
+
+def test_a_merge_refused_because_the_repo_does_not_allow_auto_merge_needs_a_human(home, tmp_path, cfg):
+    """The real adapter, with the exact stderr gh printed against a real repo that has 'Allow auto-merge' off (item 23,
+    checked 2026-11-24 on plaktoz/factory-gc-scratch, exit 1)."""
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    gh_stderr = "GraphQL: Auto merge is not allowed for this repository (enablePullRequestAutoMerge)\n"
+    seen: list[list[str]] = []
+
+    def gh(args):
+        seen.append(args)
+        return subprocess.CompletedProcess(args, 1, "", gh_stderr)
+
+    prs = GitHubPullRequests("acme/report", gh)
+    pr = PrRef(number=12, url="https://github.com/acme/report/pull/12", head="tidy-ab12c", base="main")
+    with pytest.raises(FactoryError) as e:
+        delivery.merge_or_request_review(pr, evaluate(run_dir, cfg, wt), prs, reviewers=[])
+    assert e.value.code == "delivery.merge_blocked" and e.value.kind == "human"
+    assert seen == [["pr", "merge", "12", "-R", "acme/report", "--squash", "--auto", "--delete-branch"]]
 
 
 def test_watch_pr_reports_red_ci_for_rework_and_a_closed_pr(home, tmp_path, cfg):
