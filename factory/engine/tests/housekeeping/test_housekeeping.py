@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 import sys
 import zipfile
 from datetime import timedelta
@@ -1073,3 +1074,179 @@ def test_an_unreadable_run_json_at_apply_keeps_the_worker_log_whole(home, repo, 
 
     assert log.stat().st_size == 2 * 1024 * 1024
     assert any(f.path == log and "could not re-read" in f.message for f in report.failed)
+
+
+# --- decision gc-takes-the-run-lock-before-removing-a-worktree (2026-11-24): apply takes the run's lock ---
+
+ENGINE_DIR = str(Path(__file__).resolve().parents[2])
+
+HOLDER_SCRIPT = """
+import sys
+sys.path.insert(0, {engine!r})
+from pathlib import Path
+from factory_engine.lock import acquire_lock
+lock = acquire_lock(Path({run!r}), 'engine-elsewhere')
+print('HELD', flush=True)
+sys.stdin.read()  # the holder keeps the lock until its stdin is closed
+"""
+
+PROBE_SCRIPT = """
+import sys
+sys.path.insert(0, {engine!r})
+from pathlib import Path
+from factory_engine.errors import FactoryError
+from factory_engine.lock import acquire_lock
+try:
+    acquire_lock(Path({run!r}), 'probe')
+    print('ACQUIRED')
+except FactoryError as e:
+    print(e.code)
+"""
+
+
+def hold_lock_in_another_process(run_dir):
+    """A child process takes the run's lock and keeps it until its stdin closes. The parent sees the lock as live."""
+    proc = subprocess.Popen([sys.executable, "-c", HOLDER_SCRIPT.format(engine=ENGINE_DIR, run=str(run_dir))],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    assert proc.stdout.readline().strip() == "HELD"
+    return proc
+
+
+def release_other_process(proc):
+    proc.stdin.close()
+    proc.wait(timeout=60)
+
+
+def probe_lock_from_another_process(run_dir) -> str:
+    """'state.locked' while some process holds the run's lock, 'ACQUIRED' when it is free."""
+    out = subprocess.run([sys.executable, "-c", PROBE_SCRIPT.format(engine=ENGINE_DIR, run=str(run_dir))],
+                         capture_output=True, text=True, timeout=60)
+    return out.stdout.strip()
+
+
+def test_an_engine_in_another_process_keeps_the_worktree_and_the_pass_goes_on(home, repo, cfg, clock):
+    wt_held = worktree_for(cfg, repo, "other-proc")
+    held_dir = make_run(home, repo, "other-proc", status="done", worktree=wt_held, ended=days_ago(clock, 8))
+    wt_free = worktree_for(cfg, repo, "free-run")
+    make_run(home, repo, "free-run", status="done", worktree=wt_free, ended=days_ago(clock, 8))
+    planned = plan(home, cfg, now=clock.now())
+
+    holder = hold_lock_in_another_process(held_dir)
+    try:
+        report = apply(planned)
+    finally:
+        release_other_process(holder)
+
+    assert wt_held.exists(), "a live engine in another process keeps its worktree"
+    kept = [s for s in report.skipped if s.path == wt_held]
+    assert [s.reason for s in kept] == ["an engine holds the run lock; the worktree is kept"]
+    assert "other-proc" in kept[0].detail and "locked by" in kept[0].detail, "the lock's message is the detail"
+    assert not wt_free.exists() and str(wt_free) in report.removed, "the other run's worktree is still removed"
+
+
+def test_the_run_lock_is_held_while_the_worktree_is_removed(home, repo, cfg, clock, monkeypatch):
+    wt = worktree_for(cfg, repo, "held-during")
+    run_dir = make_run(home, repo, "held-during", status="done", worktree=wt, ended=days_ago(clock, 8))
+    planned = plan(home, cfg, now=clock.now())
+    real_remove = housekeeping._remove_worktree_safely
+    seen_during_removal = []
+
+    def probing_remove(*args, **kwargs):
+        seen_during_removal.append(probe_lock_from_another_process(run_dir))
+        return real_remove(*args, **kwargs)
+
+    monkeypatch.setattr(housekeeping, "_remove_worktree_safely", probing_remove)
+    report = apply(planned)
+
+    assert seen_during_removal == ["state.locked"], "another engine cannot take the lock while apply removes the worktree"
+    assert str(wt) in report.removed
+
+
+def test_the_run_lock_is_held_while_the_worker_log_is_cut(home, repo, cfg, clock, monkeypatch):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt = worktree_for(cfg, repo, "cut-held")
+    run_dir = make_run(home, repo, "cut-held", status="done", worktree=wt, tasks=[("backend", "done", None)],
+                       ended=days_ago(clock, 2))
+    log = run_dir / "tasks" / "backend" / "worker.log"
+    log.write_bytes(b"a" * (2 * 1024 * 1024))
+    planned = plan(home, cfg, now=clock.now())
+    real_truncate = housekeeping._truncate
+    seen_during_cut = []
+
+    def probing_truncate(path, keep):
+        seen_during_cut.append(probe_lock_from_another_process(run_dir))
+        return real_truncate(path, keep)
+
+    monkeypatch.setattr(housekeeping, "_truncate", probing_truncate)
+    report = apply(planned)
+
+    assert seen_during_cut == ["state.locked"]
+    assert str(log) in report.trimmed
+
+
+def test_an_engine_in_another_process_keeps_the_worker_log_whole_and_the_pass_goes_on(home, repo, cfg, clock):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt_held = worktree_for(cfg, repo, "log-held")
+    held_dir = make_run(home, repo, "log-held", status="done", worktree=wt_held, tasks=[("backend", "done", None)],
+                        ended=days_ago(clock, 2))
+    held_log = held_dir / "tasks" / "backend" / "worker.log"
+    held_log.write_bytes(b"a" * (2 * 1024 * 1024))
+    wt_free = worktree_for(cfg, repo, "log-free")
+    free_dir = make_run(home, repo, "log-free", status="done", worktree=wt_free, tasks=[("backend", "done", None)],
+                        ended=days_ago(clock, 2))
+    free_log = free_dir / "tasks" / "backend" / "worker.log"
+    free_log.write_bytes(b"a" * (2 * 1024 * 1024))
+    planned = plan(home, cfg, now=clock.now())
+
+    holder = hold_lock_in_another_process(held_dir)
+    try:
+        report = apply(planned)
+    finally:
+        release_other_process(holder)
+
+    assert held_log.stat().st_size == 2 * 1024 * 1024
+    kept = [s for s in report.skipped if s.path == held_log]
+    assert [s.reason for s in kept] == ["an engine holds the run lock; the log is not cut"]
+    assert "log-held" in kept[0].detail
+    assert str(free_log) in report.trimmed, "the other run's log is still cut"
+
+
+def test_the_run_lock_is_released_after_a_removal_and_after_a_log_cut(home, repo, cfg, clock):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt = worktree_for(cfg, repo, "released")
+    run_dir = make_run(home, repo, "released", status="done", worktree=wt, tasks=[("backend", "done", None)],
+                       ended=days_ago(clock, 8))
+    (run_dir / "tasks" / "backend" / "worker.log").write_bytes(b"a" * (2 * 1024 * 1024))
+
+    report = apply(plan(home, cfg, now=clock.now()))
+
+    assert str(wt) in report.removed
+    assert state.lock_status(run_dir) == "free", "apply releases the lock once the removal is done"
+    lock = state.acquire_lock(run_dir, "after")
+    state.release(lock)
+
+
+def test_the_run_lock_is_released_when_the_worktree_is_kept(home, repo, cfg, clock):
+    wt = worktree_for(cfg, repo, "kept-dirty")
+    run_dir = make_run(home, repo, "kept-dirty", status="done", worktree=wt, ended=days_ago(clock, 8))
+    dirty(wt)
+
+    report = apply(plan(home, cfg, now=clock.now()))
+
+    assert wt.exists() and str(wt) in skipped_paths(report)
+    assert state.lock_status(run_dir) == "free", "a kept worktree releases the lock too"
+
+
+def test_a_worktree_of_an_archived_run_is_removed_without_a_lock_to_take(home, repo, cfg, clock):
+    """No run folder on disk means no lock to take: the worktree is removed on the plan's data, as before."""
+    wt = worktree_for(cfg, repo, "no-folder")
+    run_dir = make_run(home, repo, "no-folder", status="done", worktree=wt, ended=days_ago(clock, 8))
+    planned = plan(home, cfg, now=clock.now())
+    for item in planned.items:
+        if item.path == wt:
+            item.run_dir = None
+    shutil.rmtree(run_dir)
+
+    report = apply(planned)
+
+    assert str(wt) in report.removed
