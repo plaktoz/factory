@@ -291,6 +291,8 @@ def test_the_driver_adds_module_10s_lock_and_pack_checks(repo, fake_kit, monkeyp
 def test_modules_3_doctor_reports_only_its_own_checks(repo, fake_kit, monkeypatch, tmp_path):
     _go_repo_with_no_tools(repo, monkeypatch, tmp_path)
     assert {r.name for r in kit.doctor(repo)} == {"git", "gh", "credentials", "repo-config"}
+    kit.init_repo(repo)           # a repo with a kit also gets module 3's own `kit-current`, and nothing from 9, 10 or 17A
+    assert {r.name for r in kit.doctor(repo)} == {"git", "gh", "credentials", "repo-config", "kit-current"}
 
 
 # --- a failed upgrade ---
@@ -344,3 +346,43 @@ def test_a_scratch_folder_left_by_a_dead_process_is_cleared_by_the_next_upgrade(
     kit.upgrade(repo, "0.2.0")
     assert sorted(p.name for p in repo.iterdir() if p.name.startswith("factory")) == ["factory"]
     assert (repo / "factory" / "AGENTS.md").is_file()
+
+
+# --- a repo whose committed kit differs from the installed one (found in the first live run, 2026-11-22) ---
+
+def _kit_check(repo):
+    return next((c for c in kit.doctor(repo) if c.name == "kit-current"), None)
+
+
+def test_doctor_is_quiet_about_a_kit_that_matches_the_installed_one(repo, fake_kit):
+    kit.init_repo(repo)
+    check = _kit_check(repo)
+    assert check is not None and check.ok and "matches" in check.detail
+
+
+def test_doctor_names_the_files_that_differ_and_the_upgrade_command_when_the_repo_kit_is_older(repo, fake_kit):
+    kit.init_repo(repo)
+    (fake_kit / "engine" / "factory_engine" / "x.py").write_text("# a newer engine\n")      # the installed kit moved on
+    (fake_kit / "workflows" / "chore.yaml").write_text("name: chore\n")                        # and gained a file
+    check = _kit_check(repo)
+    assert check is not None and not check.ok
+    assert "engine/factory_engine/x.py" in check.detail and "workflows/chore.yaml" in check.detail
+    assert "factory upgrade" in check.hint
+
+
+def test_a_repo_that_edited_its_own_kit_is_reported_as_differing_not_as_an_error(repo, fake_kit):
+    kit.init_repo(repo)
+    (repo / "factory" / "AGENTS.md").write_text("my own rules\n")
+    check = _kit_check(repo)
+    assert check is not None and "AGENTS.md" in check.detail
+
+
+def test_doctor_ignores_engine_tests_and_caches_when_it_compares_kits(repo, fake_kit):
+    kit.init_repo(repo)
+    (fake_kit / "engine" / "tests" / "test_new.py").write_text("# a new engine test: never copied\n")
+    (fake_kit / "__pycache__" / "other.pyc").write_text("x")
+    assert _kit_check(repo).ok
+
+
+def test_doctor_says_nothing_about_the_kit_when_the_repo_has_none(repo, fake_kit):
+    assert _kit_check(repo) is None            # `init` has not run: repo-config already says so
