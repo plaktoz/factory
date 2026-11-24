@@ -1,0 +1,210 @@
+{
+  "task": "item-23-fakes-only-accepted",
+  "branch": "plaktoz/item-23-fakes-only-accepted",
+  "base": "origin/main",
+  "sessions": [
+    "49d45b31-89eb-4c9f-b387-eb6d734db70a"
+  ],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 0,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-23-fakes-only-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 3756.6,
+    "buckets": {
+      "agent_think": 33.5,
+      "think_reply": 930.9,
+      "run_tests": 172.2,
+      "investigate": 97.0,
+      "github": 107.9,
+      "commit_hooks": 5.0,
+      "deliver_chain": 107.8,
+      "records_checks": 35.0,
+      "wait_reply": 849.5,
+      "mixed_shell": 323.9,
+      "delegate": 75.2,
+      "wait_machine": 201.3,
+      "ask_owner": 11.8,
+      "wait_question": 804.3,
+      "write_spec": 1.4
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 304,
+      "output": 106115,
+      "cache_creation": 1685101,
+      "cache_read": 15531300
+    },
+    "subagent": {
+      "input": 488,
+      "output": 712674,
+      "cache_creation": 1443959,
+      "cache_read": 16243157
+    },
+    "by_activity": {
+      "run_tests": {
+        "new": 137741,
+        "reread": 2536592
+      },
+      "investigate": {
+        "new": 1944639,
+        "reread": 13923671
+      },
+      "github": {
+        "new": 564726,
+        "reread": 3908805
+      },
+      "commit_hooks": {
+        "new": 4730,
+        "reread": 201677
+      },
+      "deliver_chain": {
+        "new": 186550,
+        "reread": 1169874
+      },
+      "records_checks": {
+        "new": 530770,
+        "reread": 2479207
+      },
+      "think_reply": {
+        "new": 86026,
+        "reread": 1908113
+      },
+      "mixed_shell": {
+        "new": 95147,
+        "reread": 2638631
+      },
+      "delegate": {
+        "new": 239342,
+        "reread": 423629
+      },
+      "wait_machine": {
+        "new": 4218,
+        "reread": 93962
+      },
+      "ask_owner": {
+        "new": 15845,
+        "reread": 828417
+      },
+      "write_spec": {
+        "new": 17200,
+        "reread": 191570
+      },
+      "build_product": {
+        "new": 103669,
+        "reread": 1455645
+      },
+      "decision_pages": {
+        "new": 18038,
+        "reread": 14664
+      }
+    }
+  },
+  "prompts": {
+    "harness": 4,
+    "handoff": 2,
+    "instruction": 4,
+    "deliver": 2,
+    "approve": 2
+  },
+  "owner_decisions": [
+    {
+      "source": "question",
+      "header": "Rework notes",
+      "question": "When you answer `rework` at an approval, module 8 says the run goes back \"with your notes as feedback\". Today the engine routes the run back but throws your notes away (I confirmed this with a test: the stage's feedback folder stays empty). How should the notes reach the stage? (Proposed ADR `2026-11-22-human-rework-notes-reach-the-stage`)",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Feedback record with `notes` (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Usage warning",
+      "question": "Module 14's `start_attempt` runs inside the engine's run lock (`engine.py:606` is under `_start_task`, which holds the lock), so the lock question is already answered in code. The open part is what to do when the `usage_unreadable` event append fails (PR #141's open question). Today the error propagates and the attempt never starts. Which behaviour do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Warn and start anyway (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Repos step",
+      "question": "Appendix A, step 5, says `factory init --github` adds the repo to `repos` in the machine config. The code doesn't: `init --github` only copies the kit, writes `.factory/config/` and creates labels. Nothing reads `repos`, and `factory config init` writes `repos: []` that nothing uses. `tick --all-repos` only finds repos that already have a run, so a new repo is skipped by the scheduler until you start one by hand. Which do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Build it (Recommended)",
+      "category": "code",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Plugin cases",
+      "question": "Module 5's three plugin cases are open: what happens when `srt` is missing for a plugin task, when `plugin-hashes.json` can't be read, and when `requires.skills` names a skill not in `skills.lock`. Module 5 puts plugins in phase 1b, and the code has no plugin loader yet, so none of these is a phase 1a bug. What should the spec say for each?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Fail closed (Recommended)",
+      "category": "spec and design",
+      "importance": "medium",
+      "trigger": "changes-scope"
+    },
+    {
+      "source": "question",
+      "header": "File labels",
+      "question": "The pending signature check shows 12 mismatches. Step 1 of the ADR fixes seven by correcting file labels and parameter lists in the spec (it is safe and no code changes). Step 2 is about three names that exist in the spec but not as public functions in the code: `worktree_path`, `schedule_install` and `dispatch`. Which fix do you want for step 2?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Rename the spec to the code (Recommended)",
+      "category": "process and records",
+      "importance": "high",
+      "trigger": "costly-to-reverse"
+    }
+  ],
+  "agent_decisions": [
+    {
+      "id": "item-23-accept-fakes-only-evidence",
+      "importance": "low",
+      "category": "reversible choice",
+      "commit": "91623cc0f"
+    }
+  ],
+  "friction": {
+    "tool_errors": 4,
+    "interrupts": 0,
+    "secret_scans": 13,
+    "slow": [
+      [
+        557,
+        "AskUserQuestion"
+      ],
+      [
+        159,
+        "AskUserQuestion"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 0.4,
+    "PreToolUse": 19.6,
+    "PostToolUse": 16.4,
+    "PostToolBatch": 14.9,
+    "Stop": 1.7,
+    "PostToolUseFailure": 0.4
+  }
+}
