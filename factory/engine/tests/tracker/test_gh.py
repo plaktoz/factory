@@ -5,6 +5,7 @@ The stub replays output shaped like `gh ... --json` (fields checked with `gh iss
 checks; the entries below follow GitHub's documented fields (name, status, conclusion) and are marked ASSUMED."""
 
 import json
+import logging
 import subprocess
 
 import pytest
@@ -45,6 +46,36 @@ def test_list_new_reads_labelled_open_issues_and_builds_sources():
     call = stub.calls[0]
     assert call[:2] == ["issue", "list"] and "--label" in call and call[call.index("--label") + 1] == "factory"
     assert "--state" in call and "open" in call
+
+
+def _issues(count):
+    return json.dumps([{"number": n, "title": f"issue {n}", "body": "", "labels": [], "author": None,
+                        "updatedAt": "2026-11-01T00:00:00Z"} for n in range(1, count + 1)])
+
+
+def test_list_new_passes_limit_200_so_gh_does_not_stop_at_30():
+    stub = Stub({("issue", "list"): (0, _issues(3), "")})
+    GitHubTracker("acme/report", stub).list_new(None)
+    call = stub.calls[0]
+    assert call[call.index("--limit") + 1] == "200"
+
+
+def test_199_issues_give_no_sync_limit_warning(caplog):
+    stub = Stub({("issue", "list"): (0, _issues(199), "")})
+    with caplog.at_level(logging.WARNING, logger="factory_engine.gh"):
+        out = GitHubTracker("acme/report", stub).list_new(None)
+    assert len(out) == 199
+    assert "sync_limit_reached" not in caplog.text
+
+
+def test_200_issues_write_the_sync_limit_warning(caplog):
+    stub = Stub({("issue", "list"): (0, _issues(200), "")})
+    with caplog.at_level(logging.WARNING, logger="factory_engine.gh"):
+        out = GitHubTracker("acme/report", stub).list_new(None)
+    assert len(out) == 200
+    warnings = [r for r in caplog.records if "sync_limit_reached" in r.getMessage()]
+    assert len(warnings) == 1 and warnings[0].levelno == logging.WARNING
+    assert "acme/report" in warnings[0].getMessage() and "200" in warnings[0].getMessage()
 
 
 def test_list_new_uses_the_cursor():

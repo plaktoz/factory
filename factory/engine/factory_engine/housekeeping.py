@@ -616,29 +616,54 @@ def _archive(home: Path, item: GcItem, report: GcReport) -> None:
         state.release(lock)
 
 
-def _run_moved_since_plan(item: GcItem) -> str | None:
-    """Why a worktree or log must stay, when its run was resumed after the plan was made: an engine holds its lock, or
-    the run is no longer ended. None when the run is still ended and unlocked, or has no folder left on disk. The
-    re-read does not take the lock, so an engine that starts in the gap before the removal can still win."""
+@dataclass
+class _RunGate:
+    """What apply found when it took a run's lock to remove a worktree or cut a log. `lock` is held and must be
+    released by the caller; `reason` is why the item must stay (`lock` is then None), with `detail` for the lock's
+    own message."""
+    lock: state.Lock | None = None
+    reason: str | None = None
+    detail: str = ""
+
+
+def _gate_run(item: GcItem) -> _RunGate:
+    """Take the run's lock, then re-read its status, before a worktree is removed or a log is cut. An engine that
+    resumed the run since the plan holds the lock, so the item stays with the lock's message as detail; a run that is
+    no longer ended stays too. The lock is the run's `lock` file in the factory home, never a file in the worktree.
+    A worktree whose run folder is gone, or has no run.json, has nothing to lock or re-read: no lock is taken."""
     if item.run_dir is None or not (item.run_dir / "run.json").is_file():
-        return None
-    if state.lock_status(item.run_dir) == "live":
-        return "an engine holds the run lock"
-    if _read_json(item.run_dir / "run.json")["status"] not in ENDED:
-        return "the run is no longer ended"
-    return None
+        return _RunGate()
+    try:
+        lock = state.acquire_lock(item.run_dir, "housekeeping")
+    except FactoryError as e:
+        if e.code != "state.locked":
+            raise
+        return _RunGate(reason="an engine holds the run lock", detail=e.message)
+    try:
+        if _read_json(item.run_dir / "run.json")["status"] not in ENDED:
+            state.release(lock)
+            return _RunGate(reason="the run is no longer ended")
+    except (OSError, ValueError, KeyError):
+        state.release(lock)
+        raise
+    return _RunGate(lock=lock)
 
 
 def _apply_worktree(item: GcItem, report: GcReport) -> None:
     try:
-        moved = _run_moved_since_plan(item)
+        gate = _gate_run(item)
     except (OSError, ValueError, KeyError) as e:
         report.failed.append(Failed(item.path, f"could not re-read the run before removing its worktree: {e}"))
         return
-    if moved:
-        report.skipped.append(Skipped(item.path, item.run_id, f"{moved}; the worktree is kept"))
+    if gate.reason:
+        report.skipped.append(Skipped(item.path, item.run_id, f"{gate.reason}; the worktree is kept", gate.detail))
         return
-    out = _remove_worktree_safely(item.cfg, item.path, item.repo, dirty=item.dirty, check_unpushed=item.check_unpushed)
+    try:
+        out = _remove_worktree_safely(item.cfg, item.path, item.repo, dirty=item.dirty,
+                                      check_unpushed=item.check_unpushed)
+    finally:
+        if gate.lock is not None:
+            state.release(gate.lock)
     if out.status == "removed":
         report.removed.append(str(item.path))
     elif out.status == "kept":
@@ -694,18 +719,21 @@ def apply(plan: GcPlan) -> GcReport:
                 report.failed.append(Failed(item.path, f"could not delete the kit: {e}"))
         else:
             try:
-                moved = _run_moved_since_plan(item)
+                gate = _gate_run(item)
             except (OSError, ValueError, KeyError) as e:
                 report.failed.append(Failed(item.path, f"could not re-read the run before cutting its log: {e}"))
                 continue
-            if moved:
-                report.skipped.append(Skipped(item.path, item.run_id, f"{moved}; the log is not cut"))
+            if gate.reason:
+                report.skipped.append(Skipped(item.path, item.run_id, f"{gate.reason}; the log is not cut", gate.detail))
                 continue
             try:
                 _truncate(item.path, item.keep_bytes)
                 report.trimmed.append(str(item.path))
             except OSError as e:
                 report.failed.append(Failed(item.path, f"could not trim the log: {e}"))
+            finally:
+                if gate.lock is not None:
+                    state.release(gate.lock)
     for repo in sorted({i.repo for i in plan.items if i.repo is not None and i.repo.is_dir()}):
         gitops.git(repo, "worktree", "prune", check=False)
     return report

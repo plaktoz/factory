@@ -8,7 +8,7 @@ Every source is converted into the same `request.json` at pick-up, before the ru
 | --- | --- | --- |
 | CLI | `factory add "title" --type bug --body file.md` | Immediately |
 | Markdown | A file dropped in `.factory/inbox/` | `factory sync` or `factory watch` |
-| GitHub issue | An open issue with the `factory` label (at most 30 are read today; see module 7, Read GitHub requests) | `factory sync` or `factory watch`, via `gh issue list` |
+| GitHub issue | An open issue with the `factory` label (at most 200 are read per sync; see module 7, Read GitHub requests, and the `sync_limit_reached` warning there) | `factory sync` or `factory watch`, via `gh issue list` |
 
 ```json
 {
