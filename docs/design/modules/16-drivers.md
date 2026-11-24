@@ -17,7 +17,7 @@ The CLI is the primary driver and the only path that changes state. The router s
 | `factory run [<run> \| --all] [--detach]` | Starts an engine on runs that can proceed |
 | `factory resume <run>` | Continues a run whose engine has died (lock free). There is no `--force` option (decision `resume-has-no-force`) |
 | `factory recover <run> [--rebuild]` | Closes open attempts; `--rebuild` writes `run.json` from the last `run_snapshot` in `events.jsonl` (decision E1, [module 6](06-engine-core.md)) |
-| `factory status [<run>]` | Runs and stages in this repo; --here inside a worktree shows that run. Related: factory where, factory logs \<task>, factory events |
+| `factory status [<run>]` | Runs and stages in this repo; --here inside a worktree shows that run. Related: factory where, factory events |
 | `factory inbox` | Attention items across all repos, with decision page paths |
 | `factory open <run> [--stage <s>]` | Opens the decision page in the default browser |
 | `factory decide <run> --packet <sha> D1=opt-a [--notes] [--question D1="..."]` | Answers a human stop; refused if the packet changed |
@@ -26,7 +26,7 @@ The CLI is the primary driver and the only path that changes state. The router s
 | `factory retry`, `goto`, `skip`, `abort <run>` | Blocked-run actions |
 | `factory usage [<run>]` | Token totals per observed model |
 | `factory gc [--apply]` | Shows, then applies, the housekeeping plan |
-| `factory plugins enable\|disable <name>` | Manages plugins |
+| `factory plugins enable\|disable <name>` | Manages plugins. Phase 1b: not built in phase 1a (see the criteria below) |
 | `factory dashboard [--port 8765] [--detach]` | Starts the dashboard server |
 
 Internal commands used by workflow stages: `factory intake normalize`, `factory triage`, `factory sink <kind>`.
@@ -96,7 +96,8 @@ The **router skill** maps chat phrases to these same commands and shows decision
 
 Acceptance criteria:
 
-- [ ] Every command documented above exists, supports `--json` and uses the shared exit codes. (not ticked: `factory plugins enable|disable` is phase 1b and does not exist yet. `watch` is tested in `factory/launcher/tests/test_watch.py`, and `where` and `events` in `factory/engine/tests/drivers/test_cli.py`. Not every other row of the table has a test yet, so this stays open)
+- [x] Every command in the table above, except `factory plugins enable|disable`, exists, supports `--json` and uses the shared exit codes. (test: factory/engine/tests/drivers/test_command_table.py::test_every_row_answers_a_bad_flag_with_the_shared_shape_and_exit_2, ::test_every_engine_row_is_a_subcommand, and the per-row tests in that file (most rows have a success and an error case); retry, goto and skip are in factory/engine/tests/drivers/test_cli.py::test_retry_starts_an_engine_when_no_live_lock_holds_the_run, ::test_goto_starts_an_engine_when_no_live_lock_holds_the_run, ::test_skip_refuses_a_gate_not_marked_skippable_and_starts_nothing; factory/launcher/tests/test_command_table.py::test_every_machine_row_answers_a_bad_flag_with_the_shared_shape_and_exit_2, ::test_every_engine_row_is_handed_to_the_engine_with_its_json_flag_and_exit_code, and the per-row machine tests in that file; the three defects found are fixed in commit 67923dd)
+- [ ] `factory plugins enable|disable <name>` exists, supports `--json` and uses the shared exit codes. (not ticked: phase 1b. `plugins` is not a subcommand of either parser yet. The launcher passes it to the engine, and with no engine folder it answers `kit.no_engine`; the engine parser has no `plugins` command)
 - [x] Two repos on different kit versions are driven by their own engine through one launcher. (test: factory/launcher/tests/test_two_kit_dispatch.py::test_each_run_is_answered_by_its_own_repos_engine, ::test_a_run_keeps_its_engine_after_the_repo_moves_to_a_new_kit, ::test_tick_started_engine_runs_the_runs_own_snapshot_engine; decision 2026-11-20-which-engine-serves-each-repo, built as `docs/tasks.md` item 17)
 - [x] `decide`, `retry`, `goto` and `skip` start an engine only when no live lock exists. (test: factory/engine/tests/drivers/test_cli.py::test_retry_refuses_a_run_a_live_engine_holds, ::test_goto_refuses_a_run_a_live_engine_holds, ::test_skip_refuses_a_run_a_live_engine_holds, ::test_decide_records_the_answer_but_starts_no_engine_while_a_live_engine_holds_the_run, ::test_spawn_engine_returns_none_while_a_live_lock_holds_the_run)
 - [x] Two ticks fired together: the second exits at once and no run starts twice. (test: factory/launcher/tests/test_tick.py::test_a_tick_that_finds_another_tick_holding_the_lock_exits_at_once; factory/launcher/tests/test_tick.py::test_two_ticks_in_a_row_do_not_start_a_run_twice)

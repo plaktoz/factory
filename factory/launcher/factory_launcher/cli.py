@@ -41,6 +41,19 @@ def _emit(ok: bool, code: str, message: str, hint: str, data: dict, as_json: boo
         print(f"{code}: {message}\nhint: {hint}", file=sys.stderr)
 
 
+_WANTS_JSON = {"on": False}  # set by main() before parsing, so a usage error can still print the shared shape
+
+
+class _Parser(argparse.ArgumentParser):
+    """argparse with the shared error shape: with --json a usage error is one JSON object on stdout, exit 2 (section 18)."""
+
+    def error(self, message: str):  # type: ignore[override]
+        if _WANTS_JSON["on"]:
+            _emit(False, "cli.usage", message, self.format_usage().strip(), {}, True)
+            raise SystemExit(2)
+        super().error(message)
+
+
 def _git_top(folder: Path) -> Path | None:
     out = subprocess.run(["git", "-C", str(folder), "rev-parse", "--show-toplevel"], capture_output=True, text=True,
                          check=False)
@@ -287,7 +300,7 @@ def _doctor(args, home: Path) -> int:
 
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="factory", description="The factory on this machine. Other commands go to the repo's engine.")
+    p = _Parser(prog="factory", description="The factory on this machine. Other commands go to the repo's engine.")
     sub = p.add_subparsers(dest="command", metavar="<command>")
 
     t = sub.add_parser("tick", help="one scheduled pass")
@@ -334,6 +347,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
+    _WANTS_JSON["on"] = "--json" in argv
     parser = _parser()
     if argv and argv[0] not in MACHINE and argv[0] not in ("-h", "--help"):
         return _engine_passthrough(argv)
@@ -346,7 +360,10 @@ def main(argv: list[str] | None = None) -> int:
     if job is not None:
         args.job = job
     if args.command is None:
-        parser.print_help()
+        if _WANTS_JSON["on"]:
+            _emit(False, "cli.usage", "a command is required", parser.format_usage().strip(), {}, True)
+        else:
+            parser.print_help()
         return 2
     home = state.factory_home()
     try:
