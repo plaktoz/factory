@@ -39,11 +39,19 @@ def _classify(stderr: str, args: tuple[str, ...]) -> tuple[str, str]:
         return "git.worktree_dirty", "show the changed files; remove the worktree only after the check passes"
     if "already exists" in stderr:
         return "git.path_exists", "remove the existing path or use a new run id"
+    if args[:1] == ("push",) and _hook_stopped_push(stderr):
+        return "git.hook_failed", "show the hook output; a failing repo hook is rework (module 8)"
     if "rejected" in stderr and args[:1] == ("push",):
         return "git.push_rejected", "base sync and one retry have run; a person must look at this"
     if "Authentication" in stderr or "authentication" in stderr or "gh auth login" in stderr:
         return "git.auth_expired", "run gh auth login, then retry"
     return "git.command_failed", "run the same git command by hand to reproduce it"
+
+
+def _hook_stopped_push(stderr: str) -> bool:
+    """A pre-push hook that exits non-zero ends the push before any ref is sent, so git prints the hook's output and
+    `failed to push some refs` with no ` ! [...]` ref-status line. A remote refusal or a non-fast-forward has that line."""
+    return "failed to push some refs" in stderr and not any(line.lstrip().startswith("! [") for line in stderr.splitlines())
 
 
 def _commit_args(message: str) -> list[str]:

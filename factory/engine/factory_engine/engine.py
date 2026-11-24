@@ -659,7 +659,11 @@ class Engine:
             worktree.mkdir(parents=True, exist_ok=True)
         else:
             bases = self._base_branches(run, run_dir, stage, spec)
-            worktree = ts.worktree or gitops.create_task_worktree(self.repo, self.cfg, run.run_id, spec.id, base_branches=bases)
+            if ts.worktree is None:
+                worktree = gitops.create_task_worktree(self.repo, self.cfg, run.run_id, spec.id, base_branches=bases)
+                gitops.mark_run(worktree, run_dir, run.run_id, run.repo_key)  # module 7: every worktree the engine creates
+            else:
+                worktree = ts.worktree
             ts.task_base = bases[0]
         ts.worktree = worktree
         harness = self._harness_of(spec)
@@ -1029,12 +1033,18 @@ class Engine:
             delivery.evaluate_merge(run_dir, self.cfg, changed=delivery.changed_since_base(run, self.cfg), ci="pending")
         summary.render_summary(run_dir, usage_mod.summarize([run_dir]), base=(self.cfg.repo or {}).get("base_branch", "main"),
                                delivering=True)
-        if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
-            gitops.push(run.worktree, run.pr.head)
-        # Read who opens the pull request before anything is opened: if the read fails, no pull request exists yet
-        # and the run stays where it was, so the next pass can try again.
-        opener = self.prs.current_user() if opening else None
-        sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
+        try:
+            if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
+                gitops.push(run.worktree, run.pr.head)
+            # Read who opens the pull request before anything is opened: if the read fails, no pull request exists yet
+            # and the run stays where it was, so the next pass can try again.
+            opener = self.prs.current_user() if opening else None
+            sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
+        except FactoryError as e:
+            if e.code != "git.hook_failed":
+                raise
+            # A repo pre-push hook refused the push: rework, with the hook's output in the feedback (module 8, 17A).
+            return self._push_hook_failed(run, run_dir, lock, e, result)
         if sink.pr is not None:
             if opening:
                 self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run, pr_author=opener))
@@ -1047,6 +1057,18 @@ class Engine:
         state.write_run(run_dir, run, lock=lock)
         state.append_event(run_dir, "run_done", sink=sink.sink, target=sink.target)
         return result
+
+    def _push_hook_failed(self, run: Run, run_dir: Path, lock: Lock, error: FactoryError, result: TickResult) -> TickResult:
+        """A repo pre-push hook stopped the push at delivery. It routes like a failed gate on the last stage: the stage's
+        on_fail edge, with the hook output in the feedback record (module 8). Nothing reached the remote."""
+        wf = self._load(run.workflow)
+        stage = wf.stages[-1]
+        failed = rework.hook_failure_result(error)
+        routing = rework.route(run, wf, stage, rework.classify(failed))
+        if routing.action == "goto":
+            rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
+                                  max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
+        return self._apply(run, run_dir, lock, wf, stage, routing, result)
 
     def _merge_review(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
         """Read the run's pull request (module 13, watch_pr). Merged ends the run and removes its worktree, closed aborts

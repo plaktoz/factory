@@ -256,3 +256,61 @@ def test_mask_hides_every_secret_and_longest_first():
 
 def test_mask_ignores_empty_secrets():
     assert redact.mask("plain", ["", None] if False else [""]) == "plain"
+
+
+# --- machine file: a literal secret is allowed, but warned about when other users can read it (module 3, module 9) ---
+
+def _machine_with_literal_env(tmp_path, mode, value="sk-literal"):
+    home = write_home(tmp_path, "harnesses:\n  claude:\n    command: claude\n    env:\n"
+                                f"      ANTHROPIC_API_KEY: {value}\n")
+    (home / "config.yaml").chmod(mode)
+    return home
+
+
+def test_a_machine_file_with_a_literal_env_value_readable_by_others_warns(tmp_path):
+    home = _machine_with_literal_env(tmp_path, 0o644)
+    with pytest.warns(UserWarning, match="readable by other users") as w:
+        load_config(None, env={"FACTORY_HOME": str(home)})
+    assert str(home / "config.yaml") in str(w[0].message)
+
+
+def test_a_machine_file_readable_only_by_its_owner_does_not_warn(tmp_path):
+    import warnings
+    home = _machine_with_literal_env(tmp_path, 0o600)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        load_config(None, env={"FACTORY_HOME": str(home)})
+
+
+def test_a_machine_file_with_no_literal_env_value_does_not_warn_even_when_open(tmp_path):
+    import warnings
+    home = _machine_with_literal_env(tmp_path, 0o644, value="${ANTHROPIC_API_KEY}")
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        load_config(None, env={"FACTORY_HOME": str(home)})
+
+
+# --- merge-policy.yaml is checked against its schema at load, with the file and the fix (module 3) ---
+
+BAD_MERGE_POLICY = ("default: auto\nauto:\n  workflows: []\n  type_source: []\n  require:\n    gates: all_passed\n"
+                    "    ci: green\n    max_files: 1\n    max_lines: 1\nnever_auto_if: {}\n")
+
+
+def test_load_config_refuses_a_bad_merge_policy_naming_the_file_and_the_fix(tmp_path):
+    home = write_home(tmp_path, "")
+    repo = repo_with(tmp_path, BASE_REPO)
+    (repo / ".factory" / "config" / "merge-policy.yaml").write_text(BAD_MERGE_POLICY)
+    with pytest.raises(FactoryError) as e:
+        load_config(repo, env={"FACTORY_HOME": str(home)})
+    assert e.value.code == "config.invalid"
+    assert "merge-policy.yaml" in e.value.message and "default" in e.value.message
+    assert "merge-policy.schema.json" in e.value.hint
+
+
+def test_load_config_accepts_a_valid_merge_policy(tmp_path):
+    home = write_home(tmp_path, "")
+    repo = repo_with(tmp_path, BASE_REPO)
+    (repo / ".factory" / "config" / "merge-policy.yaml").write_text(
+        "default: human\nauto:\n  workflows: []\n  type_source: [explicit]\n  require:\n    gates: all_passed\n"
+        "    ci: green\n    max_files: 10\n    max_lines: 300\nnever_auto_if: {}\n")
+    assert load_config(repo, env={"FACTORY_HOME": str(home)}).repo["base_branch"] == "main"
