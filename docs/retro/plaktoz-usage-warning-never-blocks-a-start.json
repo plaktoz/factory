@@ -1,0 +1,175 @@
+{
+  "task": "usage-warning-never-blocks-a-start",
+  "branch": "plaktoz/usage-warning-never-blocks-a-start",
+  "base": "origin/main",
+  "sessions": [
+    "49d45b31-89eb-4c9f-b387-eb6d734db70a",
+    "dbdd3670-9229-4be4-a0cd-24c79e0235dc"
+  ],
+  "commits": 1,
+  "lines": {
+    "product": 29,
+    "spec": 2,
+    "process": 112
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "usage-warning-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 4064.6,
+    "buckets": {
+      "agent_think": 33.5,
+      "think_reply": 935.1,
+      "run_tests": 135.3,
+      "investigate": 118.4,
+      "github": 90.0,
+      "commit_hooks": 5.0,
+      "deliver_chain": 66.6,
+      "records_checks": 28.8,
+      "wait_reply": 1416.1,
+      "mixed_shell": 263.4,
+      "delegate": 33.0,
+      "wait_machine": 180.0,
+      "ask_owner": 5.6,
+      "wait_question": 716.2,
+      "write_spec": 37.7
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 304,
+      "output": 99999,
+      "cache_creation": 977299,
+      "cache_read": 11864234
+    },
+    "subagent": {
+      "input": 356,
+      "output": 490417,
+      "cache_creation": 754852,
+      "cache_read": 11428744
+    },
+    "by_activity": {
+      "run_tests": {
+        "new": 115949,
+        "reread": 1962604
+      },
+      "investigate": {
+        "new": 1104527,
+        "reread": 10532390
+      },
+      "github": {
+        "new": 415221,
+        "reread": 3039798
+      },
+      "commit_hooks": {
+        "new": 4730,
+        "reread": 201677
+      },
+      "deliver_chain": {
+        "new": 180175,
+        "reread": 651592
+      },
+      "records_checks": {
+        "new": 286762,
+        "reread": 1709303
+      },
+      "think_reply": {
+        "new": 56691,
+        "reread": 1593938
+      },
+      "mixed_shell": {
+        "new": 58693,
+        "reread": 1933290
+      },
+      "delegate": {
+        "new": 10001,
+        "reread": 190670
+      },
+      "wait_machine": {
+        "new": 4218,
+        "reread": 93962
+      },
+      "ask_owner": {
+        "new": 13132,
+        "reread": 276386
+      },
+      "build_product": {
+        "new": 38440,
+        "reread": 550522
+      },
+      "decision_pages": {
+        "new": 18038,
+        "reread": 14664
+      },
+      "write_spec": {
+        "new": 16650,
+        "reread": 542182
+      }
+    }
+  },
+  "prompts": {
+    "harness": 4,
+    "handoff": 2,
+    "instruction": 8,
+    "deliver": 3,
+    "approve": 1
+  },
+  "owner_decisions": [
+    {
+      "source": "question",
+      "header": "Rework notes",
+      "question": "When you answer `rework` at an approval, module 8 says the run goes back \"with your notes as feedback\". Today the engine routes the run back but throws your notes away (I confirmed this with a test: the stage's feedback folder stays empty). How should the notes reach the stage? (Proposed ADR `2026-11-22-human-rework-notes-reach-the-stage`)",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Feedback record with `notes` (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Usage warning",
+      "question": "Module 14's `start_attempt` runs inside the engine's run lock (`engine.py:606` is under `_start_task`, which holds the lock), so the lock question is already answered in code. The open part is what to do when the `usage_unreadable` event append fails (PR #141's open question). Today the error propagates and the attempt never starts. Which behaviour do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Warn and start anyway (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    }
+  ],
+  "agent_decisions": [
+    {
+      "id": "usage-warning-never-blocks-a-start",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "2e19720e2"
+    }
+  ],
+  "friction": {
+    "tool_errors": 5,
+    "interrupts": 0,
+    "secret_scans": 10,
+    "slow": [
+      [
+        557,
+        "AskUserQuestion"
+      ],
+      [
+        159,
+        "AskUserQuestion"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 1.9,
+    "PreToolUse": 22.1,
+    "PostToolUse": 19.2,
+    "PostToolBatch": 17.9,
+    "Stop": 2.9,
+    "PostToolUseFailure": 0.7
+  }
+}

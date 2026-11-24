@@ -56,7 +56,7 @@ def summarize(run_dirs: list[Path], *, since: date | None = None) -> UsageReport
   - An unreadable line, including one with no `attempt` number, is skipped by `read_usage` and `close_open_attempts`. The read goes on and does not raise.
   - A record written after a torn last line starts on a new line. The torn line is skipped, and the new record is read, so its attempt can finish.
   - When the last line for an attempt is unreadable, the last readable line for that attempt is used. An unreadable line never hides an earlier whole line.
-  - `start_attempt` writes one `usage_unreadable` event for each unreadable line, with the task id and the line number, to the run's `events.jsonl`. A line is reported once: before writing, `start_attempt` reads `events.jsonl` and skips a line whose task id and line number already appear in a `usage_unreadable` event. Read paths (`read_usage`, `summarize`) write nothing.
+  - `start_attempt` writes one `usage_unreadable` event for each unreadable line, with the task id and the line number, to the run's `events.jsonl`. If that write fails (an `OSError`), the warning is skipped, the attempt still starts and gets its number, and the next `start_attempt` tries again, because the line is still unreported. The owner chose this over failing the attempt (2026-11-24). A line is reported once: before writing, `start_attempt` reads `events.jsonl` and skips a line whose task id and line number already appear in a `usage_unreadable` event. Read paths (`read_usage`, `summarize`) write nothing.
 
 Acceptance criteria:
 
@@ -72,7 +72,7 @@ Acceptance criteria:
 - [x] A record written after a torn last line starts a new line, and its attempt finishes. (test: factory/engine/tests/usage/test_usage.py::test_a_record_after_a_torn_line_starts_on_a_new_line_and_its_attempt_finishes)
 - [x] An unreadable last line does not hide the attempt's earlier whole line. (test: factory/engine/tests/usage/test_usage.py::test_an_unreadable_last_line_does_not_hide_an_earlier_whole_line_for_the_attempt)
 - [x] Attempt numbers never reuse a number seen in an unreadable line. (test: factory/engine/tests/usage/test_usage.py::test_start_attempt_does_not_reuse_a_number_seen_in_an_unreadable_line)
-- [x] `start_attempt` writes one `usage_unreadable` event per unreadable line, with the task id and line number. (test: factory/engine/tests/usage/test_usage.py::test_start_attempt_writes_one_usage_unreadable_event_per_line_with_the_task_and_line)
+- [x] `start_attempt` writes one `usage_unreadable` event per unreadable line, with the task id and line number. (test: factory/engine/tests/usage/test_usage.py::test_a_failed_usage_unreadable_write_does_not_stop_the_attempt_and_is_retried_at_the_next_start; factory/engine/tests/usage/test_usage.py::test_start_attempt_writes_one_usage_unreadable_event_per_line_with_the_task_and_line)
 - [x] Read paths write no events. (test: factory/engine/tests/usage/test_usage.py::test_read_paths_write_no_events)
 - [x] The report total counts an attempt with several models once. (test: factory/engine/tests/usage/test_usage.py::test_the_total_counts_an_attempt_with_several_models_once)
 - [x] `factory usage` labels the by-model rows as per model, and prints the total. (test: factory/engine/tests/usage/test_usage.py::test_factory_usage_labels_the_model_rows_and_prints_the_total)

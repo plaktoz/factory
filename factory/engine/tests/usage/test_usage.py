@@ -222,6 +222,29 @@ def test_start_attempt_writes_one_usage_unreadable_event_per_line_with_the_task_
     assert unreadable_events(run_dir) == [{"task_id": "backend", "line": 2}]
 
 
+def test_a_failed_usage_unreadable_write_does_not_stop_the_attempt_and_is_retried_at_the_next_start(tmp_path, monkeypatch):
+    run_dir, run = make(tmp_path)
+    usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
+    write_raw(run_dir, b'{"torn')  # line 2
+    real = usage.append_event
+
+    def fail_for_usage_unreadable(rd, event, **fields):
+        if event == "usage_unreadable":
+            raise OSError("disk full")
+        return real(rd, event, **fields)
+
+    monkeypatch.setattr(usage, "append_event", fail_for_usage_unreadable)
+    n = usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
+
+    assert n == 2, "the attempt still starts and gets its number"
+    assert [r.attempt for r in usage.read_usage(run_dir, "backend")] == [1, 2]
+    assert unreadable_events(run_dir) == []
+
+    monkeypatch.setattr(usage, "append_event", real)
+    usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
+    assert unreadable_events(run_dir) == [{"task_id": "backend", "line": 2}]
+
+
 def test_read_paths_write_no_events(tmp_path):
     run_dir, run = make(tmp_path)
     usage.start_attempt(run_dir, run, "backend", stage="fix", harness="claude", model_requested=None)
