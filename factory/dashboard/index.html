@@ -106,7 +106,9 @@ pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-
   }
 
   function copyButton(text, label) {
-    return '<button type="button" class="copy" data-copy="' + esc(text) + '">' + (label || "Copy") + "</button>";
+    label = label || "Copy";
+    return '<button type="button" class="copy" data-copy="' + esc(text) + '" data-label="' + esc(label) + '">' +
+           label + "</button>";
   }
 
   function fallbackCopy(text) {
@@ -120,7 +122,8 @@ pre{background:rgba(127,127,127,.08);padding:10px;overflow:auto;white-space:pre-
     var btn = ev.target.closest && ev.target.closest("button.copy");
     if (!btn) { return; }
     var text = btn.getAttribute("data-copy");
-    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = "Copy"; }, 1200); };
+    var label = btn.getAttribute("data-label") || "Copy";
+    var done = function () { btn.textContent = "Copied"; setTimeout(function () { btn.textContent = label; }, 1200); };
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
     } else { fallbackCopy(text); done(); }
