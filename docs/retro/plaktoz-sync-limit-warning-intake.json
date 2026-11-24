@@ -1,0 +1,42 @@
+{
+  "task": "sync-limit-warning-intake",
+  "branch": "plaktoz/sync-limit-warning-intake",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 51,
+    "spec": 4,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-57-sync-limit-intake"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "issue-sync-limit-and-warning",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "1473eb08b"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import state
-from .adapters.tracker.base import TrackerAdapter
+from .adapters.tracker.base import SYNC_LIMIT, TrackerAdapter
 from .atomic import append_jsonl
 from .config import Config
 from .errors import FactoryError
@@ -390,7 +390,14 @@ def sync(repo: Path, cfg: Config, tracker: TrackerAdapter) -> SyncReport:
     home = state.factory_home()
     key = state.repo_key(repo, cfg)
     report = SyncReport()
-    for source in read_sources(repo, cfg, tracker):
+    sources = read_sources(repo, cfg, tracker)
+    github = sum(1 for source in sources if source.type == "github")
+    if github >= SYNC_LIMIT:
+        # gh stopped at the limit, so open issues beyond it were not read this sync (module 4, module 7).
+        _record_event(home, key, "sync_limit_reached", limit=SYNC_LIMIT, returned=github,
+                      message=f"{key}: the sync read {github} open factory issues, the limit of {SYNC_LIMIT}; "
+                              f"issues beyond it are not read this sync")
+    for source in sources:
         try:
             request = normalize(source, cfg)
         except FactoryError as e:

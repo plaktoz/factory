@@ -8,7 +8,7 @@ Every source is converted into the same `request.json` at pick-up, before the ru
 | --- | --- | --- |
 | CLI | `factory add "title" --type bug --body file.md` | Immediately |
 | Markdown | A file dropped in `.factory/inbox/` | `factory sync` or `factory watch` |
-| GitHub issue | An open issue with the `factory` label (at most 200 are read per sync; see module 7, Read GitHub requests, and the `sync_limit_reached` warning there) | `factory sync` or `factory watch`, via `gh issue list` |
+| GitHub issue | An open issue with the `factory` label (at most 200 are read per sync; when `gh` returns 200, `sync` writes `sync_limit_reached` to the intake log, see below and module 7, Read GitHub requests) | `factory sync` or `factory watch`, via `gh issue list` |
 
 ```json
 {
@@ -71,7 +71,7 @@ stages:
 
 **Built behavior** (wave 2, where the rules above left a choice):
 
-- An invalid request gets the `factory:invalid` label (added to module 7's status labels) and a comment, or `factory_error` in the front matter. It is marked once; a later sync does not repeat it. The reason is also written to `$FACTORY_HOME/intake/<repo key>/events.jsonl` as `request_invalid`, because no run exists to hold the event. `request_duplicate` goes to the same log.
+- An invalid request gets the `factory:invalid` label (added to module 7's status labels) and a comment, or `factory_error` in the front matter. It is marked once; a later sync does not repeat it. The reason is also written to `$FACTORY_HOME/intake/<repo key>/events.jsonl` as `request_invalid`, because no run exists to hold the event. `request_duplicate` goes to the same log. So does `sync_limit_reached` (data: `limit`, `returned`, `message`): when the GitHub source returns 200 issues, `sync` writes it once per sync, because `gh` stopped at the limit and the issues beyond it are not read. `factory sync` and the tick both call `sync`, so both write it. The line is not an error and the sync goes on.
 - The body hash ignores the factory's own `factory_status`, `factory_run` and `factory_error` keys, so writing status into a markdown file never makes it look changed.
 - The duplicate check reads active runs and, for archived runs, the `request.json` inside each zip in `archive/<repo key>/`. `history.jsonl` holds no source ref, so it cannot answer the question.
 - A changed body on an active run is logged as `request_changed` once per new hash. The attention item is raised only when no engine holds the run lock; otherwise the engine owns the write.
@@ -84,7 +84,7 @@ stages:
   - 3: `load_config`, `validate`
   - 6A: `factory_home`, `repo_key`, `new_run_id`, `init_run`, `find_by_source`, `append_event`
   - 7: `TrackerAdapter`, `snapshot_kit`
-- **Writes:** `request.json` and the initial run folder in the factory home, with its `paths` block; events `run_created`, `request_invalid`, `request_duplicate`, `request_changed`.
+- **Writes:** `request.json` and the initial run folder in the factory home, with its `paths` block; events `run_created`, `request_invalid`, `request_duplicate`, `request_changed`, and `sync_limit_reached` (intake log only).
 - **CLI it backs:** `add`, `sync`, and the internal `triage`.
 
 ```python

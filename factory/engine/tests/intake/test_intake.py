@@ -20,6 +20,7 @@ from factory_engine import intake, state  # noqa: E402
 from factory_engine.adapters.tracker.fake import FakeTracker  # noqa: E402
 from factory_engine.config import Config  # noqa: E402
 from factory_engine.errors import FactoryError  # noqa: E402
+from factory_engine.gh import GitHubTracker  # noqa: E402
 from factory_engine.triage import check_type_resolved, triage_rules  # noqa: E402
 from factory_engine.types import GateContext, GateSpec, Request, Source  # noqa: E402
 
@@ -245,6 +246,41 @@ def test_broken_front_matter_is_invalid_and_does_not_stop_the_sync(repo, cfg, tr
     assert report.invalid == [".factory/inbox/broken.md"]
     assert len(report.created) == 1
     assert "factory_error:" in bad.read_text()
+
+
+# --- the GitHub sync limit (decision issue-sync-limit-and-warning) ---
+
+class RecordingGh:
+    """A gh runner that lists `count` open issues with no title (so each is invalid and no run is made) and records every call."""
+
+    def __init__(self, count):
+        self.calls = []
+        self.issues = json.dumps([{"number": n, "title": "", "body": "", "labels": [{"name": "factory"}], "author": None,
+                                   "updatedAt": "2026-11-01T00:00:00Z"} for n in range(1, count + 1)])
+
+    def __call__(self, args):
+        self.calls.append(args)
+        out = self.issues if args[:2] == ["issue", "list"] else ""
+        return subprocess.CompletedProcess(args, 0, out, "")
+
+
+def intake_events(home):
+    path = home / "intake" / KEY / "events.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def test_200_issues_write_a_sync_limit_reached_line_to_the_intake_log(repo, cfg, home):
+    intake.sync(repo, cfg, GitHubTracker("acme/report", RecordingGh(200)))
+    [event] = [e for e in intake_events(home) if e["type"] == "sync_limit_reached"]
+    assert event["data"]["limit"] == 200
+    assert "200" in event["data"]["message"] and "not read" in event["data"]["message"]
+    assert "acme/report" in event["data"]["message"]
+
+
+def test_199_issues_write_no_sync_limit_reached_line(repo, cfg, home):
+    intake.sync(repo, cfg, GitHubTracker("acme/report", RecordingGh(199)))
+    assert [e for e in intake_events(home) if e["type"] == "sync_limit_reached"] == []
+    assert len([e for e in intake_events(home) if e["type"] == "request_invalid"]) == 199
 
 
 # --- run id ---
