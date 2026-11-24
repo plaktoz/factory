@@ -3,6 +3,7 @@ const { JSDOM } = await import(NM + "/jsdom/lib/api.js");
 import fs from "node:fs";
 const dom = new JSDOM("<!doctype html><body></body>");
 globalThis.window = dom.window; globalThis.document = dom.window.document;
+globalThis.Element = dom.window.Element;   // DOMPurify, which mermaid calls for a labelled node, reads this global
 const mermaid = (await import(NM + "/mermaid/dist/mermaid.core.mjs")).default;
 mermaid.initialize({ startOnLoad: false });
 let bad = 0, n = 0;
