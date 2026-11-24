@@ -31,6 +31,7 @@ class _Pr:
 class FakePullRequests:
     def __init__(self):
         self.login = "factory"  # what current_user returns; a test sets it to the issue author to test D2
+        self.login_error: Exception | None = None  # set by a test to make current_user raise
         self.prs: dict[int, _Pr] = {}
         self.fail_next: Exception | None = None
         self.calls: list[str] = []
@@ -78,6 +79,8 @@ class FakePullRequests:
             p.state = "merged"
 
     def current_user(self) -> str:
+        if self.login_error is not None:  # a test makes the read fail, as gh does when it gives no login
+            raise self.login_error
         return self.login  # not recorded in calls: it reads who is signed in and acts on no pull request
 
     def request_reviewers(self, pr: PrRef, users: list[str]) -> None:

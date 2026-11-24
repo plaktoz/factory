@@ -971,10 +971,13 @@ class Engine:
                                delivering=True)
         if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
             gitops.push(run.worktree, run.pr.head)
+        # Read who opens the pull request before anything is opened: if the read fails, no pull request exists yet
+        # and the run stays where it was, so the next pass can try again.
+        opener = self.prs.current_user() if opening else None
         sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
         if sink.pr is not None:
             if opening:
-                self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run, pr_author=self.prs.current_user()))
+                self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run, pr_author=opener))
             run.pr = sink.pr
             run.status = "awaiting_approval"
             result.attention = run.attention = notify.attention_for(run, now=self.clock.now().isoformat())
