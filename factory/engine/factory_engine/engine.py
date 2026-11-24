@@ -10,8 +10,10 @@ or waiting on a person, then releases the locks and returns.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -118,16 +120,25 @@ class Engine:
 
     def stop(self, run_id: str, *, reason: str) -> None:
         """Abort a run, close its open attempts and record why. A run that has ended is left alone."""
+        with self._held(run_id) as (run_dir, lock):
+            self._abort(run_dir, lock, reason)
+
+    def _abort(self, run_dir: Path, lock: Lock, reason: str) -> None:
+        run = state.read_run(run_dir)
+        if run.status in ENDED:
+            return
+        usage_mod.close_open_attempts(run_dir)
+        run.status, run.attention = "aborted", None
+        state.write_run(run_dir, run, lock=lock)
+        state.append_event(run_dir, "run_aborted", reason=reason)
+
+    @contextmanager
+    def _held(self, run_id: str):
+        """The run's directory and lock for one action, taken here and released at the end."""
         run_dir = self._run_dir(run_id)
         lock = state.acquire_lock(run_dir, self.owner)
         try:
-            run = state.read_run(run_dir)
-            if run.status in ENDED:
-                return
-            usage_mod.close_open_attempts(run_dir)
-            run.status, run.attention = "aborted", None
-            state.write_run(run_dir, run, lock=lock)
-            state.append_event(run_dir, "run_aborted", reason=reason)
+            yield run_dir, lock
         finally:
             state.release(lock)
 
@@ -136,36 +147,38 @@ class Engine:
     def retry(self, run_id: str, *, stage: str | None = None, note: str | None = None, by: str = "cli") -> None:
         """Run a blocked stage once more. The note, if any, is queued on that stage's tasks and reaches the worker as
         feedback. Loop counters stay as they are: a retry is one more attempt, not another loop."""
-        run_dir, lock, run, wf = self._blocked(run_id)
-        try:
-            target = self._stage_of(wf, stage or run.stage)
-            for spec in self._specs(target, run_dir):
-                if (run_dir / "tasks" / spec.id / "task.json").is_file() and state.read_task(run_dir, spec.id).status == "failed":
-                    (run_dir / "tasks" / spec.id / "task.json").unlink()  # a failed task starts again with a fresh state
-                if note and note.strip():
-                    self._task_state(run_dir, lock, target, spec)  # a fresh pending task can take the note
-                    notes.queue_note(run_dir, spec.id, note.strip(), by=by)
-            self._unblock(run, run_dir, lock, target.id)
-            state.append_event(run_dir, "run_retried", stage=target.id, by=by, note=bool(note and note.strip()))
-        finally:
-            state.release(lock)
+        with self._held(run_id) as (run_dir, lock):
+            self._retry(run_dir, lock, stage, note, by)
+
+    def _retry(self, run_dir: Path, lock: Lock, stage: str | None, note: str | None, by: str) -> None:
+        run, wf = self._blocked(run_dir)
+        target = self._stage_of(wf, stage or run.stage)
+        for spec in self._specs(target, run_dir):
+            if (run_dir / "tasks" / spec.id / "task.json").is_file() and state.read_task(run_dir, spec.id).status == "failed":
+                (run_dir / "tasks" / spec.id / "task.json").unlink()  # a failed task starts again with a fresh state
+            if note and note.strip():
+                self._task_state(run_dir, lock, target, spec)  # a fresh pending task can take the note
+                notes.queue_note(run_dir, spec.id, note.strip(), by=by)
+        self._unblock(run, run_dir, lock, target.id)
+        state.append_event(run_dir, "run_retried", stage=target.id, by=by, note=bool(note and note.strip()))
 
     def goto(self, run_id: str, stage: str, *, by: str = "cli") -> None:
         """Send a blocked run to any earlier stage. That stage and every later one start again, with no loop limit,
         because a person chose the route."""
-        run_dir, lock, run, wf = self._blocked(run_id)
-        try:
-            target = self._stage_of(wf, stage)
-            order = [s.id for s in wf.stages]
-            if run.stage in order and order.index(target.id) > order.index(run.stage):
-                raise FactoryError("config.invalid", f"{target.id!r} is after the blocked stage {run.stage!r}",
-                                   hint="goto sends a run back to this stage or an earlier one")
-            reset = rework._reset_from(run, wf, target.id)
-            self._reset_tasks(run_dir, wf, reset)
-            self._unblock(run, run_dir, lock, target.id)
-            state.append_event(run_dir, "run_routed", to_stage=target.id, reset=reset, by=by)
-        finally:
-            state.release(lock)
+        with self._held(run_id) as (run_dir, lock):
+            self._goto(run_dir, lock, stage, by)
+
+    def _goto(self, run_dir: Path, lock: Lock, stage: str, by: str) -> None:
+        run, wf = self._blocked(run_dir)
+        target = self._stage_of(wf, stage)
+        order = [s.id for s in wf.stages]
+        if run.stage in order and order.index(target.id) > order.index(run.stage):
+            raise FactoryError("config.invalid", f"{target.id!r} is after the blocked stage {run.stage!r}",
+                               hint="goto sends a run back to this stage or an earlier one")
+        reset = rework._reset_from(run, wf, target.id)
+        self._reset_tasks(run_dir, wf, reset)
+        self._unblock(run, run_dir, lock, target.id)
+        state.append_event(run_dir, "run_routed", to_stage=target.id, reset=reset, by=by)
 
     def skip(self, run_id: str, gate: str, *, reason: str, by: str = "cli") -> None:
         """Pass a gate the workflow marks `skippable: true`, or the T1 block by its name `no-test-results`. The skip is
@@ -173,44 +186,84 @@ class Engine:
         marked refuses, and so does `no-test-results` when the run is blocked for another reason."""
         if not reason or not reason.strip():
             raise FactoryError("config.invalid", "a skip needs a reason", hint='pass --reason "why this gate is passed"')
-        run_dir, lock, run, wf = self._blocked(run_id)
-        try:
-            stage = self._stage_of(wf, run.stage)
-            spec = next((g for g in stage.gate if gates.gate_name(g) == gate), None)
-            if gate == NO_TEST_RESULTS:
-                blocks = [ev for ev in state.read_events(run_dir) if ev.type == "run_blocked"]
-                if not blocks or blocks[-1].data.get("code") != "gate.no_test_results":
-                    raise FactoryError("config.invalid", f"run {run_id} is not blocked by no test results",
-                                       hint="`no-test-results` skips only that block; see factory status for this one")
-            elif spec is None:
-                names = ", ".join(gates.gate_name(g) for g in stage.gate) or "none"
-                raise FactoryError("config.invalid", f"stage {stage.id!r} has no gate named {gate!r} (gates: {names})",
-                                   hint="copy the gate name from the blocked card or from a gate_failed event")
-            elif not spec.skippable:
-                raise FactoryError("config.invalid", f"gate {gate!r} is not marked skippable",
-                                   hint="add `skippable: true` to the gate in the workflow file")
-            state.append_event(run_dir, "gate_skipped", stage=stage.id, gate=gate, reason=reason.strip(), by=by)
-            self._set_stage(run, stage.id, "skipped").ended = self.clock.now().isoformat()
-            self._unblock(run, run_dir, lock, self._next_stage_id(wf, stage.id))
-        finally:
-            state.release(lock)
+        with self._held(run_id) as (run_dir, lock):
+            self._skip(run_dir, lock, gate, reason, by)
 
-    def _blocked(self, run_id: str):
-        """Take the run's lock and load a blocked run and its workflow. Refuses a run that is not blocked."""
-        run_dir = self._run_dir(run_id)
-        lock = state.acquire_lock(run_dir, self.owner)
+    def _skip(self, run_dir: Path, lock: Lock, gate: str, reason: str, by: str) -> None:
+        run, wf = self._blocked(run_dir)
+        stage = self._stage_of(wf, run.stage)
+        spec = next((g for g in stage.gate if gates.gate_name(g) == gate), None)
+        if gate == NO_TEST_RESULTS:
+            blocks = [ev for ev in state.read_events(run_dir) if ev.type == "run_blocked"]
+            if not blocks or blocks[-1].data.get("code") != "gate.no_test_results":
+                raise FactoryError("config.invalid", f"run {run_dir.name} is not blocked by no test results",
+                                   hint="`no-test-results` skips only that block; see factory status for this one")
+        elif spec is None:
+            names = ", ".join(gates.gate_name(g) for g in stage.gate) or "none"
+            raise FactoryError("config.invalid", f"stage {stage.id!r} has no gate named {gate!r} (gates: {names})",
+                               hint="copy the gate name from the blocked card or from a gate_failed event")
+        elif not spec.skippable:
+            raise FactoryError("config.invalid", f"gate {gate!r} is not marked skippable",
+                               hint="add `skippable: true` to the gate in the workflow file")
+        state.append_event(run_dir, "gate_skipped", stage=stage.id, gate=gate, reason=reason.strip(), by=by)
+        self._set_stage(run, stage.id, "skipped").ended = self.clock.now().isoformat()
+        self._unblock(run, run_dir, lock, self._next_stage_id(wf, stage.id))
+
+    def _blocked(self, run_dir: Path):
+        """Load a blocked run and its workflow. The caller holds the run's lock. Refuses a run that is not blocked."""
+        run = state.read_run(run_dir)
+        if run.status != "blocked":
+            raise FactoryError("config.invalid", f"run {run_dir.name} is not blocked (it is {run.status})",
+                               hint="retry, goto and skip apply to a blocked run")
+        if run.workflow is None:
+            raise FactoryError("config.invalid", f"run {run_dir.name} is blocked before a workflow was chosen",
+                               hint="set the request type and retry from triage")
+        return run, self._load(run.workflow)
+
+    def tick_answered_blocked(self, run_id: str) -> None:
+        with self._held(run_id) as (run_dir, lock):
+            self._answered_blocked(run_dir, lock)
+
+    def _answered_blocked(self, run_dir: Path, lock: Lock) -> bool:
+        """The routing step for a blocked run, called with the lock already held (`tick`, `_drive`). An answered blocked
+        file calls the routine the command line uses: retry (the notes go to the stage as feedback), goto (`D1.target`),
+        skip (`D1.gate`, the notes as the reason) or abort (the notes as the reason). Each answer is applied once, by
+        the hash of the file. A routine that refuses (an unknown stage, a gate that is not skippable) logs
+        `blocked_answer_refused` and reopens the file for a new answer, so a pass never raises and never reads the same
+        answer twice. True when the run moved."""
+        run = state.read_run(run_dir)
+        if run.status != "blocked" or run.stage is None:
+            return False
+        visit = decisions.latest_visit(run, run.stage)
+        path = decisions.decision_path(run_dir, run.stage, visit)
+        doc = decisions.try_read(path)
+        if doc is None or decisions.kind_of(doc["packet"]) != "blocked":
+            return False
+        content = hashlib.sha256(path.read_bytes()).hexdigest()
+        if any(e.data.get("content") == content for e in state.read_events(run_dir)
+               if e.type in ("blocked_answer_applied", "blocked_answer_refused")):
+            return False
+        out = decisions.evaluate(run_dir, run.stage, visit)
+        if out.status not in ("approved", "reject"):
+            return False
+        pick, by, text = out.choices["D1"], doc["decision"]["by"] or "file", out.notes.strip()
         try:
-            run = state.read_run(run_dir)
-            if run.status != "blocked":
-                raise FactoryError("config.invalid", f"run {run_id} is not blocked (it is {run.status})",
-                                   hint="retry, goto and skip apply to a blocked run")
-            if run.workflow is None:
-                raise FactoryError("config.invalid", f"run {run_id} is blocked before a workflow was chosen",
-                                   hint="set the request type and retry from triage")
-            return run_dir, lock, run, self._load(run.workflow)
-        except BaseException:
-            state.release(lock)
-            raise
+            if pick == "retry":
+                self._retry(run_dir, lock, None, text or None, by)
+            elif pick == "goto":
+                self._goto(run_dir, lock, out.choices["D1.target"], by)
+            elif pick == "skip":
+                self._skip(run_dir, lock, out.choices["D1.gate"], text or f"skipped by {by} in the decision file", by)
+            else:
+                self._abort(run_dir, lock, text or f"aborted by {by} in the decision file")
+        except FactoryError as e:
+            state.append_event(run_dir, "blocked_answer_refused", stage=run.stage, visit=visit, content=content,
+                               answer=pick, code=e.code, reason=e.message)
+            decisions.reopen(run_dir, run.stage, visit, by="engine")
+            return False
+        state.append_event(run_dir, "blocked_answer_applied", stage=run.stage, visit=visit, content=content,
+                           answer=pick, by=by)
+        return True
 
     @staticmethod
     def _stage_of(wf: Workflow, stage_id: str | None) -> Stage:
@@ -241,6 +294,10 @@ class Engine:
             for _ in range(10_000):  # a bound, so a routing bug cannot spin forever
                 run = state.read_run(run_dir)
                 if run.status in ENDED or run.status in PARKED:
+                    if run.status == "blocked":
+                        if self._answered_blocked(run_dir, lock):  # the file's answer moved it: read the run again
+                            continue
+                        return "blocked"
                     if run.status != "awaiting_approval":
                         return run.status
                     if worked and delivery.at_merge_review(run):
@@ -297,6 +354,9 @@ class Engine:
         result = TickResult()
         if run.status == "awaiting_approval":
             return self._answered_stop(run, run_dir, lock, result)
+        if run.status == "blocked":
+            self._answered_blocked(run_dir, lock)  # an answer in the decision file moves it; the next pass does the work
+            return result
         if run.status in ENDED or run.status in PARKED:
             return result
         if run.workflow is None:
