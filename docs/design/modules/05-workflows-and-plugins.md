@@ -60,7 +60,7 @@ In phase 1a this module builds loading, validation, `expand_tasks_from` and `exp
 | `_triage` | 1a | `factory/workflows/_triage.yaml` | [module 4](04-intake-and-triage.md), which holds its YAML and the triage stop |
 | bug-fix | 1a | `factory/workflows/bug-fix.yaml` | This file, the example below; the failure classes in [module 8](08-gates-error-handling-and-rework.md) |
 | chore | 1a | `factory/workflows/chore.yaml` | This file, the example below |
-| feature | 1b | none | No stage list. [Module 11](11-human-stops.md) gives an architecture stage that feature runs when a rule fires; [modules 3](03-kit-and-configuration.md) and [13](13-delivery.md) only name it |
+| feature | 1b | none yet; the proposed file is in the feature section below | A proposed stage list is below, pending ADR `2026-11-24-the-feature-workflow-stage-list`. It has no architecture stage. [Module 11](11-human-stops.md) gives one that feature runs when a rule fires, but no engine code evaluates that rule or reads a skill's architect packet. [Modules 3](03-kit-and-configuration.md) and [13](13-delivery.md) only name it |
 | new-app | 1b | none | No stage list. [Module 11](11-human-stops.md) gives its architecture stage, which always runs |
 | research | 1b | none | This file, the example below (illustrative) |
 | reviewer-eval | phase 2 | `factory/workflows/reviewer-eval.yaml`, shipped in the kit | Not in this file. It is phase 2 work that stayed on main. It is its own workflow, not a stage in `bug-fix.yaml`: nothing starts it except a person who runs the eval by hand |
@@ -166,6 +166,53 @@ stages:
     gate: [{check: every-claim-has-source}]
     on_fail: {goto: synthesize, max: 1}
 ```
+
+**Feature workflow (proposed, not shipped)**
+
+This is a proposal for the owner to review. No file exists in `factory/workflows/`. Keyword triage already picks `feature` for a request with the word "add" (`triage.py` `KEYWORDS`), and then `load_workflow("feature")` fails with `config.invalid: no workflow named 'feature'` (checked 2026-11-24 on this branch). Triage's load check (`triage_candidates`) does not stop that route, because it runs only on a low-confidence stop. The draft loads through `load_workflow` (checked 2026-11-24 against a copy in a temp folder, with the engine from this branch). Its skills all exist in `factory/skills/own/`, and every check it names is in `KNOWN_CHECKS`. Decision record: ADR `2026-11-24-the-feature-workflow-stage-list`.
+
+```yaml
+name: feature
+type: feature
+sink: pull_request
+policy:
+  write: true
+  deny_paths: [".github/**"]
+defaults: {retries: 2, timeout_minutes: 30, checkpoint_every_minutes: 10, max_restarts: 3}
+stages:
+  - id: propose
+    tasks: [{id: plan, skill: propose, out: plan.json}]
+    approval: human                 # a person approves the plan before any code changes
+    on_reject: {goto: propose}      # rework sends the run back to write the plan again
+  - id: implement
+    needs: [propose]
+    tasks: [{id: change, skill: implement, scope: ["**"], helpers: {mode: off}, out: change.json}]
+    gate: [{schema: stage-report}, {check: scope-diff}, {check: lint-clean}]
+    on_fail: {goto: implement, max: 2}
+    on_conflict: {goto: implement, max: 1}
+  - id: verify
+    needs: [implement]
+    tasks: [{id: check, cmd: [scripts/check], out: check.junit.xml}]
+    gate: [{schema: test-report}]   # blocks the run when the stage reports 0 test cases
+    on_fail: {goto: implement, max: 2}
+  - id: review
+    needs: [verify]
+    tasks:
+      - {id: standards, skill: review-standards, out: standards.json}
+      - {id: spec, skill: review-spec, out: spec.json}
+    join: all
+    gate: [{check: no-blocking-findings}]
+    on_fail: {goto: implement, max: 1}
+```
+
+- **Human approval.** The approval sits on `propose`, as in bug-fix. The engine does not run a stage's gates when the stage has `approval: human` (`engine.py` `_run_stage` returns from `_human_stop`), so `propose` has no gate. Its plan is checked by the person at the stop.
+- **Implement.** One worker writes the change and its tests in the whole repo (scope `**`, as in chore), so no two parallel tasks overlap. `implement` loops to itself on a failed gate, as chore does, with the loop count of 2. `on_conflict` goes back to `implement` once, as bug-fix's `fix` does.
+- **Verify.** A `cmd` task runs the repo's own `scripts/check` and must write a JUnit file, `check.junit.xml`, because the `test-report` gate reads only JUnit output. A repo whose check writes no JUnit file blocks here with `gate.no_test_results`. The pilot repo's `scripts/check` runs `pytest -q` and writes none, so it needs a JUnit flag before this workflow can pass there.
+- **Review.** Two review skills, as bug-fix does. `no-blocking-findings` blocks on a medium or high finding, and a finding sends the run back to `implement` once.
+- **No architecture stage.** Module 11's architecture stage is not in this list. Its trigger rule is not evaluated by any engine code, and no code turns a skill's architect packet into a decision file (`decisions.request` is called only for the triage and approval templates). A feature that needs an architecture choice cannot get one from this workflow until the owner decides how the rule and the packet are built (see the ADR's consequences).
+- **Merge.** Feature is not in `auto.workflows`, so every feature pull request needs human review (module 13). Phase 1 keeps it that way.
+- **When a loop runs out.** Each `on_fail`, `on_conflict` and `on_reject` edge counts its own loops. When a loop would pass its `max`, the run is blocked for a person, with the reason naming the edge and its limit (`rework.py` `_go`). The `propose` approval has no limit: a rework answer goes to `propose` again, as the approval stop is always a person's choice.
+- **Test when built.** `load_workflow` on `factory/workflows/feature.yaml` returns no problems. `triage_rules` on a request whose title has the word "add" returns `feature`, and `triage_candidates` offers `feature` once it loads. A `verify` stage whose JUnit files hold zero test cases blocks with `gate.no_test_results`. Each becomes an acceptance criterion in this file when the workflow is built; none is ticked now.
 
 **Plugins**
 
