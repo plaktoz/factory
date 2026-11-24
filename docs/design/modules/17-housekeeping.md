@@ -12,9 +12,9 @@ Everything the factory creates has a defined end of life. `factory gc` shows the
 | Run folder `$FACTORY_HOME/runs/<repo key>/<id>/` | `archive_after_days` after the run ends | Zipped to `$FACTORY_HOME/archive/<repo key>/<yyyy-mm>/<id>.zip` (Python `zipfile`) |
 | Archive zip | `delete_archive_after_days` | Deleted by `factory gc --apply` |
 | `history.jsonl` line | Never; one small line per run | No action |
-| Processed markdown requests | At intake | Moved to `.factory/inbox/processed/`, archived with the run. The code does not move requests yet (see choices) |
+| Processed markdown requests | At intake | Moved to `.factory/inbox/processed/`, archived with the run. **Not built:** the code does not move requests yet (see choices) |
 | `worker.log` | Over `worker_log_max_mb`, for a run that has ended and is not yet due for archive | Oldest bytes cut so the newest `worker_log_max_mb` remain. The table said the archive keeps the log whole; the code keeps whatever copy existed at archive time (see choices) |
-| Runs whose repo is missing, and orphan worktrees | After `keep_failed_days`; orphans are only reported | Archived like any ended run; orphans listed by `factory gc` for you to remove. The CLI does not print orphans yet (see choices) |
+| Runs whose repo is missing, and orphan worktrees | After `keep_failed_days`; orphans are only reported | Archived like any ended run; orphans listed by `factory gc` for you to remove. **Not built:** the CLI does not print orphans yet (see choices) |
 
 **Safety rules**
 
@@ -50,7 +50,7 @@ A skipped worktree is not an error: its run is still archived, the run's `worktr
   - The state cannot be read, because the call raised an error or `plan` was given no `prs`: the worktree and the branch are kept, and the skip says `pull request cannot be read` and why, with the error text.
   - The run has no pull request: nothing is held.
   A later `gc` reads the pull request again for an archived run whose worktree is still there, because the archive keeps the run's `pr` field.
-- An active or blocked run is never touched. The code checks this at plan time only; a run that resumes between `plan` and `apply` can still lose its worktree (see choices).
+- An active or blocked run is never touched. The code checks this at plan time and again in `apply`, before it removes a worktree or cuts a log: a run that was resumed after `plan` is skipped (see choices).
 - `git worktree prune` clears worktree records whose folders are already gone.
 - `retention.auto_gc` (default off) would run the plan when an engine starts, but the code does not implement it: no code reads the setting, and no plan runs at engine start.
 
@@ -75,7 +75,7 @@ def cleanup_after_join(repo: Path, cfg: Config, run: Run, task_ids: list[str]) -
 def cleanup_after_merge(repo: Path, cfg: Config, run: Run) -> None                       # called by 6B or tick
 ```
 
-Types that `plan` and `apply` take and return. Section 18 does not list them, so `housekeeping.py` is their source. Each list starts empty. `GcItem` defaults `run_id`, `cfg`, `repo`, `zip_path` and `ended` to None, `dirty` to False, `keep_bytes` to 0 and `check_unpushed` to True. `Skipped.detail` defaults to an empty string. In `GcReport`, `archived` holds run ids, and `removed`, `deleted` and `trimmed` hold path strings.
+Types that `plan` and `apply` take and return. Section 18 does not list them, so `housekeeping.py` is their source. Each list starts empty. `GcItem` defaults `run_id`, `cfg`, `repo`, `zip_path`, `ended` and `run_dir` to None, `dirty` to False, `keep_bytes` to 0 and `check_unpushed` to True. `Skipped.detail` defaults to an empty string. In `GcReport`, `archived` holds run ids, and `removed`, `deleted` and `trimmed` hold path strings.
 
 What the `GcItem` fields hold:
 - `kind` and `path`: the kind names what is removed, and `path` is that item's folder, file or worktree.
@@ -87,11 +87,12 @@ What the `GcItem` fields hold:
 - `ended`: for `archive`, the run's end time as text, written to `history.jsonl`.
 - `keep_bytes`: for `worker_log`, the number of newest bytes kept.
 - `check_unpushed`: True keeps the branch when it has commits no remote has. False is set for a run whose pull request merged.
+- `run_dir`: for a `worktree` or `worker_log` item of a run whose folder is on disk, that folder. `apply` re-reads its `run.json` status and its lock before it removes the worktree or cuts the log. None for the worktree of an archived run, which has no folder to re-read, and for other kinds.
 
-`Skipped.reason` is a short text from a fixed set in the code: `pull request open`, `pull request cannot be read`, `not clean; kept until it is due or removed by hand`, `not clean, and no cleanup_check is set`, `joined task, not clean; the run is still active`, `an engine holds the run lock; not touched`, `the repo is gone; the worktree cannot be checked or removed`, `the recorded worktree is the repo itself; never removed`, and `its repo config is invalid; the worktrees are kept`. `Skipped.detail` carries the variable part, such as the check's output, the `gh` error, or the branch and commit count.
+`Skipped.reason` is a short text from a fixed set in the code. The re-read in `apply` adds `the run is no longer ended; the worktree is kept`, `an engine holds the run lock; the worktree is kept`, `the run is no longer ended; the log is not cut` and `an engine holds the run lock; the log is not cut`. Others: `pull request open`, `pull request cannot be read`, `not clean; kept until it is due or removed by hand`, `not clean, and no cleanup_check is set`, `joined task, not clean; the run is still active`, `an engine holds the run lock; not touched`, `the repo is gone; the worktree cannot be checked or removed`, `the recorded worktree is the repo itself; never removed`, and `its repo config is invalid; the worktrees are kept`. `Skipped.detail` carries the variable part, such as the check's output, the `gh` error, or the branch and commit count.
 
 ```python
-class GcItem:   kind: Literal["worktree", "archive", "archive_delete", "kit", "worker_log"]; path: Path; run_id: str | None; cfg: Config | None; repo: Path | None; dirty: bool; zip_path: Path | None; ended: str | None; keep_bytes: int; check_unpushed: bool
+class GcItem:   kind: Literal["worktree", "archive", "archive_delete", "kit", "worker_log"]; path: Path; run_id: str | None; cfg: Config | None; repo: Path | None; dirty: bool; zip_path: Path | None; ended: str | None; keep_bytes: int; check_unpushed: bool; run_dir: Path | None
 class Skipped:  path: Path; run_id: str | None; reason: str; detail: str
 class Orphan:   path: Path; run_id: str | None; reason: str
 class Failed:   path: Path; message: str
@@ -109,7 +110,7 @@ class GcReport: removed: list[str]; archived: list[str]; deleted: list[str]; tri
   - A worktree that git cannot read counts as not clean.
   - Every period counts from the run's end, except `delete_archive_after_days`, which counts from the zip's modification time (when it was written).
   - A run whose `status` is `running` with no live lock is not ended, so `gc` does not archive it or remove its worktrees, however old its last event is. `lock_status` is read only for ended runs, to see whether an engine holds a lock.
-  - `apply` re-reads the lock and status of a run only before it archives it. It then takes the lock without waiting, and skips the run if it is no longer ended. The kit step re-reads every run folder's `kit_hash`. The worktree removal, the log cut and the zip delete do not re-read the lock or the status. So a run resumed after `plan` loses its worktrees, and its log is cut. A probe set a planned run to `running` between `plan` and `apply`, and its worktree was removed. This is a known defect: it breaks the rule above that an active run is never touched, which the tests check only for runs that are active at plan time. The fix is for `apply` to re-check the lock and status before each removal, which is a code change, not a spec change.
+  - `apply` re-reads the status and lock of a run before it archives it, before it removes one of its worktrees and before it cuts its log. A run whose engine holds the lock, or that is no longer ended, is skipped with the reasons above. If the run's `run.json` cannot be read at that point, the worktree or log is not touched and the item is reported as failed (`could not re-read the run before removing its worktree` or `... before cutting its log`), and the rest of the pass goes on. The re-read does not take the lock, so an engine that starts between the read and the removal can still win; the archive step takes the lock. A run that is resumed and ended again between `plan` and `apply` is not caught: the re-read asks only whether the run is ended and unlocked, so its worktree is removed on the plan's data (its end time and pull request may have changed).
   - `gc` cuts a `worker.log` only for an ended run that is not yet due for archive. A running run's log is never cut. A log over the cap is cut to its newest `worker_log_max_mb` bytes. A run due for archive is archived as it is, without a cut.
   - `cleanup_check` runs with a timeout of 300 seconds. A command that is missing or cannot start counts as a failed check.
   - `apply` runs the items in this order: worktrees, archives, archive deletes, kits, log cuts. Then it runs `git worktree prune` in each repo that had a worktree or archive item.
@@ -121,13 +122,14 @@ class GcReport: removed: list[str]; archived: list[str]; deleted: list[str]; tri
   - `factory abort` ends a run as `aborted` even when its pull request is open. After `keep_failed_days`, `gc` reads the pull request. While it is open, the worktree and the branch stay and `gc` reports `pull request open`. Once it is closed or merged, `gc` removes the worktree, and deletes the branch unless it holds unpushed commits.
   - Nothing in the code moves a processed markdown request to `.factory/inbox/processed/`. Intake only skips a folder of that name. The table row describes the intended design.
   - `api.gc(repo, *, apply=False) -> GcPlan` (module 16) matches the code's return type. With `apply=True` it still returns the plan, not the `GcReport`.
-  - `factory gc --json` prints `{"ok", "code", "message", "hint", "data"}`. `code` is `ok`. `data` is `{"applied": bool, "items": [{"kind", "path", "run_id"}], "skipped": [{"path", "reason", "detail"}]}`, where `skipped` is the plan's list and `detail` is the plan's `Skipped.detail` (empty when there is none; for a pull request that cannot be read it holds the `gh` error). The `--apply` result (archived, removed, deleted, trimmed, failed) is not printed, because `api.gc` drops the `GcReport`. Orphans are not printed either, so the table's "orphans listed by `factory gc`" does not hold. This is a disagreement between the table and the code.
+  - `factory gc --json` prints `{"ok", "code", "message", "hint", "data"}`. `code` is `ok`. `data` is `{"applied": bool, "items": [{"kind", "path", "run_id"}], "skipped": [{"path", "reason", "detail"}]}`, where `skipped` is the plan's list and `detail` is the plan's `Skipped.detail` (empty when there is none; for a pull request that cannot be read it holds the `gh` error). The `--apply` result (archived, removed, deleted, trimmed, failed) is not printed, because `api.gc` drops the `GcReport`. Orphans are not printed either, so the table's "orphans listed by `factory gc`" is not built. The table row is the intended design.
 - **Run and test:** `pytest factory/engine/tests/housekeeping` with `FakeClock` and `FakePullRequests`; `factory gc --json`.
 - **Errors:** a worktree that is not clean and fails `cleanup_check` is skipped and reported (`GcReport.skipped` holds the path, the reason and the check output); a failed delete is reported and the rest continues; an archive is verified before the run folder is removed.
 
 Acceptance criteria:
 
 - [x] `plan` lists only ended runs past retention, and never an active or blocked run. (test: factory/engine/tests/housekeeping/test_housekeeping.py::test_only_ended_runs_past_retention_are_planned, ::test_an_active_run_is_never_removed, ::test_a_pending_run_is_left_alone)
+- [x] A run resumed between `plan` and `apply` keeps its worktree and its worker log: `apply` re-reads the run's status and lock first and skips it with a reason. (test: factory/engine/tests/housekeeping/test_housekeeping.py::test_a_run_that_resumes_between_plan_and_apply_keeps_its_worktree; ::test_a_run_that_resumes_between_plan_and_apply_keeps_its_worker_log_whole; ::test_a_run_that_ends_again_without_a_lock_is_still_not_removed_by_a_stale_plan; ::test_an_unreadable_run_json_at_apply_is_reported_and_the_pass_goes_on; each fails when the check it names is removed). The re-read does not take the lock, so an engine that starts between the read and the removal can still win.
 - [x] A worktree with uncommitted changes is never removed when `cleanup_check` is unset, exits non-zero, times out or is missing; `gc` reports it with the reason. (test: factory/engine/tests/housekeeping/test_housekeeping.py::test_a_dirty_worktree_with_no_check_is_skipped_by_the_plan, ::test_a_dirty_worktree_whose_check_fails_is_kept_and_reported (the missing-check case is the parametrized command that does not exist), ::test_a_check_that_times_out_keeps_the_dirty_worktree)
 - [x] With a `cleanup_check` that exits 0, a worktree that is not clean is removed, and the check ran in that worktree before the removal. (test: factory/engine/tests/housekeeping/test_housekeeping.py::test_a_dirty_worktree_is_removed_when_the_check_exits_zero_in_it)
 - [x] A skipped worktree is reported by every later `gc` until it is removed, and its run is still archived. (test: factory/engine/tests/housekeeping/test_housekeeping.py::test_a_skipped_worktree_is_reported_until_removed_and_its_run_is_archived)
