@@ -57,7 +57,9 @@ def _all(run_dir: Path, task_id: str) -> list[Note]:
 
 
 def queue_note(run_dir: Path, task_id: str, text: str, *, deny: list[str] | None = None, by: str) -> NoteRef:
-    """Append a queued note. A finished task refuses it."""
+    """Append a queued note. A finished task refuses it, and a task the run does not have is a config error."""
+    if not (task_dir(run_dir, task_id) / "task.json").is_file():
+        raise FactoryError("config.invalid", f"run has no task {task_id!r}", hint="factory events <run> lists what ran")
     status = read_task(run_dir, task_id).status
     if status in FINISHED:
         raise FactoryError("notes.task_finished", f"task {task_id} is {status}, so it cannot take a note",
