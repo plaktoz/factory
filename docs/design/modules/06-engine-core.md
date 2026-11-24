@@ -366,9 +366,7 @@ class Engine:
                  clock: Clock = SystemClock(), owner: str | None = None): ...
         # `command` runs every `cmd`, `script` and `python` task; `None` means a CommandAdapter (module 9). `workers` runs the skill tasks.
     def run(self, run_ids: list[str] | None = None, *, poll_seconds: int = 5) -> EngineResult:
-        """Drive the runs at the same time (one thread each) until each is done, failed, aborted, blocked or awaiting a
-        human. Holds each run's lock. A run that raises does not stop the others; the first error, in the order the runs
-        were named, is raised once every run has ended."""
+        """Drive the runs at the same time, one thread each, until each is done, failed, aborted, blocked or awaiting a human. Holds each run's lock."""
     def tick(self, run_id: str) -> TickResult:
         """One pass: start ready tasks, collect results, checkpoint, deliver notes, join, gate,
         route or advance, raise attention, deliver. Deterministic given the same inputs."""
@@ -395,7 +393,7 @@ All collaborators are injected, so 6B is tested end to end with `FakeWorkerAdapt
   - **The discarded diff includes new files.** `git diff` ignores a file a worker just created, so recovery marks new files with intent-to-add before it saves `discarded-<n>.patch`.
 
 - **Run and test:** `pytest factory/engine/tests/engine` with the fakes; `factory run <run> --json` on a seeded repo.
-- **Errors:** worker results are classified by 8. Infrastructure calls go through `with_backoff`. A failed state write stops the engine, and tasks resume as interrupted.
+- **Errors:** worker results are classified by 8. Infrastructure calls go through `with_backoff`. A failed state write stops the engine, and tasks resume as interrupted. In `Engine.run`, a run that raises stops only itself: the other runs still end, and the first error, in the order the runs were named, is raised after them all. A failed state write while workers are running ends their supervision; each such worker's machine and repo slots are given back once its thread has ended (module 3, `slots/`), and no restart follows. A crashed engine process frees all its slots when the kernel closes its files.
 
 Acceptance criteria:
 
