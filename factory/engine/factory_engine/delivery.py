@@ -41,7 +41,8 @@ MANIFESTS = (
 )
 
 # Words in a merge error that mean branch protection or a required check refused the merge (module 13 errors).
-PROTECTION_MARKERS = ("branch protection", "protected branch", "base branch policy", "not mergeable")
+PROTECTION_MARKERS = ("branch protection", "protected branch", "base branch policy", "not mergeable",
+                      "auto merge is not allowed")  # gh, when the repo's "Allow auto-merge" setting is off (item 23)
 
 # Used when no merge-policy.yaml is in the run's kit: nothing is auto (fail closed).
 _NO_POLICY = {
