@@ -2,7 +2,7 @@
 
 Part of the [phase 1 design](../phase-1.md#module-map). Build wave: 2. Contracts and acceptance criteria are in this file; shared types are in [section 18](../shared/18-shared-contracts.md). Terms such as run, stage, task, attempt and rework are defined in the [glossary](../phase-1.md#2-glossary).
 
-Every point where a run waits for you works the same way. The engine writes a YAML decision file, raises one attention item, and notifies you through the request's source and the dashboard. Your answer, from any route, goes through one check, and the run resumes where it stopped.
+Every point where a run waits for you works the same way. The engine writes a YAML decision file, raises one attention item, and notifies you through the request's source and the dashboard. Today a real blocked stop raises the attention item but writes no decision file (see the blocked-run answer below). Your answer, from any route, goes through one check, and the run resumes where it stopped.
 
 **Kinds of human stop**
 
@@ -11,7 +11,7 @@ Every point where a run waits for you works the same way. The engine writes a YA
 | Approval (propose, review, research scope) | Engine, from a template | approve, rework, reject |
 | Architecture decision | Architect skill, schema-checked | One set of options per gated choice |
 | Triage confirm | Engine | The candidate workflows |
-| Blocked run | Engine | retry, goto a stage, skip a skippable gate, abort |
+| Blocked run | Engine, from a template (a real block does not write it yet) | retry, goto a stage, skip a skippable gate, abort |
 | Merge review | GitHub pull request review | Approve or request changes on GitHub; the engine watches the result |
 
 The architecture stage runs after triage and before plan. It always runs in new-app, and in feature only when a rule fires: an architecture label, a new language, framework, datastore or service, or more than a set number of modules touched. Gated choices are language and framework per tier, datastore, hosting, authentication and any major new dependency. A worker may recommend, but only an approved decision unlocks the next stage. After approval, an ADR is written to `docs/adr/` as part of the pull request, named \<date>-\<run id>.md so parallel runs never collide on a number, and a build-file gate checks `pom.xml` or `package.json` against the chosen stack.
@@ -128,6 +128,10 @@ The hash covers only the packet, so your answers never break it. An approved dec
 **Not sure**
 
 Submitting with `status: question` routes the run back to the packet task with your questions as feedback. The skill answers them in the packet, so the hash changes and `decision_requested` fires again. You are notified with the revised options.
+
+**A blocked run's answer**
+
+A blocked packet offers retry, goto, skip and abort. A goto answer also carries `D1.target` (the stage to send the run to) and a skip answer carries `D1.gate` (the gate to pass); `record` refuses either without its second key. The engine reads the answer in `Engine.tick`, `Engine.run` and `Engine.tick_answered_blocked`, under the run lock it already holds (or takes, when called alone), and calls the routine the command line uses: `retry` (the notes go to the stage as feedback), `goto`, `skip` (the notes are the reason) or `stop` (the notes are the reason). Each answer is applied once, by the hash of the file. A pending file, a run that is not blocked, or a blocked run with no decision file does nothing. A routine that refuses the answer (an unknown stage, a gate that is not skippable, a note for a finished task) logs `blocked_answer_refused` and reopens the file, so a pass never raises and the same answer is not read again. Two limits today: a real block writes no decision file (so only a hand-written or tested file is answered), and the launcher's `factory tick` starts an engine only for an answered `awaiting_approval` run. A crash inside a routine is not guarded. Retry re-queues notes and goto resets tasks before the run is unblocked, so a crash there leaves the run blocked and the next pass applies the answer again. A skip logs `gate_skipped` before it unblocks, so a crash between the two logs the skip twice. The fix is not built: log the skip after the unblock, or make each routine's writes idempotent.
 
 | Event | When |
 | --- | --- |
