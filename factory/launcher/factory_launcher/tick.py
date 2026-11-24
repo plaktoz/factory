@@ -4,6 +4,9 @@ A tick keeps no state of its own. It reads every run.json under the factory home
 its status and lock, starts a detached engine for each run that can move, and writes tick.json. It never runs a
 worker, so it returns within seconds.
 
+A blocked run whose decision file holds an answer the engine has not yet acted on starts an engine too, which applies
+the answer under the run lock (module 11). A blocked run whose file is pending or absent gets a reminder only.
+
 A run whose pull request is open waits at its merge review. The tick reads that pull request (module 13, watch_pr) and
 starts an engine only when GitHub has merged it, closed it, turned its CI red, or turned it green for the first time;
 the engine then ends the run, routes it, or checks the merge rules again.
@@ -12,6 +15,7 @@ The tick itself writes no run state.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from dataclasses import asdict, dataclass, field
@@ -52,8 +56,9 @@ class TickReport:
 
 def decide(status: str, lock: str, repo_exists: bool, *, answered: bool = False, pr_changed: bool = False) -> str:
     """The action module 6's table gives for one run. Pure, so the table is tested without a file system.
-    `answered` is true when an awaiting_approval run's decision file holds an answer. `pr_changed` is true when the
-    run's open pull request was merged, closed or turned red, so its engine has something to do."""
+    `answered` is true when a waiting run's decision file holds an answer the engine has not acted on: an
+    awaiting_approval run's open stop, or a blocked run's blocked file. `pr_changed` is true when the run's open pull
+    request was merged, closed or turned red, so its engine has something to do."""
     if not repo_exists:
         return MISSING
     if status in ("done", "failed", "aborted"):
@@ -63,6 +68,8 @@ def decide(status: str, lock: str, repo_exists: bool, *, answered: bool = False,
     if status == "running" and lock == "stale":
         return RESUME
     if status == "awaiting_approval" and lock == "free" and (answered or pr_changed):
+        return START
+    if status == "blocked" and lock == "free" and answered:
         return START
     if status == "retrying" and lock == "free":
         return START
@@ -184,8 +191,9 @@ def tick(cfg: Config, *, repos: list[Path], home: Path | None = None, spawn: Cal
             repo_exists = ref.repo.is_dir()
             status, lock_state = _status_and_lock(ref)
             waiting = repo_exists and status == "awaiting_approval" and lock_state == "free"
+            blocked = repo_exists and status == "blocked" and lock_state == "free"
             action = decide(status, lock_state, repo_exists,
-                            answered=waiting and _answered(ref),
+                            answered=(waiting and _answered(ref)) or (blocked and _blocked_answered(ref, report)),
                             pr_changed=waiting and _pr_changed(ref, prs_for, report))
             if action == MISSING:
                 report.repo_missing.append(ref.run_id)
@@ -214,6 +222,40 @@ def _answered(ref: state.RunRef) -> bool:
         return False
     doc = decisions.try_read(decisions.decision_path(ref.run_dir, stage, decisions.latest_visit(run, stage)))
     return doc is not None and doc["decision"]["status"] != "pending"
+
+
+# Events that show the engine has already acted on the bytes of a decision file (module 11): the answer was applied,
+# refused, or rejected before it was used. The tick starts no engine for those bytes again.
+_ACTED_ON = frozenset({"blocked_answer_applied", "blocked_answer_refused", "decision_rejected", "decision_invalidated"})
+
+
+def _blocked_answered(ref: state.RunRef, report: TickReport) -> bool:
+    """True when a blocked run's decision file is approved, its packet is intact, it is a blocked packet, and no event
+    shows the engine has acted on these bytes yet. A file that is pending, absent or not a blocked packet is no answer.
+    A file that cannot be read is reported in the tick's errors, and the run is left alone. Writes nothing."""
+    try:
+        run = state.read_run(ref.run_dir)
+        if run.stage is None:
+            return False
+        visit = decisions.latest_visit(run, run.stage)
+        path = decisions.decision_path(ref.run_dir, run.stage, visit)
+        if not path.is_file():
+            return False
+        doc = decisions.read_decision(ref.run_dir, run.stage, visit)
+        packet, dec = doc["packet"], doc["decision"]
+        if decisions.kind_of(packet) != "blocked" or dec["status"] != "approved":
+            return False
+        if decisions.hash_packet(packet) != packet["sha"]:
+            return False
+        content = hashlib.sha256(path.read_bytes()).hexdigest()
+        acted = any(e.type in _ACTED_ON and e.data.get("content") == content
+                    for e in state.read_events(ref.run_dir))
+        return not acted
+    except FactoryError as e:
+        report.errors.append(f"{ref.run_id}: {e.code}: the blocked decision file cannot be read: {e.message}")
+    except (OSError, UnicodeDecodeError) as e:
+        report.errors.append(f"{ref.run_id}: config.invalid: the blocked decision file cannot be read: {e}")
+    return False
 
 
 def _status_and_lock(ref: state.RunRef) -> tuple[str, str]:

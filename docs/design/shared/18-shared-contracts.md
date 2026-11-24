@@ -9,7 +9,7 @@ These are the types, conventions and package layout every module codes against. 
 | File or folder | Module |
 | --- | --- |
 | `types.py` (the shared and frozen types below, plus `Workflow`, `Stage` and `TaskSpec`, which module 5 defines), `errors.py` | 18 Shared contracts |
-| `config.py`, `kit.py` | 3 Kit and configuration |
+| `config.py` (the `Config` type), `loadcfg.py`, `validate.py`, `redact.py`, `paths.py`, `kit.py` | 3 Kit and configuration |
 | `intake.py`, `triage.py` | 4 Intake and triage |
 | `workflow.py`, `plugins.py` | 5 Workflows and plugins |
 | `state.py` | 6A State store |
