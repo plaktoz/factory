@@ -137,6 +137,8 @@ Submitting with `status: question` routes the run back to the packet task with y
 | `decision_rejected` | A check fails: bad YAML, schema, edited packet, missing or unknown choice |
 | `decision_invalidated` | The packet changed after an answer was recorded |
 | `decision_reopened` | You unlocked an approved decision |
+| `blocked_answer_applied` | A blocked run's answer in its decision file was read and its routine (retry, goto, skip, abort) ran |
+| `blocked_answer_refused` | That routine refused the answer (for example an unknown stage); the file is reopened for a new answer |
 
 **Resume**
 
@@ -211,7 +213,8 @@ class Outcome: status: str; choices: dict[str, str]; questions: dict[str, str]; 
 
 Acceptance criteria:
 
-- [ ] Every stop kind writes a valid decision file; approval packets have approve, rework and reject. (not ticked: merge review writes no decision file by design (its test says it is answered on GitHub); the tests cover the engine template stops (approval, blocked) and the skill packet, not every stop kind)
+- [ ] Every stop kind writes a valid decision file; approval packets have approve, rework and reject. (not ticked: merge review writes no decision file by design (its test says it is answered on GitHub); a real block still writes no decision file (item 51's xfail shows it), so the blocked packet is only written by the tests; the tests cover the engine template stops (approval, blocked) and the skill packet, not every stop kind)
+- [x] A blocked run whose decision file is answered applies the answer under the run lock: retry, goto (`D1.target`), skip (`D1.gate`) or abort, and a pending file does nothing. (test: factory/engine/tests/engine/test_blocked_file_answer.py::test_a_goto_answer_sends_the_run_to_the_stage_it_names, ::test_a_retry_answer_runs_the_blocked_stage_again, ::test_a_skip_answer_passes_the_gate_it_names_with_its_reason, ::test_an_abort_answer_ends_the_run_with_its_notes_as_the_reason, ::test_a_pending_file_does_nothing; `Engine.run` and `Engine.tick` apply it: ::test_run_applies_a_blocked_answer_and_reports_the_new_status, ::test_tick_applies_a_blocked_answer. Not built: `factory tick` (launcher `tick.decide`) starts no engine for an answered blocked run; it does for an answered awaiting_approval run only)
 - [x] An architect packet missing context, options, flows or a recommendation fails `validate`. (test: factory/engine/tests/decisions/test_decisions.py::test_an_architect_packet_missing_a_picker_field_fails_validate, ::test_an_option_with_no_flow_fails_validate, ::test_a_recommendation_that_is_not_an_option_is_refused)
 - [x] `record` with a stale packet sha is refused with a reopen hint. (test: factory/engine/tests/decisions/test_decisions.py::test_record_with_a_stale_packet_sha_is_refused_with_a_reopen_hint)
 - [x] Editing the packet after an answer gives `decision_invalidated`. (test: factory/engine/tests/decisions/test_decisions.py::test_editing_the_packet_after_an_answer_gives_decision_invalidated)
