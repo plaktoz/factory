@@ -1,0 +1,35 @@
+{
+  "task": "item-23-real-github",
+  "branch": "plaktoz/item-23-real-github",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 24,
+    "spec": 0,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-23-real-github-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
