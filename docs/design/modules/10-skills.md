@@ -69,7 +69,7 @@ How they stay small:
 def practice_packs(languages: list[str], stage: str, repo: Path, cfg: Config) -> list[SkillRef]
 ```
 
-- [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (not ticked: practice_packs is tested with a language list the test passes in, but no production code calls it, so no task ever gets a pack from its files)
+- [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (not ticked: `skills.practice_packs` takes a language list, and test_skills.py::test_a_java_only_task_gets_only_the_java_pack_and_a_mixed_task_gets_both passes that list in. Nothing in `factory_engine` calls `practice_packs` (engine.py passes `practices=[]`), so no task gets a pack from its files)
 - [x] A team override in `.factory/config/overrides/practices/` is used in place of, or merged with, the shipped pack. (test: factory/engine/tests/skills/test_skills.py::test_a_team_override_replaces_the_shipped_pack, ::test_a_team_override_can_be_merged_over_the_shipped_pack)
 - [x] A pack over `max_lines` is reported by `factory doctor`. (test: factory/engine/tests/skills/test_skills.py::test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable, factory/engine/tests/kit/test_kit.py::test_the_driver_adds_module_10s_lock_and_pack_checks)
 
@@ -103,7 +103,7 @@ Acceptance criteria:
 - [x] Shims appear in a new worktree and never show in `git status`. (test: factory/engine/tests/skills/test_skills.py::test_shims_appear_in_a_new_worktree_and_never_show_in_git_status, ::test_shims_in_a_second_worktree_are_also_hidden)
 - [x] A changed upstream ref is reported by `verify_lock`. (test: factory/engine/tests/skills/test_skills.py::test_a_changed_upstream_ref_is_reported_by_verify_lock)
 - [x] With an empty `skills.lock`, every stage of every built-in workflow resolves to an `own` skill. (test: factory/engine/tests/skills/test_skills.py::test_with_an_empty_lock_every_stage_resolves_to_an_own_skill; its stage list is hand-written and covers every skill name the shipped workflows use: classify, fix, implement, propose, reproduce, review-spec, review-standards, root-cause)
-- [ ] Each own skill asks no question: run against `FakeWorkerAdapter` fixtures, it writes an artifact that passes its schema or a decision packet. (not ticked: tests/workers/test_own_skills_against_fake.py proves wiring only (its docstring says so): it scripts each skill's artifact instead of running the skill, so no test shows a skill writes its own artifact on the fake)
+- [ ] Each own skill asks no question: run against `FakeWorkerAdapter` fixtures, it writes an artifact that passes its schema or a decision packet. (not ticked: tests/workers/test_own_skills_against_fake.py proves wiring only (its docstring says so). The fake writes a scripted artifact (its `architect` entry is a `packet` for `packet.json`) instead of the skill's own output, so no test shows a skill writes a valid artifact or packet from its prompt; each scripted artifact is only checked against its schema)
 
 ## Decisions
 
