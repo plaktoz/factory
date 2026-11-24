@@ -15,7 +15,7 @@ The CLI is the primary driver and the only path that changes state. The router s
 | `factory add "title" [--type] [--body] [--files]` | Creates a run from CLI text or files |
 | `factory sync` / `factory watch [--every 10m]` | Reads issues and the inbox once / runs `tick` in a foreground loop |
 | `factory run [<run> \| --all] [--detach]` | Starts an engine on runs that can proceed |
-| `factory resume <run>` | Continues a run whose engine has died (lock free) |
+| `factory resume <run>` | Continues a run whose engine has died (lock free). There is no `--force` option (decision `resume-has-no-force`) |
 | `factory recover <run> [--rebuild]` | Closes open attempts; `--rebuild` writes `run.json` from the last `run_snapshot` in `events.jsonl` (decision E1, [module 6](06-engine-core.md)) |
 | `factory status [<run>]` | Runs and stages in this repo; --here inside a worktree shows that run. Related: factory where, factory logs \<task>, factory events |
 | `factory inbox` | Attention items across all repos, with decision page paths |

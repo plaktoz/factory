@@ -6,7 +6,7 @@ Every git and GitHub action is run by the engine with `git` and `gh` as argument
 
 | Operation | When | Command (simplified) |
 | --- | --- | --- |
-| Read GitHub requests | `factory sync`, or every `watch` interval | `gh issue list --label factory --state open --json number,title,body,labels,author,updatedAt` |
+| Read GitHub requests | `factory sync`, or every `watch` interval | `gh issue list --label factory --state open --json number,title,body,labels,author,updatedAt`. No `--limit` is passed, so `gh` returns at most 30 issues (its default). Decided, not built (`issue-sync-limit-and-warning`): a higher limit, and a warning event when the answer reaches it; the value and the event name are Unspecified |
 | Mark an issue picked up | Run created | `gh issue edit 42 --add-label factory:queued`, then `gh issue comment 42` with the run id and dashboard link |
 | Read markdown requests | `factory sync` | Read `.factory/inbox/*.md`, parse front matter |
 | Make the run id | Run created | Slug of the title plus 5 random characters, checked against existing branches and worktree paths |

@@ -48,11 +48,11 @@ The factory is a reusable kit that turns a request into reviewed work through a 
 
 ### Phase split
 
-Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-dependencies-and-plan.md) is the same for both; the split decides what each wave leaves out first.
+Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-dependencies-and-plan.md) is the same for both; the split decides what each wave leaves out first. Phase 1b is built in this order (owner decision 2026-11-24): the feature workflow, practice packs and MCP, plugins and hooks, then dashboard writes.
 
 | Area | Phase 1a (walking skeleton) | Phase 1b |
 | --- | --- | --- |
-| Harness | Claude, plus `CommandAdapter` and the fakes | - (Codex is phase 2) |
+| Harness | Claude, plus `CommandAdapter` and the fakes | Codex may be chosen (owner decision 2026-11-24; not built) |
 | Requests | CLI, markdown inbox and GitHub issues | - |
 | Workflows | `_triage`, bug-fix, chore | feature, new-app, research |
 | Gates, rework, human stops, notes, delivery, tokens, housekeeping | All | - |

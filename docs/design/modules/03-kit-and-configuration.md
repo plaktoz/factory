@@ -18,7 +18,6 @@ factory/                    the kit: replaced whole on update, never edited
                             (12 are written in wave 0. `stage-report`, `test-report`, `source-notes` and `review-findings` had no fields in the
                             spec; the owner accepted the wave 3 drafts as the phase 1 schemas, see
                             [module 5](05-workflows-and-plugins.md#report-schemas)). `merge` is checked by `factory/schemas/merge.schema.json`, written by hand because module 13 builds the file from a dict; its tests are in `tests/delivery/test_delivery.py`)
-  policies/                 default scope and protected-path rules
   engine/                   Python engine and the factory CLI (copied by init and upgrade without its tests/ folder, so each snapshot carries it)
   adapters/tracker/         file, github
   adapters/worker/          claude, command, fake
@@ -62,7 +61,7 @@ factory/                    the kit: replaced whole on update, never edited
 # .factory/config/factory.yaml   (in the repo, committed)
 base_branch: main
 tracker: github                  # file | github
-harness: claude                  # phase 1 accepts only claude; others fail fast (Codex is phase 2)
+harness: claude                  # the schema accepts only claude today; Codex is allowed by owner decision 2026-11-24 (not built)
 concurrency: 4                   # parallel workers for this repo; the machine-wide cap is max_workers in the machine file
 repo_key: null                   # override, such as github.com/acme/report
 notify: {github_mention: author, desktop: true, webhook: null, remind_after_hours: 24}
@@ -279,3 +278,4 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | macOS and Linux in phase 1. Windows in phase 2. | The core loop is unproven, and Windows adds retrying atomic replaces, Task Scheduler install, `.bat` and `.sh` scripts and path rules. Fewer acceptance tests and a faster first release. The owner works on macOS. | All three OSes from the start (the largest test matrix before the core loop is proven). | 2026-11-14-macos-and-linux-in-phase-1 (D6) |
 | OAuth login is out of scope; phase 1 uses a key or gateway token. `factory doctor` must pass the canary on Linux before the phase 1a pilot. | `doctor` makes an untested machine fail closed, so waiting costs nothing, and wave 0 needs neither. | Test both before wave 0. Declare phase 1a macOS only. | 2026-11-14-linux-and-oauth-testing (Q5) |
 | A setting comes from its file, then its default. `FACTORY_WORKTREE_ROOT` is the only environment override and no flag changes a setting. The unused `pick` helper is deleted. | Nothing needs the broad order, and a variable or flag name is a promise for as long as the factory lasts. A later request adds an override where one is needed. | Build a flag, then environment variable, then file order for every key. | 2026-11-22-owner-calls D6 shrink-to-built |
+| A repo may choose Codex as its harness (`harness: codex`). Not built: the `harness` schema accepts only `claude` and `api.default_workers` builds only the Claude adapter, so a repo that sets `codex` is still refused. It replaces the phase 2 row `2026-11-14-codex-moves-to-phase-2`. Owner decision, 2026-11-24. | The owner chose it, and the Codex adapter is merged and tested against a stub; `loadcfg.resolve_harness` already accepts it. The same gate evidence on both harnesses, a live Codex smoke run, MCP isolation for Codex and the router skill from Codex stay unproven, so they stay unticked in `phase-2.md` P2-1. | Keep Codex refused with "Codex is phase 2" (the recommendation: nothing unproven is reachable). Allow it only in the machine file (the schema and the machine check would keep disagreeing). | 2026-11-24-a-repo-may-choose-codex (D3 of the page "Owner decisions, 2026-11-24 (backlog review)", owner decision, not the recommendation) |
