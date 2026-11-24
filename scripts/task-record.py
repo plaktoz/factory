@@ -302,11 +302,12 @@ def _outcome(options, answer):
 
 
 QUESTION_THEMES = [
-    ("token and secret rotation", re.compile(r"token|secret|credential|rotat", re.I)),
-    ("push, PR and merge approval", re.compile(r"\bpush\b|\bPRs?\b|pull request|\bmerge\b", re.I)),
+    ("token and secret rotation", re.compile(r"(gateway|auth|api|access)[ _-]?token|\bsecrets?\b|credential|rotat", re.I)),
+    ("push, PR and merge approval", re.compile(r"\bpush\b|\bmerge (it|this|that|the (branch|PR|pull request))\b|"
+                                              r"\b(open|push|merge|close)\b[^.?]{0,20}\b(PR|pull request)\b", re.I)),
     ("fix now or later", re.compile(r"fix (it )?now|now or|\blater\b|follow-up|record (as|a)\b|defer|backfill", re.I)),
     ("where it lives", re.compile(r"\bwhere\b|which (file|folder|path|name)|rename|\bmove\b", re.I)),
-    ("spec wording", re.compile(r"wording|\bspec\b|module \d|contract|section", re.I)),
+    ("spec wording", re.compile(r"wording|\bspec\b|contract|section", re.I)),
 ]
 
 
@@ -314,11 +315,18 @@ def question_theme(text):
     return next((name for name, rx in QUESTION_THEMES if rx.search(text)), "other")
 
 
+# A closing line that asks for a reply without a question mark: a command to answer, a request to paste back.
+_ASKS_FOR_REPLY = re.compile(
+    r"\breply with\b|\bsay \(?[a-c1-9]\)?[,) ]|\bpaste (?:the|that|it|this)\b[^.\n]{0,60}\bback\b|"
+    r"\btell me (?:which|whether|what)\b|\b(?:once|until|when) you(?:'ve| have)? answer", re.I)
+
+
 def gap_kind(text):
     """What the agent ended its turn with, read from its last message: a question, a delivery, a finish or a status."""
     t = text.strip()
     tail = t[-400:].lower()
-    if t.endswith("?") or re.search(r"which (option|do you)|do you want|should i\b|let me know|your call|approve", tail):
+    if t.endswith("?") or _ASKS_FOR_REPLY.search(tail) \
+            or re.search(r"which (option|do you)|do you want|should i\b|let me know|your call|approve", tail):
         return "asked"
     if re.search(r"waiting on you|needs? your|your (go-ahead|decision|answer|call|approval)|pick (an )?option|"
                  r"option \d,? .*\bor\b|awaiting (your|the owner)", tail):
