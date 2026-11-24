@@ -50,6 +50,7 @@ class GcItem:
     ended: str | None = None        # archive: when the run ended, for history.jsonl
     keep_bytes: int = 0             # worker_log: the newest part that is kept
     check_unpushed: bool = True     # worktree: keep the branch when it has commits no remote has (not for a merged run)
+    run_dir: Path | None = None     # worktree of a run folder still on disk: apply re-reads its status and lock first
 
 
 @dataclass
@@ -349,7 +350,8 @@ def _pr_hold(prs: PullRequests | None, run: dict, path: Path) -> tuple[Skipped |
 
 
 def _plan_worktree(p: GcPlan, path: Path, cfg: Config, repo: Path | None, run_id: str, *, due: bool,
-                   seen: set[str], run_doc: dict | None = None, prs: PullRequests | None = None) -> None:
+                   seen: set[str], run_doc: dict | None = None, prs: PullRequests | None = None,
+                   run_dir: Path | None = None) -> None:
     """A due worktree is removed when clean, and handed to cleanup_check when not. One that is not due, or not
     removable, is reported while it stays, so a later gc lists it again. `run_doc` is given for the run's own
     worktree: its pull request, if open or unreadable, holds the worktree and its branch."""
@@ -379,18 +381,19 @@ def _plan_worktree(p: GcPlan, path: Path, cfg: Config, repo: Path | None, run_id
                                  "the worktree stays until its files are compared or removed by hand"))
         return
     p.items.append(GcItem("worktree", path, run_id=run_id, cfg=cfg, repo=repo, dirty=dirty,
-                          check_unpushed=not merged))
+                          check_unpushed=not merged, run_dir=run_dir))
 
 
 def _plan_ended_worktrees(p: GcPlan, snap: _Snap, cfg: Config, *, repo: Path, repo_gone: bool,
-                          seen: set[str], prs: PullRequests | None) -> None:
+                          seen: set[str], prs: PullRequests | None, run_dir: Path | None = None) -> None:
     """The worktrees of an ended run, all due on the run's clock. The run's own worktree also waits while its pull
     request is open or unreadable; cleanup_after_merge removes it earlier when the merge hook runs."""
     run = snap.run
     worktree_due, _ = _due(snap, cfg, repo_gone)
     for path, is_run in _worktrees(snap):
         _plan_worktree(p, path, cfg, repo if not repo_gone else None, run["run_id"],
-                       due=p.now >= worktree_due, seen=seen, run_doc=run if is_run else None, prs=prs)
+                       due=p.now >= worktree_due, seen=seen, run_doc=run if is_run else None, prs=prs,
+                       run_dir=run_dir)
 
 
 def _plan_active_run(p: GcPlan, snap: _Snap, seen: set[str]) -> None:
@@ -427,7 +430,7 @@ def _plan_folder_run(p: GcPlan, run_dir: Path, snap: _Snap, repos: _RepoConfigs,
     except FactoryError as e:
         p.skipped.append(Skipped(run_dir, run_id, f"{e.message}; the run is kept", e.hint))
         return
-    _plan_ended_worktrees(p, snap, cfg, repo=repo, repo_gone=repo_gone, seen=seen, prs=prs)
+    _plan_ended_worktrees(p, snap, cfg, repo=repo, repo_gone=repo_gone, seen=seen, prs=prs, run_dir=run_dir)
     _, archive_due = _due(snap, cfg, repo_gone)
     if p.now >= archive_due:
         archived.add(run_id)
@@ -438,7 +441,7 @@ def _plan_folder_run(p: GcPlan, run_dir: Path, snap: _Snap, repos: _RepoConfigs,
     cap = int(_retention(cfg)["worker_log_max_mb"]) * MB
     for log in sorted(run_dir.glob("tasks/*/worker.log")):
         if log.stat().st_size > cap:
-            p.items.append(GcItem("worker_log", log, run_id=run_id, keep_bytes=cap))
+            p.items.append(GcItem("worker_log", log, run_id=run_id, keep_bytes=cap, run_dir=run_dir))
 
 
 def _plan_archived_run(p: GcPlan, zp: Path, snap: _Snap, repos: _RepoConfigs, seen: set[str],
@@ -613,7 +616,23 @@ def _archive(home: Path, item: GcItem, report: GcReport) -> None:
         state.release(lock)
 
 
+def _run_moved_since_plan(item: GcItem) -> str | None:
+    """Why a worktree must stay, when its run was resumed after the plan was made: the run is no longer ended, or an
+    engine holds its lock. None when the run is still ended and unlocked, or has no folder left on disk."""
+    if item.run_dir is None or not (item.run_dir / "run.json").is_file():
+        return None
+    if state.lock_status(item.run_dir) == "live":
+        return "an engine holds the run lock; not removed"
+    if _read_json(item.run_dir / "run.json")["status"] not in ENDED:
+        return "the run is no longer ended; not removed"
+    return None
+
+
 def _apply_worktree(item: GcItem, report: GcReport) -> None:
+    moved = _run_moved_since_plan(item)
+    if moved:
+        report.skipped.append(Skipped(item.path, item.run_id, moved))
+        return
     out = _remove_worktree_safely(item.cfg, item.path, item.repo, dirty=item.dirty, check_unpushed=item.check_unpushed)
     if out.status == "removed":
         report.removed.append(str(item.path))
@@ -669,6 +688,10 @@ def apply(plan: GcPlan) -> GcReport:
             except OSError as e:
                 report.failed.append(Failed(item.path, f"could not delete the kit: {e}"))
         else:
+            moved = _run_moved_since_plan(item)
+            if moved:
+                report.skipped.append(Skipped(item.path, item.run_id, moved.replace("not removed", "log not trimmed")))
+                continue
             try:
                 _truncate(item.path, item.keep_bytes)
                 report.trimmed.append(str(item.path))

@@ -962,3 +962,45 @@ def test_an_archived_worker_log_is_whole_when_no_earlier_gc_cut_it_and_cut_when_
     assert archived_log("never-cut", 8, cut_first=False) == big, "no earlier gc cut it: the archive keeps it whole"
     cut = archived_log("cut-first", 2, cut_first=True)
     assert cut == big[-mb:] and cut.endswith(b"NEWEST"), "an earlier gc cut it: the archive keeps the cut copy"
+
+
+def test_a_run_that_resumes_between_plan_and_apply_keeps_its_worktree(home, repo, cfg, clock):
+    """Module 17: an active run is never touched. The plan sees a failed run and lists its worktree; a run that is
+    resumed before apply is running again, with a live engine, and its worktree must stay."""
+    wt = worktree_for(cfg, repo, "resumed")
+    run_dir = make_run(home, repo, "resumed", status="failed", worktree=wt, ended=days_ago(clock, 20))
+    planned = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "worktree" and i.path == wt for i in planned.items), "the plan lists the worktree"
+
+    # the run is resumed: its status goes back to running and an engine takes the lock
+    lock = state.acquire_lock(run_dir, "engine")
+    run = state.read_run(run_dir)
+    run.status = "running"
+    state.write_run(run_dir, run, lock=lock)
+
+    apply(planned)
+
+    assert wt.exists(), "apply must re-check the run under the lock before it removes a worktree"
+    state.release(lock)
+
+
+def test_a_run_that_resumes_between_plan_and_apply_keeps_its_worker_log_whole(home, repo, cfg, clock):
+    write_repo_config(repo, "retention:\n  worker_log_max_mb: 1\n")
+    wt = worktree_for(cfg, repo, "resumed-log")
+    run_dir = make_run(home, repo, "resumed-log", status="done", worktree=wt, tasks=[("backend", "done", None)],
+                       ended=days_ago(clock, 2))
+    log = run_dir / "tasks" / "backend" / "worker.log"
+    log.write_bytes(b"a" * (1024 * 1024) + b"b" * (1024 * 1024) + b"NEWEST")
+    planned = plan(home, cfg, now=clock.now())
+    assert any(i.kind == "worker_log" for i in planned.items), "the plan lists the log"
+
+    lock = state.acquire_lock(run_dir, "engine")
+    run = state.read_run(run_dir)
+    run.status = "running"
+    state.write_run(run_dir, run, lock=lock)
+
+    report = apply(planned)
+
+    assert log.stat().st_size == 2 * 1024 * 1024 + len(b"NEWEST"), "a running task is still writing this log"
+    assert str(log) not in report.trimmed
+    state.release(lock)
