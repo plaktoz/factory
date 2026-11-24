@@ -49,7 +49,7 @@ def hand_edit(run, stage, **decision_fields):
 
 @pytest.mark.parametrize("kind,stage,options", [
     ("approval", "propose", {"approve", "rework", "reject"}),
-    ("blocked", "verify", {"retry", "abort"}),
+    ("blocked", "verify", {"retry", "goto", "skip", "abort"}),  # owner decision 2026-11-24: all four answers
 ])
 def test_engine_template_stops_write_a_valid_decision_file(run, kind, stage, options):
     sha = D.request(run.run_dir, stage, 1, kind=kind)
@@ -425,3 +425,24 @@ def test_check_build_stack_fails_with_no_build_file(tmp_path):
     res = D.check_build_stack(GateSpec("check", None, "build-matches-stack", None, {"require": ["react"]}),
                               _bare_ctx(tmp_path))
     assert res.code == "gate.build_file_missing"
+
+
+# --- a blocked run offers all four answers (owner decision, 2026-11-24, module 11: decision file with retry, goto, skip, abort) ---
+
+def test_a_blocked_packet_offers_retry_goto_skip_and_abort(run):
+    D.request(run.run_dir, "verify", 1, kind="blocked")
+    doc = yaml.safe_load(D.decision_path(run.run_dir, "verify", 1).read_text())
+    ids = [o["id"] for o in doc["packet"]["decisions"][0]["options"]]
+    assert ids == ["retry", "goto", "skip", "abort"]
+
+
+def test_a_blocked_goto_answer_routes_to_the_named_stage(run):
+    sha = D.request(run.run_dir, "verify", 1, kind="blocked")
+    out = answer(run, sha, {"D1": "goto"}, stage="verify")
+    assert out.status == "goto"
+
+
+def test_a_blocked_skip_answer_routes_to_skip(run):
+    sha = D.request(run.run_dir, "verify", 1, kind="blocked")
+    out = answer(run, sha, {"D1": "skip"}, stage="verify")
+    assert out.status == "skip"

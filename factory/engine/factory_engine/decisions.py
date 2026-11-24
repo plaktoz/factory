@@ -27,7 +27,7 @@ StopKind = Literal["approval", "decision", "triage", "blocked"]
 Packet = dict[str, Any]
 
 APPROVAL_OPTIONS = frozenset({"approve", "rework", "reject"})
-BLOCKED_OPTIONS = frozenset({"retry", "abort"})
+BLOCKED_OPTIONS = frozenset({"retry", "goto", "skip", "abort"})  # module 11: a blocked run offers all four (owner decision, 2026-11-24)
 
 
 @dataclass
@@ -129,6 +129,10 @@ def _blocked_packet(stage: str) -> Packet:
         "options": [
             {"id": "retry", "name": "Retry", "flow": ["engine:Run stage again"],
              "pros": ["Keeps the work done so far"], "cons": ["One more attempt"]},
+            {"id": "goto", "name": "Send back to a stage", "flow": ["human:Pick a stage", "engine:Run from there"],
+             "pros": ["Reruns the stage that is wrong, not the one that failed"], "cons": ["Work after that stage is redone"]},
+            {"id": "skip", "name": "Skip a gate", "flow": ["human:Name the gate", "engine:Pass it on record"],
+             "pros": ["Moves a stuck run on when the gate is wrong"], "cons": ["The gate's check is not made"]},
             {"id": "abort", "name": "Abort", "flow": ["human:Abort", "engine:Clean up"],
              "pros": ["Stops spend"], "cons": ["The request is not delivered"]},
         ],
