@@ -1,0 +1,43 @@
+# The four docs checks (AGENTS.md, "Specs and checks"; docs/process.md, D1 of 2026-11-24).
+# The full engine suite is not part of this job. Settings (auto-merge, the required check on main)
+# are the owner's and are not set by this file.
+name: docs-checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read # gh pr list (records.py check 9)
+  issues: read # gh issue list (records.py check 9)
+
+jobs:
+  docs-checks:
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth 0: records.py reads origin/main (check 6) and issue_close.py reads merged pull requests.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          # The floor the engine supports (factory/engine/pyproject.toml, requires-python >=3.10).
+          python-version: "3.10"
+
+      - name: records
+        # gh reads pull requests and issues for check 9; without a token it cannot answer and the check is skipped.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -I scripts/docs-check/records.py .
+
+      - name: links
+        run: python3 -I scripts/docs-check/links.py .
+
+      - name: criteria
+        run: python3 -I scripts/docs-check/criteria.py .
+
+      - name: contracts
+        run: python3 -I scripts/docs-check/contracts.py .
