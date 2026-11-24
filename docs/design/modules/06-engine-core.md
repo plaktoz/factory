@@ -215,7 +215,7 @@ The example above is the frozen `Run` type of [section 18](../shared/18-shared-c
 **Lock and recovery**
 
 - One engine owns a run at a time. It takes a non-blocking OS file lock on the run's `lock` file (`flock` on macOS and Linux; on Windows `msvcrt.locking` on one byte past the heartbeat, so the file stays readable) and holds it until the process exits. `lock` also records its owner, its pid and its heartbeat, refreshed every 10 seconds, for display.
-- Another engine, or a `resume`, that cannot take the lock refuses the run. `resume(force=True)` skips its own check, but `acquire_lock` still refuses a live holder, so `force` has no effect today. The owner chose a per-task-worktree lock (decision `run-lock-is-per-task-worktree`, 2026-11-24): tasks go on in parallel and `resume --force` takes over only the engine of one task. That is not built and its location and mechanism are Unspecified; until it is, this section describes the code. A crash releases the lock at once; a sleeping or paused process keeps it, so no second engine can start on a run whose first engine is only asleep. `factory resume` continues a run whose lock is free.
+- Another engine, or a `resume`, that cannot take the lock refuses the run. A live holder always refuses a resume: the `force` parameter that `Engine.resume` has in the code never worked, because `acquire_lock` still refuses (decision `resume-has-no-force`; the code change is not made yet). The owner asked on 2026-11-24 for a lock for each task worktree; the design is the proposed ADR `2026-11-24-the-run-lock-is-held-per-task-worktree` and nothing is built. A crash releases the lock at once; a sleeping or paused process keeps it, so no second engine can start on a run whose first engine is only asleep. `factory resume` continues a run whose lock is free.
 - Each worker runs in its own process group, recorded in `task.json`. Before a new attempt starts, any recorded group that is still alive is killed, so a worker left over from a crashed engine cannot keep editing the worktree.
 - Write-ahead: an attempt's usage record is written before the worker starts. On takeover, open attempts are closed as `interrupted` and their tasks resume from the last checkpoint as new attempts. Before a new attempt after a crash, timeout or kill, the engine resets the task worktree to the last checkpoint commit (`git reset --hard`, then `git clean -fd` that leaves the git-excluded shims alone), so no half-written edit survives. Edits since the checkpoint are lost, at most `checkpoint_every_minutes` of work; the engine first saves the discarded diff as `tasks/<task>/discarded-<n>.patch` for troubleshooting.
 
@@ -364,7 +364,7 @@ class Engine:
     def tick(self, run_id: str) -> TickResult:
         """One pass: start ready tasks, collect results, checkpoint, deliver notes, join, gate,
         route or advance, raise attention, deliver. Deterministic given the same inputs."""
-    def resume(self, run_id: str, *, force: bool = False) -> None    # force: no effect today, see Lock and recovery
+    def resume(self, run_id: str) -> None
     def stop(self, run_id: str, *, reason: str) -> None
 
 @dataclass
