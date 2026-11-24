@@ -1,0 +1,42 @@
+{
+  "task": "worktree-agent-a0a3cc13ef0e967d5",
+  "branch": "worktree-agent-a0a3cc13ef0e967d5",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 4,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-49-section-18-labels"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "2026-11-24-section-18-follows-the-code-for-config-and-kit",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "a641147d8"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
