@@ -117,6 +117,7 @@ class PullRequests(Protocol):
     def merge(self, pr: PrRef, *, method: str = "squash", auto: bool = True, delete_branch: bool = True) -> None
     def request_reviewers(self, pr: PrRef, users: list[str]) -> None
     def comment(self, pr: PrRef, body: str) -> None    # a comment on the pull request (module 13, the verdict at green)
+    def current_user(self) -> str                      # the login gh is signed in as: the account that opens pull requests (module 13 skips it as a reviewer)
 ```
 
 Implementations: `FileTracker`, `GitHubTracker` (`gh`), `GitHubPullRequests` (`gh`), plus `FakeTracker` and `FakePullRequests` for other modules' tests.

@@ -193,3 +193,15 @@ def test_the_file_tracker_reads_markdown_front_matter_and_makes_no_github_call(t
 def test_a_missing_request_file_is_reported(tmp_path):
     with pytest.raises(FactoryError, match="no request file"):
         FileTracker(tmp_path).fetch("nope.md")
+
+
+def test_current_user_reads_the_login_gh_is_signed_in_as():
+    stub = Stub({("api", "user"): (0, "plaktoz\n", "")})
+    assert GitHubPullRequests("a/b", stub).current_user() == "plaktoz"
+    assert stub.calls[0] == ["api", "user", "-q", ".login"]
+
+
+def test_current_user_is_refused_when_gh_gives_no_login():
+    stub = Stub({("api", "user"): (1, "", "HTTP 401")})
+    with pytest.raises(FactoryError):
+        GitHubPullRequests("a/b", stub).current_user()

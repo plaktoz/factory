@@ -171,6 +171,24 @@ def test_the_person_who_raised_the_request_is_asked_to_review_when_it_opens(park
     assert "merge" not in prs.calls
 
 
+def test_a_failed_login_read_opens_no_pull_request_and_the_next_pass_can_try_again(new_run, engine, prs):
+    """The author is read before the pull request is opened. A read that fails must leave nothing open that the run does
+    not record, so the run stays where it was and a later pass opens the pull request."""
+    run_dir = new_run(request=github_request())
+    script, writes = chore_script(run_dir)
+    eng, _ = engine(script, writes)
+    prs.login_error = FactoryError("git.command_failed", "api user: no login")
+    with pytest.raises(FactoryError):
+        eng.run([RUN])
+    assert prs.prs == {}  # nothing was opened on GitHub
+    assert state.read_run(run_dir).pr is None  # and the run records no pull request
+    prs.login_error = None
+    prs.login = "alice"  # the request's author (github_request) is also the account that opens the pull request
+    eng.run([RUN])
+    assert state.read_run(run_dir).pr is not None
+    assert prs.prs[state.read_run(run_dir).pr.number].reviewers == []  # the author opened it: nobody is asked
+
+
 def test_a_request_from_the_cli_asks_nobody_and_still_waits_for_review(new_run, engine, prs):
     run_dir = new_run()  # a CLI request: its author is not a GitHub login
     script, writes = chore_script(run_dir)

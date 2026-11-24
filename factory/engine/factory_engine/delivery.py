@@ -323,11 +323,17 @@ def changed_since_base(run: Run, cfg: Config) -> list[str]:
     return [path for path, _, _ in (diff_stats(run.worktree, _base(cfg)) or [])]
 
 
-def reviewers_for(run: Run) -> list[str]:
+def reviewers_for(run: Run, *, pr_author: str | None = None) -> list[str]:
     """The person working on the request: the issue author of a GitHub request (owner decision D1, 2026-11-21).
-    A CLI or markdown request has no GitHub login, so nobody is asked and the merge-review item is the only signal."""
+    A CLI or markdown request has no GitHub login, so nobody is asked and the merge-review item is the only signal.
+    When that person is also the account that opens the pull request, nobody is asked: GitHub drops a review request
+    to a pull request's own author (owner decision D2, 2026-11-24, option ask-nobody-when-author-opens)."""
     src = run.request.source
-    return [src.author] if src.type == "github" and src.author else []
+    if src.type != "github" or not src.author:
+        return []
+    if pr_author is not None and pr_author == src.author:
+        return []
+    return [src.author]
 
 
 def green_check_done(run_dir: Path) -> bool:
