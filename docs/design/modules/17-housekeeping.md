@@ -75,7 +75,7 @@ def cleanup_after_join(repo: Path, cfg: Config, run: Run, task_ids: list[str]) -
 def cleanup_after_merge(repo: Path, cfg: Config, run: Run) -> None                       # called by 6B or tick
 ```
 
-Types that `plan` and `apply` take and return. Section 18 does not list them, so `housekeeping.py` is their source. Each list starts empty. `GcItem` defaults `run_id`, `cfg`, `repo`, `zip_path` and `ended` to None, `dirty` to False, `keep_bytes` to 0 and `check_unpushed` to True. `Skipped.detail` defaults to an empty string. In `GcReport`, `archived` holds run ids, and `removed`, `deleted` and `trimmed` hold path strings.
+Types that `plan` and `apply` take and return. Section 18 does not list them, so `housekeeping.py` is their source. Each list starts empty. `GcItem` defaults `run_id`, `cfg`, `repo`, `zip_path`, `ended` and `run_dir` to None, `dirty` to False, `keep_bytes` to 0 and `check_unpushed` to True. `Skipped.detail` defaults to an empty string. In `GcReport`, `archived` holds run ids, and `removed`, `deleted` and `trimmed` hold path strings.
 
 What the `GcItem` fields hold:
 - `kind` and `path`: the kind names what is removed, and `path` is that item's folder, file or worktree.
@@ -87,11 +87,12 @@ What the `GcItem` fields hold:
 - `ended`: for `archive`, the run's end time as text, written to `history.jsonl`.
 - `keep_bytes`: for `worker_log`, the number of newest bytes kept.
 - `check_unpushed`: True keeps the branch when it has commits no remote has. False is set for a run whose pull request merged.
+- `run_dir`: for a `worktree` or `worker_log` item of a run whose folder is on disk, that folder. `apply` re-reads its `run.json` status and its lock before it removes the worktree or cuts the log. None for the worktree of an archived run, which has no folder to re-read, and for other kinds.
 
 `Skipped.reason` is a short text from a fixed set in the code: `pull request open`, `pull request cannot be read`, `not clean; kept until it is due or removed by hand`, `not clean, and no cleanup_check is set`, `joined task, not clean; the run is still active`, `an engine holds the run lock; not touched`, `the repo is gone; the worktree cannot be checked or removed`, `the recorded worktree is the repo itself; never removed`, and `its repo config is invalid; the worktrees are kept`. `Skipped.detail` carries the variable part, such as the check's output, the `gh` error, or the branch and commit count.
 
 ```python
-class GcItem:   kind: Literal["worktree", "archive", "archive_delete", "kit", "worker_log"]; path: Path; run_id: str | None; cfg: Config | None; repo: Path | None; dirty: bool; zip_path: Path | None; ended: str | None; keep_bytes: int; check_unpushed: bool
+class GcItem:   kind: Literal["worktree", "archive", "archive_delete", "kit", "worker_log"]; path: Path; run_id: str | None; cfg: Config | None; repo: Path | None; dirty: bool; zip_path: Path | None; ended: str | None; keep_bytes: int; check_unpushed: bool; run_dir: Path | None
 class Skipped:  path: Path; run_id: str | None; reason: str; detail: str
 class Orphan:   path: Path; run_id: str | None; reason: str
 class Failed:   path: Path; message: str
