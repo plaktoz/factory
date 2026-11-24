@@ -6,20 +6,16 @@ instead of calling GitHub (module 7: 'GitHub adapters against a recorded gh stub
 from __future__ import annotations
 
 import json
-import logging
 import re
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
 
+from .adapters.tracker.base import SYNC_LIMIT
 from .errors import FactoryError
 from .types import PrRef, PrState, Source
 
-log = logging.getLogger(__name__)
-
 Runner = Callable[[list[str]], subprocess.CompletedProcess]
-
-SYNC_LIMIT = 200  # issues read per sync (decision issue-sync-limit-and-warning); gh's own default is 30
 
 STATUS_LABELS = ("factory:queued", "factory:running", "factory:needs-human", "factory:blocked", "factory:done", "factory:failed",
                  "factory:invalid")
@@ -53,15 +49,12 @@ class GitHubTracker:
 
     def list_new(self, since: str | None) -> list[Source]:
         """Every open `factory` issue, up to SYNC_LIMIT. gh returns 30 without --limit, so a 31st queued issue would
-        never be read. When the answer holds SYNC_LIMIT issues there may be more: a `sync_limit_reached` warning is
-        logged (`factory_engine.gh`), because list_new has no run folder to write an event into."""
+        never be read. When the answer holds SYNC_LIMIT issues, intake records the `sync_limit_reached` line in the
+        intake log (module 4): this adapter has no run folder and no event log of its own."""
         out = _ok(self.run(["issue", "list", *self._base(), "--label", "factory", "--state", "open",
                             "--limit", str(SYNC_LIMIT), "--json", "number,title,body,labels,author,updatedAt"]),
                   "issue list")
         items = json.loads(out or "[]")
-        if len(items) >= SYNC_LIMIT:
-            log.warning("sync_limit_reached: %s returned %d open factory issues, the sync limit; issues beyond it are "
-                        "not read this sync", self.repo or "the current repo", len(items))
         return [self._source(i) for i in items if since is None or i.get("updatedAt", "") > since]
 
     def fetch(self, ref: str) -> Source:

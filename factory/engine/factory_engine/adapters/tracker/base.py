@@ -6,6 +6,9 @@ from typing import Protocol
 
 from ...types import Source
 
+# Issues read per sync (decision issue-sync-limit-and-warning); gh returns 30 without --limit.
+SYNC_LIMIT = 200
+
 
 class TrackerAdapter(Protocol):
     def list_new(self, since: str | None) -> list[Source]: ...

@@ -6,7 +6,7 @@ Every git and GitHub action is run by the engine with `git` and `gh` as argument
 
 | Operation | When | Command (simplified) |
 | --- | --- | --- |
-| Read GitHub requests | `factory sync`, or every `watch` interval | `gh issue list --label factory --state open --limit 200 --json number,title,body,labels,author,updatedAt`. `gh` returns 30 without `--limit`, so the limit is 200 (decision `issue-sync-limit-and-warning`). When the answer holds 200 issues, `GitHubTracker.list_new` logs a `sync_limit_reached` warning (logger `factory_engine.gh`): it has no run folder to write an event into, so the warning is not in `events.jsonl`, and the issues beyond 200 are not read this sync |
+| Read GitHub requests | `factory sync`, or every `watch` interval | `gh issue list --label factory --state open --limit 200 --json number,title,body,labels,author,updatedAt`. `gh` returns 30 without `--limit`, so the limit is 200 (decision `issue-sync-limit-and-warning`). `list_new` returns a plain list and writes nothing. When the answer holds 200 issues, `intake.sync` writes a `sync_limit_reached` line to the intake log (`$FACTORY_HOME/intake/<repo key>/events.jsonl`, [module 4](04-intake-and-triage.md)), and the issues beyond 200 are not read this sync |
 | Mark an issue picked up | Run created | `gh issue edit 42 --add-label factory:queued`, then `gh issue comment 42` with the run id and dashboard link |
 | Read markdown requests | `factory sync` | Read `.factory/inbox/*.md`, parse front matter |
 | Make the run id | Run created | Slug of the title plus 5 random characters, checked against existing branches and worktree paths |
