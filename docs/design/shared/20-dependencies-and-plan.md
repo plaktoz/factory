@@ -175,7 +175,7 @@ The pilot starts in phase 1a with one chore or bug-fix issue and a human merge. 
 - [ ] Bug-fix end to end with fakes, driven only through the CLI: issue, run, triage, approval through `factory decide`, one rework from verify, PR, human merge, cleanup.
 - [ ] A small chore end to end with an explicit type auto-merges; the same chore typed by the triage LLM goes to human review.
 - [ ] Research end to end: read-only run, a branch only at delivery, report PR (1b).
-- [ ] Kill the engine mid-fix, then let the next tick resume it: only unfinished tasks run.
+- [x] Kill the engine mid-fix, then let the next tick resume it: only unfinished tasks run. (test: factory/engine/tests/engine/test_kill_and_resume.py::test_the_engine_a_tick_spawns_after_a_kill_finishes_the_run; a real engine child is SIGKILLed mid-worker, then a fresh engine process runs as the tick's spawn does; the tick's `spawn` is the subprocess here, not `tick` itself)
 - [ ] Two overlapping ticks: the second exits and no run starts twice.
 - [ ] Two repos on different kit versions on one dashboard (1a); a decision submitted on the page resumes the right run (1b).
 - [ ] A live smoke test on Claude with `FACTORY_LIVE=1`: a seeded request passes every gate.

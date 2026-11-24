@@ -137,7 +137,8 @@ class Engine:
                                hint="wait for that engine, or stop it, then resume")
         lock = state.acquire_lock(run_dir, self.owner)
         try:
-            self._recover(run_dir, lock)
+            if usage_mod.has_open_attempt(run_dir):  # recovery is for a killed attempt only; _drive does the rest
+                self._recover(run_dir, lock)
         finally:
             state.release(lock)
         self._drive(run_id)
@@ -315,6 +316,9 @@ class Engine:
         lock = state.acquire_lock(run_dir, self.owner)
         worked = False  # this engine ran a pass that could have pushed, so a pull request read now may be stale
         try:
+            # An engine that died left an attempt `started`: recover it before the passes (module 6, the tick's RESUME).
+            if usage_mod.has_open_attempt(run_dir):
+                self._recover(run_dir, lock)
             for _ in range(10_000):  # a bound, so a routing bug cannot spin forever
                 run = state.read_run(run_dir)
                 if run.status in ENDED or run.status in PARKED:
