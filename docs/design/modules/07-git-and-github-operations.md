@@ -81,7 +81,7 @@ Dashboard impact: the run detail shows conflict signals, such as "base: 14 commi
 
 **Module contract: 7 Git and GitHub operations**
 
-- **Depends on:** 3: `load_config`, `worktree_path`.
+- **Depends on:** 3: `load_config` and `render` (in `paths.py`), which fills the template of the worktree path setting.
 - **Writes:** git worktrees, branches and commits; GitHub labels, comments and pull requests.
 - **CLI it backs:** none directly; it is used by 4, 6B, 13, 16 and 17.
 

@@ -61,14 +61,20 @@ def gc(repo, *, apply=False) -> GcPlan                                       # 1
 def doctor(repo, *, as_scheduler=False) -> list[CheckResult]                    # 3, then 9 srt, sandbox canary, Claude check, canary and isolation probe, then 10 lock and pack size, then 17A toolchains
 def spawn_engine(repo, run_id) -> int | None
     """Start `factory run <run_id> --detach` unless a live lock exists; return pid."""
-# launcher (machine): dispatch and machine commands
-def dispatch(argv: list[str]) -> int        # find repo by cwd, --repo, or the run's repo path; exec its engine
-def tick(cfg: Config, *, repos: list[Path]) -> TickReport
+# launcher/cli.py (machine): the machine command dispatch
+def _dispatch(argv: list[str], repo: Path, home: Path, *, run_id: str | None = None, installed: bool = False) -> int
+    """Find the repo by cwd, --repo, or the run's repo path, and hand the command to its engine; the exit code passes through."""
+# launcher/tick.py
+def tick(cfg: Config, *, repos: list[Path], home: Path | None = None, spawn: Callable | None = None,
+         now: datetime | None = None, prs_for: Callable[[Path], PullRequests] | None = None,
+         tracker_for: Callable[[Path], object] | None = None) -> TickReport
     """cfg comes from load_config(None): the machine part only, with repo=None. For each repo in
     repos, tick calls load_config(repo) for the steps that read repo settings (sync, reminders, housekeeping).
     TickReport.reminded lists the runs it sent a reminder for."""
-def schedule_install(every: str, *, dashboard: bool = False) -> None
-def install_once(name: str, at: datetime, command: list[str], *, home: Path, cwd: Path) -> Path   # schedule.py; remove_once(name) -> bool
+# launcher/schedule.py
+def install(every: str, *, home: Path, target_dir: Path | None = None, system: str | None = None) -> Path
+def install_once(name: str, at: datetime, command: list[str], *, home: Path, cwd: Path,
+                 target_dir: Path | None = None, system: str | None = None) -> Path   # remove_once(name) -> bool
 ```
 
 **Run commands in detail**

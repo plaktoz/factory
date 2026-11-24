@@ -25,16 +25,33 @@ def module_for(file: str) -> str:
     return "factory_engine." + file[:-3].replace("/", ".")
 
 
+def lookup(mod, key: str):
+    """`func` or `Class.method` looked up on a module."""
+    obj = mod
+    for part in key.split("."):
+        obj = getattr(obj, part)
+    return obj
+
+
+def locate(sig: Sig) -> tuple[str, object] | None:
+    """The file that defines the signature, and the function, or None. The label's files are tried in order: a label
+    such as `# loadcfg.py, validate.py` names two files, and a function can live in either one."""
+    for file in sig.files:
+        if not (ENGINE / file).is_file():
+            continue
+        try:
+            fn = lookup(importlib.import_module(module_for(file)), sig.key)
+        except (ImportError, AttributeError):
+            continue
+        if getattr(fn, "__module__", module_for(file)) == module_for(file):   # defined here, not only imported here
+            return file, fn
+    return None
+
+
 def exists(sig: Sig) -> bool:
     """Built means the function (or method) can be found. A module file can exist before its module is built:
     config.py holds only the Config type until wave 1 builds module 3."""
-    if not (ENGINE / sig.file).is_file():
-        return False
-    try:
-        resolve(sig)
-    except (ImportError, AttributeError):
-        return False
-    return True
+    return locate(sig) is not None
 
 
 def norm(text: str | None) -> str | None:
@@ -59,11 +76,10 @@ def code_params(fn) -> tuple[Param, ...]:
 
 
 def resolve(sig: Sig):
-    mod = importlib.import_module(module_for(sig.file))
-    if "." in sig.key:
-        cls, meth = sig.key.split(".", 1)
-        return getattr(getattr(mod, cls), meth)
-    return getattr(mod, sig.key)
+    found = locate(sig)
+    if found is None:
+        raise AttributeError(f"{sig.key} is in none of {sig.files}")
+    return found[1]
 
 
 def returns_text(fn) -> str | None:
@@ -83,7 +99,9 @@ def test_the_parser_reads_the_whole_spec():
     # 153 since 2026-11-22: module 11 lists notify.remind, which the tick calls for a run that waits for a person.
     # 155 since 2026-11-22: module 17A lists format_changed_files (D8), language_tasks takes the changed paths (D5), and module 16 lists install_once (`factory schedule at`, PR #135).
     # 156 since 2026-11-24: module 8 lists rework.build_human_feedback (a human rework's notes reach the stage).
-    assert len(SIGS) == 156, f"{len(SIGS)} signatures parsed, expected 156: the parser regressed, or a spec signature was removed or added"
+    # 157 since 2026-11-24: module 7 lists PullRequests.current_user (owner decision D2, 2026-11-24, the account that opens pull requests).
+    # Module 3's worktree_path became paths.render (same count); module 16's schedule_install became launcher's install.
+    assert len(SIGS) == 157, f"{len(SIGS)} signatures parsed, expected 157: the parser regressed, or a spec signature was removed or added"
     assert all(s.file for s in SIGS), "a signature has no module file; add a `# file.py` comment to its block"
 
 

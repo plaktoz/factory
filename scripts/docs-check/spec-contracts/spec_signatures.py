@@ -6,7 +6,10 @@ The spec writes a signature on one or more lines, often with no body and with a 
         \"\"\"Merge defaults ...\"\"\"
 
 A block names the file it belongs to with a comment line such as `# gitops.py` or `# adapters/tracker/base.py`.
-A signature belongs to the last such comment above it in the same block. Methods of a class are keyed `Class.method`.
+A label may list several files, `# adapters/worker/claude.py, fake.py`: a bare name after the first is in the first
+name's folder. The reader keeps all of them in `Sig.files`, and `Sig.file` is the first. The contract test finds the
+file that defines a signature among them. A signature belongs to the last such comment above it in the same block.
+Methods of a class are keyed `Class.method`.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from pathlib import Path
 from spec_blocks import REPO
 
 SPEC_DIRS = [REPO / "docs/design/modules", REPO / "docs/design/shared"]
-FILE_COMMENT = re.compile(r"^#\s+((?:[a-z_]+/)*[a-z_0-9]+\.py)\b")
+FILE_LIST = re.compile(r"^#\s+((?:[a-z_]+/)*[a-z_0-9]+\.py)((?:\s*,\s*(?:[a-z_]+/)*[a-z_0-9]+\.py)*)")
 
 
 @dataclass(frozen=True)
@@ -32,11 +35,12 @@ class Param:
 
 @dataclass(frozen=True)
 class Sig:
-    key: str           # "load_config" or "Clock.now"
-    file: str | None   # "config.py" or None when the block names no file
-    spec: str          # which spec file, for messages
+    key: str                # "load_config" or "Clock.now"
+    file: str | None        # the first file the block's label names, or None when it names no file
+    spec: str               # which spec file, for messages
     params: tuple[Param, ...]
     returns: str | None
+    files: tuple[str, ...] = ()   # every file the label lists, in order: ("adapters/worker/claude.py", "adapters/worker/fake.py")
 
 
 def _balanced(text: str) -> bool:
@@ -102,17 +106,26 @@ def _strip_comment(text: str) -> str:
     return text
 
 
+def _label_files(first: str, rest: str) -> tuple[str, ...]:
+    """`first` plus the names after it. A bare name is in the folder of `first`."""
+    folder = first.rpartition("/")[0]
+    names = [first] + [n.strip() for n in rest.split(",") if n.strip()]
+    return tuple(n if "/" in n or not folder else f"{folder}/{n}" for n in names)
+
+
 def block_signatures(block: str, spec: str) -> list[Sig]:
     lines = block.split("\n")
     sigs: list[Sig] = []
     file: str | None = None
+    files: tuple[str, ...] = ()
     cls: str | None = None
     i = 0
     while i < len(lines):
         line = lines[i]
-        m = FILE_COMMENT.match(line)
+        m = FILE_LIST.match(line)
         if m:
             file, cls = m.group(1), None
+            files = _label_files(m.group(1), m.group(2))
         cm = re.match(r"class (\w+)", line)
         if cm:
             cls = cm.group(1)
@@ -136,7 +149,7 @@ def block_signatures(block: str, spec: str) -> list[Sig]:
                 indent = len(dm.group(1))
                 owner = cls if indent > 0 and cls else None
                 key = f"{owner}.{fn.name}" if owner else fn.name
-                sigs.append(Sig(key, file, spec, _params(fn), ast.unparse(fn.returns) if fn.returns else None))
+                sigs.append(Sig(key, file, spec, _params(fn), ast.unparse(fn.returns) if fn.returns else None, files))
         i = last + 1
     return sigs
 
