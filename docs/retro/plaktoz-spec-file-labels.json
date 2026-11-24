@@ -1,0 +1,42 @@
+{
+  "task": "spec-file-labels",
+  "branch": "plaktoz/spec-file-labels",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 23,
+    "process": 82
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-49b-spec-file-labels"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "2026-11-24-spec-file-labels-match-the-code",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "21edf4d0c"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
