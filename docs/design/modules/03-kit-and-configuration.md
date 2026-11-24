@@ -217,16 +217,20 @@ Phase 1 logs in to Claude with an API key or a gateway token. An OAuth login is 
 - **CLI it backs:** `init`, `upgrade`, `doctor`, `config init`.
 
 ```python
-# config.py
+# loadcfg.py, validate.py, redact.py
 def load_config(repo: Path | None, *, env: Mapping[str, str] = os.environ) -> Config
     """Merge defaults, machine file and repo file; machine keys from the machine file,
     repo keys from the repo file; the one environment override built is FACTORY_WORKTREE_ROOT. Validates against schema.
     Returns Config(machine=..., repo=...); repo is None when the repo argument is None."""
-def resolve_harness(cfg: Config, harness: str, *, env: Mapping[str, str] = os.environ) -> HarnessConfig   # HarnessConfig is defined in module 9
-    """command, model (None when unset), args and the minimal env with ${...} resolved at call time."""
-def worktree_path(cfg: Config, repo: Path, run_id: str, task: str | None = None) -> Path
-def validate(obj: dict, schema: str) -> None            # raises FactoryError("config.invalid"), naming the file and the failing path
+def resolve_harness(cfg: Config, harness: str, *, env: Mapping[str, str] = os.environ, stage_model: str | None = None,
+                    task_model: str | None = None) -> HarnessConfig   # HarnessConfig is defined in module 9
+    """command, model (None when unset), args and the minimal env with ${...} resolved at call time.
+    The model is task_model, then stage_model (the stage routing), then the harness default, then None."""
+def validate(obj: dict, schema: str, *, file: str = "<input>") -> None   # raises FactoryError("config.invalid") naming `file` and the failing path
 def mask(text: str, secrets: Iterable[str]) -> str
+# paths.py: the `worktree_path` setting (a template) is rendered here; gitops's private `_worktree_for` reads the setting and calls this
+def render(template: str, *, root: Path, repo: str, owner: str, run_id: str, task: str | None) -> Path
+    """Fill {root}, {repo}, {owner}, {run_id} and {task}; a task adds `--<task>` when the template has no {task}."""
 # kit.py
 def init_repo(repo: Path) -> InitReport                  # labels are added by drivers (16)
 # InitReport: created: list[Path] (files written), unchanged: list[Path] (files that already existed and were left alone)

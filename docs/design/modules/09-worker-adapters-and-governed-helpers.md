@@ -195,7 +195,8 @@ def check_helpers_ledger(spec: GateSpec, ctx: GateContext) -> GateResult     # u
 # adapters/worker/claude.py, fake.py
 class ClaudeAdapter(WorkerAdapter): ...
 class FakeWorkerAdapter(WorkerAdapter):        # scripted results for other modules' tests
-    def __init__(self, script: dict[str, list[AttemptResult]], *, writes: dict[str, dict[str, str]] = {}): ...
+    def __init__(self, script: dict[str, list[AttemptResult]], *, writes: dict[str, dict[str, str]] | None = None,
+                 capabilities: Capabilities | None = None): ...   # capabilities default: subagents none, usage True
 ```
 
 **Write boundary.** The adapter limits the worker's writes to its worktree and `$FACTORY_TASK_DIR` with Claude Code's sandbox (see Threat model and isolation below). The engine reads back only three things from `work/`: the artifact (schema-checked), `progress.md` and the helpers ledger. Everything else the worker writes there is ignored.
