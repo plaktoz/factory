@@ -151,8 +151,6 @@ def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: Gat
     Every field comes from the command's output: the exit code, the failing tests the gate read from JUnit XML, and
     the files git reports. `max_loops` of 0 means the edge has no limit, and the record then shows the loop number.
     Returns the first record written."""
-    if not task_ids:
-        raise ValueError("build_feedback needs at least one task folder to write into")
     if isinstance(result, JoinResult):
         gate, exit_code, failed = "join", None, []
         files = list(result.conflict_files)
@@ -165,6 +163,28 @@ def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: Gat
     doc = {"schema_version": SCHEMA_VERSION, "from_stage": from_stage, "to_stage": to_stage, "loop": loop,
            "max": max_loops or loop, "gate": gate, "exit_code": exit_code, "failed_tests": failed,
            "output_tail": output, "changed_files": files, "at": _iso(SystemClock().now())}
+    return _write_records(run_dir, doc, task_ids, max_loops=max_loops)
+
+
+def build_human_feedback(run_dir: Path, *, from_stage: str, to_stage: str, notes: str, loop: int, max_loops: int,
+                         task_ids: list[str]) -> Path:
+    """Write the notes of a human rework as a feedback record into each task folder of the stage the run goes back to.
+
+    A human rework has no gate, exit code or test, so those fields hold the values the schema allows for none:
+    gate "human", exit_code null and empty lists. `notes` is the operator's answer, and it is written even when empty,
+    so the worker still sees that a person sent the stage back. Logs routed_back, as a gate rework does."""
+    doc = {"schema_version": SCHEMA_VERSION, "from_stage": from_stage, "to_stage": to_stage, "loop": loop,
+           "max": max_loops or loop, "gate": "human", "exit_code": None, "failed_tests": [], "output_tail": "",
+           "changed_files": [], "at": _iso(SystemClock().now()), "notes": notes}
+    return _write_records(run_dir, doc, task_ids, max_loops=max_loops)
+
+
+def _write_records(run_dir: Path, doc: dict, task_ids: list[str], *, max_loops: int) -> Path:
+    """Validate one feedback record, write it into each task folder, and log routed_back with the edge's limit as
+    routed (0 when the edge has none). Returns the first record."""
+    if not task_ids:
+        raise ValueError("feedback needs at least one task folder to write into")
+    from_stage, to_stage = doc["from_stage"], doc["to_stage"]
     validate(doc, "feedback", file=f"feedback {from_stage}->{to_stage}")
     first: Path | None = None
     for task_id in task_ids:
@@ -174,8 +194,8 @@ def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: Gat
         path = folder / f"{n:03d}-{from_stage}-to-{to_stage}.json"
         write_json_atomic(path, doc)
         first = first or path
-    append_event(run_dir, "routed_back", from_stage=from_stage, to_stage=to_stage, loop=loop, max=max_loops,
-                 gate=gate, tasks=task_ids)
+    append_event(run_dir, "routed_back", from_stage=from_stage, to_stage=to_stage, loop=doc["loop"],
+                 max=max_loops, gate=doc["gate"], tasks=task_ids)
     assert first is not None
     return first
 

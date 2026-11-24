@@ -11,7 +11,7 @@ The engine sorts every failure into one class, and each class has a fixed respon
 | Gate failure | Tests fail (a `cmd` task exits non-zero), scope violation, blocking review finding | Rework: route to `on_fail.goto` with a feedback record | `on_fail.max` loops per edge |
 | No test results | The verify stage's tasks report 0 test cases together: no JUnit file was written, or the files hold no test case | Blocked, with a reason naming the missing files, so no pull request opens. `factory skip <run> --gate no-test-results` passes it (a repo with no tests); a skip turns off auto-merge | None (owner decision T1; see Decisions) |
 | Merge conflict at join | Two task branches change the same lines | Abort the merge, route to `on_conflict.goto` | `on_conflict.max` |
-| Human rework | You answer rework at an approval | Route to `on_reject.goto` with your notes as feedback | None |
+| Human rework | You answer rework at an approval | Route to `on_reject.goto` and write your notes into each task folder of that stage as a feedback record (`gate: "human"`, `exit_code: null`, empty lists, `notes`); logs `routed_back` | `on_reject` has no limit; the record shows the loop number. A stage with no `on_reject` blocks the run and writes nothing |
 | Human reject | You answer reject | Run aborted | None |
 | Engine crash | Process killed, machine asleep | On the next start, open attempts become interrupted and resume | Does not use retries; `max_interruptions` per task (a task key, an integer of 0 or more, default 3). A task fails when its `interrupted` attempts reach the value, so with the default the 3rd interruption fails it and two still resume. `0` fails it at the first crash |
 
@@ -36,6 +36,19 @@ The engine sorts every failure into one class, and each class has a fixed respon
 ```
 
 Every field is extracted by code: the gate's exit code and output, JUnit XML for test names, `git diff --name-only` for changed files.
+
+A human rework writes the same record. The fields a gate does not have hold the values the schema allows for none, and the operator's answer is in `notes`, an optional field that only a human rework sets. Empty notes still write the record, with `notes` as an empty string, so the worker sees that a person sent the stage back. A `reject` writes no record. Example of a human rework:
+
+```json
+{
+  "schema_version": 1,
+  "from_stage": "propose", "to_stage": "root-cause", "loop": 1, "max": 1,
+  "gate": "human", "exit_code": null,
+  "failed_tests": [], "output_tail": "", "changed_files": [],
+  "at": "2026-11-24T10:20:00+08:00",
+  "notes": "Keep the old token format; only the expiry check is wrong."
+}
+```
 
 **When a run is blocked**, its decision file offers these options, also available as commands:
 
@@ -78,6 +91,8 @@ def classify(failure: FactoryError | AttemptResult | GateResult | JoinResult) ->
 def with_backoff(fn: Callable[[], T], *, delays: tuple[int, ...] = (5, 30), clock: Clock) -> T
 def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: GateResult | JoinResult,
                    loop: int, max_loops: int, task_ids: list[str]) -> Path
+def build_human_feedback(run_dir: Path, *, from_stage: str, to_stage: str, notes: str, loop: int, max_loops: int,
+                         task_ids: list[str]) -> Path   # a human rework: gate "human", the notes in `notes`
 def route(run: Run, wf: Workflow, stage: Stage, failure: ErrorKind | Outcome) -> Routing
     """retry task | goto stage (with stages to reset) | wait (retrying) | blocked | aborted."""
 ```
@@ -85,7 +100,7 @@ def route(run: Run, wf: Workflow, stage: Stage, failure: ErrorKind | Outcome) ->
 Plugins can add checks by placing a function in their `gates/` folder; the name is registered as plugin:\<name>/\<check> when the plugin is enabled, and the function runs in a separate Python process that gets the GateContext as JSON and returns a GateResult.
 
 - **Run and test:** `pytest factory/engine/tests/gates factory/engine/tests/rework` with recorded gate outputs.
-- **Errors:** a routing loop is bounded by persisted counters; at the maximum the run is blocked.
+- **Errors:** a routing loop is bounded by persisted counters; at the maximum the run is blocked. A feedback write that fails part-way (a disk error after the first task folder, for example) is not handled: the error stops the tick before the routing is saved, and this file does not say what the next tick does. Not built yet; the same holds for `build_feedback`.
 - **Decisions taken while building (wave 2).** The backoff has three tries and two waits, 5 s and 30 s, so the default is `(5, 30)`. A third wait of 2 min is not used. A `cmd` task's non-zero exit is a gate failure, so 6B passes its result to `cmd_gate_result`; `classify` alone reads a bare non-zero exit as a worker error. `max` is the number of loops an edge allows: `max: 3` routes the first three failures and blocks the fourth. The shipped `bug-fix.yaml` and the module 5 `bug-fix` example use 3 on `verify->fix`, the value the walkthrough uses (owner decision, wave 3). The other shipped edges keep their values: `fix->root-cause` 2, `fix` conflict 1, `review->fix` 1, and `chore` 2 on both edges. A gate command that is missing is `gate.command_missing`, kind `human`, as module 9 gives a missing binary.
 
 **A silent `cmd` task is reported, not killed.** Not built yet. The planned rule: the engine notes when a running `cmd` task's `worker.log` last grew. After `stall_minutes` with no growth (a task field, default 10, `0` turns the check off), it logs one `task_silent` event and shows it on the task card. It does not kill the task or change its state. Claude tasks are left out. The fields and event are not in the schemas or the event list yet.
@@ -94,7 +109,7 @@ Plugins can add checks by placing a function in their `gates/` folder; the name 
 
 Acceptance criteria:
 
-- [ ] Each failure type in the class table maps to exactly one handling type. (not ticked: the human rework row routes the run back and asks again, and the reject row aborts it, both tested through a real module 11 answer in `factory/engine/tests/engine/test_human_rework_and_reject.py`. The rework row also promises that the operator's notes reach the stage as feedback, and they do not: `_human_stop` never reads `decision.notes`, and the feedback schema has no field for them. Fixing that changes a shared schema, so it is the proposed ADR `docs/adr/2026-11-22-human-rework-notes-reach-the-stage.md`. The engine crash row is tested: `factory/engine/tests/engine/test_max_interruptions.py`, which simulates the engine's death mid-attempt and resumes it, and `test_kill_the_engine_mid_task_then_resume`, which kills a real child engine process and resumes it once)
+- [x] Each failure type in the class table maps to exactly one handling type. (test: factory/engine/tests/engine/test_human_rework_and_reject.py::test_a_rework_answers_notes_reach_the_next_prompt_of_the_stage_it_goes_back_to, ::test_a_reject_answer_writes_no_feedback_record; factory/engine/tests/rework/test_rework.py::test_a_human_rework_writes_the_notes_as_a_feedback_record_in_each_target_task_folder, ::test_a_merge_conflict_follows_on_conflict_and_has_its_own_counter, ::test_the_error_kind_a_module_raises_is_what_classify_returns; factory/engine/tests/engine/test_verify_report.py::test_a_verify_stage_with_no_test_cases_blocks_the_run_and_names_the_missing_junit_files; factory/engine/tests/engine/test_max_interruptions.py; factory/engine/tests/engine/test_engine.py::test_kill_the_engine_mid_task_then_resume)
 - [ ] A `cmd` gate runs under `srt`; its exit code decides pass or fail, and a missing binary is a task error. (not ticked: no test runs under `srt`, because the gate tests replace the runner with a stub, so the real `CommandAdapter` (merged in module 9) is not exercised through a gate; the exit-code and missing-binary parts are asserted by `factory/engine/tests/gates/test_gates.py::test_a_cmd_gate_passes_on_exit_0_and_fails_on_any_other_exit` and `::test_a_missing_gate_binary_is_a_task_error_not_a_failed_gate`)
 - [x] A verify stage whose tasks report 0 test cases blocks the run with a reason naming the missing JUnit files, and opens no pull request. (test: factory/engine/tests/engine/test_verify_report.py::test_a_verify_stage_with_no_test_cases_blocks_the_run_and_names_the_missing_junit_files; decision T1, 2026-11-17)
 - [x] `factory skip <run> --gate no-test-results` passes the T1 block, logs `gate_skipped` and stops auto-merge; on any other block it is refused and the run stays blocked. (test: factory/engine/tests/engine/test_t1_skip.py::test_a_skip_passes_the_zero_test_block_for_a_repo_with_no_tests; ::test_the_t1_skip_is_refused_when_the_run_is_blocked_by_anything_else; ADR 2026-11-17-t1-skip-is-a-named-block-skip)
@@ -118,4 +133,5 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | A verify stage whose tasks report 0 test cases together blocks the run (code `gate.no_test_results`) before a pull request opens. The block names the missing result files. | The factory must never open a pull request that says the tests passed when no test ran. | `pass-and-warn` (open the pull request with a warning line); `pass-silently` ("no tests ran" looks like "all passed"). | 2026-11-17-no-test-results-stops-the-run (T1) |
 | `factory skip <run> --gate no-test-results` passes the T1 block, and only it. The blocked card shows this command, not `factory retry`. The engine accepts the name only when the latest `run_blocked` event has code `gate.no_test_results`. It turns off auto-merge. | The T1 block is raised by the engine in the verify join, so it is not a gate in the workflow. No workflow edit is needed and no shipped gate becomes skippable. | `skippable-test-report` (a skippable flag also lets a person skip real test failures); `has-test-results-check` (a new gate, which needs a workflow edit). | 2026-11-17-t1-skip-is-a-named-block-skip (T1) |
 | The engine logs one `task_silent` event for a running `cmd` task whose `worker.log` has not grown for `stall_minutes` (default 10, 0 is off). It does not kill the task or change its state. Claude tasks are left out. Not built yet. | A task quiet on purpose, such as a compile that prints only at the end, would be killed and retried for nothing. Claude tasks need `stream-json` first. | `kill-on-silence` (end the attempt as `timeout`); `print-progress-in-commands` (cannot cover a repo's own commands). | 2026-11-18-a-silent-cmd-task-is-reported-not-killed (owner decision 2026-11-18) |
+| A human's `rework` answer writes its notes as a feedback record (`gate: "human"`, `exit_code: null`, empty lists, the new optional `notes` field) into each task folder of the `on_reject.goto` stage, and logs `routed_back`, so the stage's next prompt shows them. A `reject` writes nothing. Rework with empty notes still writes the record, with `notes` empty. | The notes are the content of a human rework. Without them the stage runs again on the same input, so the loop cannot end for a reason the person cares about. The feedback path is the one channel a worker already reads for rework, so this is the smallest change that makes the rework row true. | Queue the notes as a note on each task (`notes.queue_note`): a task reset deletes `task.json`, the note API is built for a running task, and it loses the stage and loop context. Leave the row as it was and say the notes are not passed: a rework with no notes gives the worker nothing new. | 2026-11-22-human-rework-notes-reach-the-stage (owner answer, 2026-11-24, option 1) |
 | After three tries the run is `retrying`. Each tick retries for `infra_wait_hours` (6) before the run is blocked. | Retries of 5 s, 30 s and 2 min block a run in a 3-minute outage, so one outage would block every active run and need a human for each. Waiting uses the existing tick, so no new loop is needed, and outages heal without human noise. | Keep the three tries and then block (many runs blocked by one outage). | 2026-11-14-outages-retry-then-block (D13) |

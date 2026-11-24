@@ -94,6 +94,15 @@ def test_unknown_schema_version_fails(name):
         check(name, dict(GOOD[name], schema_version=2))
 
 
+def test_a_human_rework_feedback_record_with_notes_is_valid():
+    """A human rework has no gate or tests: gate "human", exit_code null, empty lists, and the operator's notes."""
+    human = dict(FEEDBACK, gate="human", exit_code=None, failed_tests=[], output_tail="", changed_files=[],
+                 notes="Use the refresh hint in the 401 body.")
+    check("feedback", human)
+    with pytest.raises(jsonschema.ValidationError):
+        check("feedback", dict(FEEDBACK, notes=["not", "a", "string"]))
+
+
 def test_enum_fields_are_closed():
     with pytest.raises(jsonschema.ValidationError):
         check("run", dict(RUN, status="sleeping"))
