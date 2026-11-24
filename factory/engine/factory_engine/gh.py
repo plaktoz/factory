@@ -126,6 +126,10 @@ class GitHubPullRequests:
     def comment(self, pr: PrRef, body: str) -> None:
         _ok(self.run(["pr", "comment", str(pr.number), *self._base(), "--body", body]), "pr comment")
 
+    def current_user(self) -> str:
+        """The login gh is signed in as. It opens the pull requests, so it is the author a review request would target."""
+        return _ok(self.run(["api", "user", "-q", ".login"]), "api user").strip()
+
 
 _FAIL = {"FAILURE", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR"}
 _PASS = {"SUCCESS", "NEUTRAL", "SKIPPED"}

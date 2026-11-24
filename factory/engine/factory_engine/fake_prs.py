@@ -30,6 +30,7 @@ class _Pr:
 
 class FakePullRequests:
     def __init__(self):
+        self.login = "factory"  # what current_user returns; a test sets it to the issue author to test D2
         self.prs: dict[int, _Pr] = {}
         self.fail_next: Exception | None = None
         self.calls: list[str] = []
@@ -75,6 +76,9 @@ class FakePullRequests:
             if p.ci != "green":
                 raise RuntimeError(f"pull request #{pr.number} has CI {p.ci}")
             p.state = "merged"
+
+    def current_user(self) -> str:
+        return self.login  # not recorded in calls: it reads who is signed in and acts on no pull request
 
     def request_reviewers(self, pr: PrRef, users: list[str]) -> None:
         self.calls.append("request_reviewers")

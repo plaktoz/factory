@@ -974,7 +974,7 @@ class Engine:
         sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
         if sink.pr is not None:
             if opening:
-                self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run))
+                self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run, pr_author=self.prs.current_user()))
             run.pr = sink.pr
             run.status = "awaiting_approval"
             result.attention = run.attention = notify.attention_for(run, now=self.clock.now().isoformat())
@@ -1026,7 +1026,8 @@ class Engine:
         if not decision.auto:
             return  # reviewers were asked when the pull request opened
         try:
-            delivery.merge_or_request_review(run.pr, decision, self.prs, delivery.reviewers_for(run))
+            delivery.merge_or_request_review(run.pr, decision, self.prs,
+                                             delivery.reviewers_for(run, pr_author=self.prs.current_user()))
         except FactoryError as e:
             if e.code != "delivery.merge_blocked":
                 raise

@@ -497,3 +497,14 @@ def test_the_pull_request_body_says_the_run_awaits_review_not_that_it_is_running
     run_dir, wt, _ = chore(home, tmp_path, cfg)
     text = render_summary(run_dir, usage.summarize([run_dir]), delivering=True).read_text()
     assert "Result: awaiting review" in text and "Result: running" not in text
+
+
+def test_no_review_is_requested_when_the_issue_author_opens_the_pull_request(home, tmp_path, cfg):
+    """Owner decision D2 (2026-11-24, decision page open-stops-2026-11-24, option ask-nobody-when-author-opens): GitHub drops a
+    review request to the pull request's own author, so the factory asks nobody when the author is the one who opens it."""
+    run_dir, wt, _ = chore(home, tmp_path, cfg)
+    run = read_run(run_dir)
+    run.request.source.type = "github"
+    run.request.source.author = "plaktoz"
+    assert delivery.reviewers_for(run, pr_author="plaktoz") == []
+    assert delivery.reviewers_for(run, pr_author="someone-else") == ["plaktoz"]
