@@ -15,7 +15,8 @@
     "failed_tests": {"type": "array", "items": {"type": "string"}},
     "output_tail": {"type": "string"},
     "changed_files": {"type": "array", "items": {"type": "string"}},
-    "at": {"type": "string"}
+    "at": {"type": "string"},
+    "notes": {"type": "string"}
   },
   "required": ["schema_version", "from_stage", "to_stage", "loop", "max", "gate", "exit_code",
                "failed_tests", "output_tail", "changed_files", "at"],

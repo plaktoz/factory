@@ -107,6 +107,14 @@ def test_json_examples_in_the_spec_validate():
     validator("feedback").validate(json.loads(block))
 
 
+def test_the_human_rework_feedback_example_in_module_8_validates():
+    """The second json block in module 8 is the record a human rework writes (gate "human", notes set)."""
+    text = (MODULES / "08-gates-error-handling-and-rework.md").read_text()
+    doc = json.loads(re.findall(r"```json\n(.*?)```", text, re.S)[1])
+    assert doc["gate"] == "human" and doc["exit_code"] is None and doc["notes"]
+    validator("feedback").validate(doc)
+
+
 def test_plain_safe_load_breaks_the_spec_examples():
     """Why FactoryLoader exists: with plain safe_load, `mode: off` becomes False."""
     block = one(MODULES / "05-workflows-and-plugins.md", r"plugins/frontend-review/plugin\.yaml")

@@ -243,6 +243,23 @@ def test_build_feedback_logs_routed_back_with_the_loop(tmp_path):
             event["data"]["max"]) == ("verify", "fix", 1, 2)
 
 
+def test_a_human_rework_writes_the_notes_as_a_feedback_record_in_each_target_task_folder(tmp_path):
+    run_dir, run, wf = make_run(tmp_path)
+    path = rework.build_human_feedback(run_dir, from_stage="propose", to_stage="fix", notes="Keep the old token format.",
+                                       loop=1, max_loops=0, task_ids=["backend", "frontend"])
+    doc = json.loads(path.read_text())
+    validate(doc, "feedback")
+    assert doc["notes"] == "Keep the old token format."
+    assert (doc["from_stage"], doc["to_stage"], doc["loop"], doc["gate"], doc["exit_code"]) == (
+        "propose", "fix", 1, "human", None)
+    assert (doc["failed_tests"], doc["changed_files"]) == ([], [])
+    assert doc["max"] == 1  # an edge with no limit shows the loop number, as a gate rework does
+    for task in ("backend", "frontend"):
+        assert len(list((run_dir / "tasks" / task / "feedback").glob("*.json"))) == 1
+    (event,) = [e for e in read_jsonl(run_dir / "events.jsonl") if e["type"] == "routed_back"]
+    assert (event["data"]["from_stage"], event["data"]["to_stage"], event["data"]["gate"]) == ("propose", "fix", "human")
+
+
 # --- route ----------------------------------------------------------------------------------------------------
 
 def test_route_resets_the_target_stage_and_every_later_stage_and_leaves_earlier_stages_done(tmp_path):

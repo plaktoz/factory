@@ -918,7 +918,13 @@ class Engine:
             state.write_run(run_dir, run, lock=lock)
             result.finished.append(stage.id)
             return result
-        return self._apply(run, run_dir, lock, wf, stage, rework.route(run, wf, stage, outcome), result)
+        routing = rework.route(run, wf, stage, outcome)
+        if routing.action == "goto" and outcome.status == "rework":
+            # The operator's notes go to the stage the run is sent back to, as feedback its workers read (module 8).
+            rework.build_human_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, notes=outcome.notes,
+                                        loop=routing.loop, max_loops=routing.max,
+                                        task_ids=self._tasks_of(wf, routing.goto, run_dir))
+        return self._apply(run, run_dir, lock, wf, stage, routing, result)
 
     def _apply(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, routing: rework.Routing,
                result: TickResult) -> TickResult:
