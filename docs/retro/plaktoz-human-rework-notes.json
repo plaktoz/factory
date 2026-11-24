@@ -1,0 +1,42 @@
+{
+  "task": "human-rework-notes",
+  "branch": "plaktoz/human-rework-notes",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 98,
+    "spec": 19,
+    "process": 10
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "rework-notes-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "2026-11-22-human-rework-notes-reach-the-stage",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "135552f98"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
