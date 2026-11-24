@@ -1,0 +1,258 @@
+{
+  "task": "phase-2-stacks-are-practice-packs-2",
+  "branch": "plaktoz/phase-2-stacks-are-practice-packs-2",
+  "base": "origin/main",
+  "sessions": [
+    "49d45b31-89eb-4c9f-b387-eb6d734db70a"
+  ],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 9,
+    "process": 2
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "phase-2-decisions-2026-11-24"
+  ],
+  "time": {
+    "wall_s": 5471.7,
+    "buckets": {
+      "agent_think": 45.6,
+      "think_reply": 1580.1,
+      "run_tests": 239.0,
+      "investigate": 192.6,
+      "github": 120.1,
+      "commit_hooks": 7.2,
+      "deliver_chain": 109.5,
+      "records_checks": 75.9,
+      "wait_reply": 1597.1,
+      "mixed_shell": 375.5,
+      "delegate": 93.2,
+      "wait_machine": 201.3,
+      "ask_owner": 13.4,
+      "wait_question": 815.2,
+      "write_spec": 1.4,
+      "decision_pages": 1.2,
+      "push_hooks": 3.3
+    }
+  },
+  "tokens": {
+    "main": {
+      "input": 454,
+      "output": 167959,
+      "cache_creation": 3333694,
+      "cache_read": 34082324
+    },
+    "subagent": {
+      "input": 1380,
+      "output": 2422908,
+      "cache_creation": 3879784,
+      "cache_read": 61238183
+    },
+    "by_activity": {
+      "run_tests": {
+        "new": 621642,
+        "reread": 11096972
+      },
+      "investigate": {
+        "new": 6100319,
+        "reread": 46982817
+      },
+      "github": {
+        "new": 884739,
+        "reread": 5782628
+      },
+      "commit_hooks": {
+        "new": 28673,
+        "reread": 1143908
+      },
+      "deliver_chain": {
+        "new": 206463,
+        "reread": 1821341
+      },
+      "records_checks": {
+        "new": 759994,
+        "reread": 6604232
+      },
+      "think_reply": {
+        "new": 125678,
+        "reread": 3526417
+      },
+      "mixed_shell": {
+        "new": 128440,
+        "reread": 4173389
+      },
+      "delegate": {
+        "new": 260358,
+        "reread": 928141
+      },
+      "wait_machine": {
+        "new": 36534,
+        "reread": 1553913
+      },
+      "ask_owner": {
+        "new": 17422,
+        "reread": 1126653
+      },
+      "write_spec": {
+        "new": 162682,
+        "reread": 1471148
+      },
+      "decision_pages": {
+        "new": 19489,
+        "reread": 281418
+      },
+      "push_hooks": {
+        "new": 3002,
+        "reread": 1139928
+      },
+      "build_product": {
+        "new": 450744,
+        "reread": 7687602
+      }
+    }
+  },
+  "prompts": {
+    "harness": 4,
+    "handoff": 4,
+    "instruction": 7,
+    "deliver": 2,
+    "approve": 2
+  },
+  "owner_decisions": [
+    {
+      "source": "question",
+      "header": "Rework notes",
+      "question": "When you answer `rework` at an approval, module 8 says the run goes back \"with your notes as feedback\". Today the engine routes the run back but throws your notes away (I confirmed this with a test: the stage's feedback folder stays empty). How should the notes reach the stage? (Proposed ADR `2026-11-22-human-rework-notes-reach-the-stage`)",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Feedback record with `notes` (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Usage warning",
+      "question": "Module 14's `start_attempt` runs inside the engine's run lock (`engine.py:606` is under `_start_task`, which holds the lock), so the lock question is already answered in code. The open part is what to do when the `usage_unreadable` event append fails (PR #141's open question). Today the error propagates and the attempt never starts. Which behaviour do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Warn and start anyway (Recommended)",
+      "category": "process and records",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Repos step",
+      "question": "Appendix A, step 5, says `factory init --github` adds the repo to `repos` in the machine config. The code doesn't: `init --github` only copies the kit, writes `.factory/config/` and creates labels. Nothing reads `repos`, and `factory config init` writes `repos: []` that nothing uses. `tick --all-repos` only finds repos that already have a run, so a new repo is skipped by the scheduler until you start one by hand. Which do you want?",
+      "day": "2026-11-24",
+      "theme": "other",
+      "outcome": "followed",
+      "answer": "Build it (Recommended)",
+      "category": "code",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "Plugin cases",
+      "question": "Module 5's three plugin cases are open: what happens when `srt` is missing for a plugin task, when `plugin-hashes.json` can't be read, and when `requires.skills` names a skill not in `skills.lock`. Module 5 puts plugins in phase 1b, and the code has no plugin loader yet, so none of these is a phase 1a bug. What should the spec say for each?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Fail closed (Recommended)",
+      "category": "spec and design",
+      "importance": "medium",
+      "trigger": "changes-scope"
+    },
+    {
+      "source": "question",
+      "header": "File labels",
+      "question": "The pending signature check shows 12 mismatches. Step 1 of the ADR fixes seven by correcting file labels and parameter lists in the spec (it is safe and no code changes). Step 2 is about three names that exist in the spec but not as public functions in the code: `worktree_path`, `schedule_install` and `dispatch`. Which fix do you want for step 2?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Rename the spec to the code (Recommended)",
+      "category": "process and records",
+      "importance": "high",
+      "trigger": "costly-to-reverse"
+    },
+    {
+      "source": "page",
+      "id": "D1",
+      "header": "Where section 18 says config and kit functions live",
+      "answer": "Spec follows the code (recommended)",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "where it lives",
+      "category": "spec and design",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "page",
+      "id": "D2",
+      "header": "Reviewer request to a pull request's own author",
+      "answer": "Ask nobody when the author opens it (recommended)",
+      "day": "2026-11-24",
+      "outcome": "followed",
+      "theme": "other",
+      "category": "security and ops",
+      "importance": "low",
+      "trigger": "routine"
+    },
+    {
+      "source": "question",
+      "header": "PR author method",
+      "question": "To apply D2 (ask nobody when the issue author opens the PR), the engine has to know who opens the PR. The only way is a new method on the pull-request port (`current_user()`, reading `gh api user`). That port is a shared contract in module 7, so it needs your OK. Do you approve adding it?",
+      "day": "2026-11-24",
+      "theme": "spec wording",
+      "outcome": "followed",
+      "answer": "Approve (Recommended)",
+      "category": "security and ops",
+      "importance": "high",
+      "trigger": "reopens-decision"
+    }
+  ],
+  "agent_decisions": [
+    {
+      "id": "phase-2-stacks-are-practice-packs",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "61c4bea1c"
+    },
+    {
+      "id": "phase-2-architecture-review-runs-once",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "61c4bea1c"
+    }
+  ],
+  "friction": {
+    "tool_errors": 4,
+    "interrupts": 0,
+    "secret_scans": 16,
+    "slow": [
+      [
+        557,
+        "AskUserQuestion"
+      ],
+      [
+        159,
+        "AskUserQuestion"
+      ]
+    ]
+  },
+  "hooks": {
+    "SessionStart": 0.4,
+    "PreToolUse": 28.2,
+    "PostToolUse": 26.0,
+    "PostToolBatch": 24.2,
+    "Stop": 2.2,
+    "PostToolUseFailure": 0.4
+  }
+}
