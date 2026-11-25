@@ -52,7 +52,7 @@ This is not `factory/skills/own/review-spec`. That skill is a workflow stage tha
 
 1. **Options are real.** At least two options a reasonable person could pick, each stated fairly, with the cost of each.
 2. **Recommendation is justified.** The reasons follow from the context and cite evidence: a file, a measurement, an earlier ADR.
-3. **Consequences are stated.** What gets harder, what later work is now committed to, and what `supersedes` points at.
+3. **Consequences are stated.** What gets harder, what later work is now committed to, and what `supersedes` points at. A cost listed under the chosen option counts only if Consequences repeats it or points to it (owner decision, 2026-11-25, decision page item 28).
 
 A **backfilled** record says it was written later from an earlier source. Score it on its own text. A source the reader cannot open in this repo is not evidence: write "unverifiable" in the evidence column and give it no credit. Do not lower a score only because a cited source is missing from this repo.
 
