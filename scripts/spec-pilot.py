@@ -1,6 +1,9 @@
-"""Measure the spec pilot (issue #56) on history that already exists. Run from the repo root:
+"""Measure the spec pilot (issue #56) on history that already exists. Run it from any folder:
 
     python3 -I scripts/spec-pilot.py [--window W ...] [--json]
+
+The repo is the checkout this script sits in, so git and gh always read the same repository. gh is given the
+checkout's origin remote with -R, so it never depends on the current folder.
 
 W is a number with a unit: 30s, 5m, 2h or 3d. Give --window more than once to measure several windows in one run,
 for example --window 1h --window 24h --window 72h. --hours H is the same as --window Hh.
@@ -22,7 +25,9 @@ import re
 import subprocess
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
+REPO = Path(__file__).resolve().parent.parent
 CODE = "factory/"
 SPEC_TITLE = "[Spec]"
 UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
@@ -50,7 +55,16 @@ def run(*args):
 
 
 def git(*args):
-    return run("git", *args)
+    return run("git", "-C", str(REPO), *args)
+
+
+def repo_slug(root=REPO):
+    """OWNER/NAME of the origin remote, in SSH or HTTPS form, for gh -R."""
+    url = run("git", "-C", str(root), "remote", "get-url", "origin").strip().removesuffix("/").removesuffix(".git")
+    parts = re.split(r"[:/]", url)
+    if len(parts) < 3 or not parts[-2] or not parts[-1]:
+        raise SystemExit(f"no origin remote with an OWNER/NAME path in {root}: {url!r}")
+    return f"{parts[-2]}/{parts[-1]}"
 
 
 def when(iso):
@@ -68,14 +82,14 @@ class Row:
     rate: float
 
 
-def spec_issues():
-    out = run("gh", "issue", "list", "--state", "all", "--limit", "500", "--json", "number,title")
+def spec_issues(slug):
+    out = run("gh", "issue", "list", "-R", slug, "--state", "all", "--limit", "500", "--json", "number,title")
     return {i["number"] for i in json.loads(out) if i["title"].startswith(SPEC_TITLE)}
 
 
-def merged_prs():
+def merged_prs(slug):
     fields = "number,title,body,mergedAt,mergeCommit,closingIssuesReferences"
-    out = run("gh", "pr", "list", "--state", "merged", "--base", "main", "--limit", "500", "--json", fields)
+    out = run("gh", "pr", "list", "-R", slug, "--state", "merged", "--base", "main", "--limit", "500", "--json", fields)
     return [p for p in json.loads(out) if p.get("mergeCommit")]
 
 
@@ -165,8 +179,8 @@ def measure(seconds, now, specs, chain, prs):
     return rows, recent
 
 
-def defects():
-    bugs = run("gh", "issue", "list", "--state", "all", "--label", "bug", "--limit", "500", "--json", "number")
+def defects(slug):
+    bugs = run("gh", "issue", "list", "-R", slug, "--state", "all", "--label", "bug", "--limit", "500", "--json", "number")
     reverts = [l for l in git("log", "--format=%s", "origin/main").split("\n") if l.lower().startswith("revert")]
     return len(json.loads(bugs)), len(reverts)
 
@@ -197,10 +211,11 @@ def main():
     args = ap.parse_args()
     windows = (args.window or []) + (args.hours or []) or [parse_window("24h")]
     now = datetime.now(timezone.utc)
-    specs = spec_issues()
+    slug = repo_slug()
+    specs = spec_issues(slug)
     chain = first_parent_chain()
-    prs = merged_prs()
-    bugs, reverts = defects()
+    prs = merged_prs(slug)
+    bugs, reverts = defects(slug)
     results = []
     for seconds in windows:
         rows, recent = measure(seconds, now, specs, chain, prs)
