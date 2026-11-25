@@ -30,11 +30,11 @@ variants:
 
 | Language | Detected by | Format | Lint | Test |
 | --- | --- | --- | --- | --- |
-| Java | `pom.xml`, `build.gradle` | Spotless (google-java-format) | Checkstyle or PMD | Maven: `mvn -q test`, then the surefire `TEST-*.xml` files are merged into one `test.junit.xml` in the task folder; under srt the step reaches Maven Central only, through its `network` key (see the profile format below). Gradle: `gradlew test`, no report yet |
+| Java | `pom.xml`, `build.gradle` | Spotless (google-java-format) | Checkstyle or PMD | Maven: `mvn -q test`, then the surefire `TEST-*.xml` files are merged into one `test.junit.xml` in the task folder; under srt the step reaches Maven Central only, through its `network` key (see the profile format below). Gradle: `gradlew test`. **Not verified, and writes no JUnit file**, so a Gradle repo blocks on `gate.no_test_results` until its step is built and run (owner decision, 2026-11-25) |
 | TypeScript, JavaScript | `package.json` | Prettier | ESLint | `npm test` with jest-junit, which writes `test.junit.xml` into the task folder |
 | Python | `pyproject.toml` | `ruff format` | `ruff check` | `pytest --junitxml`, which writes `test.junit.xml` into the task folder |
 | Go | `go.mod` | `gofmt` | `golangci-lint` | `go test -json ./...`, converted to `test.junit.xml` in the task folder |
-| C# | `*.csproj` | `dotnet format` | `dotnet format --verify-no-changes` | `dotnet test`, no report yet |
+| C# | `*.csproj` | `dotnet format` | `dotnet format --verify-no-changes` | `dotnet test`. **Not verified, and writes no JUnit file**, so a C# repo blocks on `gate.no_test_results` until its step is built and run (owner decision, 2026-11-25) |
 
 These are defaults. A repo whose build lacks a tool (such as the Spotless plugin in `pom.xml`) gets a `factory doctor` warning with the fix. The factory never edits build files outside a run.
 
