@@ -1,0 +1,35 @@
+{
+  "task": "delivery-outage-retry",
+  "branch": "plaktoz/delivery-outage-retry",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 5,
+  "lines": {
+    "product": 161,
+    "spec": 3,
+    "process": 4
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-59-outage-retry"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

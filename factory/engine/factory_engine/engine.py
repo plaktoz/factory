@@ -43,6 +43,8 @@ POLL_SECONDS = 0.05  # how often the main thread looks at running workers; a res
 # Run statuses that end a run, and those where the engine waits for a person or for infrastructure.
 ENDED: frozenset[str] = frozenset({"done", "failed", "aborted"})
 PARKED: frozenset[str] = frozenset({"awaiting_approval", "blocked", "retrying"})
+# The delivery operations a retrying run can wait on (module 8: the name is the first words of infra_wait.last_error).
+DELIVER, REVIEWERS = "deliver", "request reviewers"
 
 
 @dataclass
@@ -328,6 +330,7 @@ class Engine:
 
     def _unblock(self, run: Run, run_dir: Path, lock: Lock, stage_id: str | None) -> None:
         run.status, run.attention, run.stage = "running", None, stage_id
+        run.infra_wait = None  # a person's retry is a fresh attempt, so an earlier outage's wait does not carry over
         state.write_run(run_dir, run, lock=lock)
 
     # ---- the loop ------------------------------------------------------------------------------------------------
@@ -343,6 +346,10 @@ class Engine:
                 self._recover(run_dir, lock)
             for _ in range(10_000):  # a bound, so a routing bug cannot spin forever
                 run = state.read_run(run_dir)
+                if run.status == "retrying":  # a tick's engine repeats the waited-on operation (module 6, tick table)
+                    run.status = "running"
+                    state.write_run(run_dir, run, lock=lock)
+                    run = state.read_run(run_dir)
                 if run.status in ENDED or run.status in PARKED:
                     if run.status == "blocked":
                         if self._answered_blocked(run_dir, lock):  # the file's answer moved it: read the run again
@@ -357,6 +364,15 @@ class Engine:
                         return "awaiting_approval"
                     continue
                 self._pass(run_dir, lock)
+                run = state.read_run(run_dir)
+                if run.status == "retrying":
+                    return "retrying"  # the pass tried three times and failed: the next tick tries again
+                if run.infra_wait is not None and run.status != "blocked":
+                    # The pass got through without waiting again, so an earlier wait is over: clear it, as a recovery does.
+                    operation = self._waiting_on(run)
+                    rework.infra_recovered(run)
+                    state.write_run(run_dir, run, lock=lock)
+                    state.append_event(run_dir, "infra_recovered", operation=operation)
                 worked = True
             raise FactoryError("config.invalid", f"run {run_id} made no progress in 10000 passes",
                                hint="a routing loop is not reaching a stop; check the workflow's on_fail edges")
@@ -1152,8 +1168,7 @@ class Engine:
         elif routing.action == "aborted":
             state.append_event(run_dir, "run_aborted", reason=routing.reason)
         elif routing.action == "wait":
-            rework.start_infra_wait(run, operation=stage.id, error=FactoryError("git.network", routing.reason),
-                                    clock=self.clock)
+            self._wait_for_infra(run, run_dir, lock, stage.id, FactoryError("git.network", routing.reason), result)
         state.write_run(run_dir, run, lock=lock)
         result.routed_to = routing.goto
         return result
@@ -1187,22 +1202,31 @@ class Engine:
             delivery.evaluate_merge(run_dir, self.cfg, changed=delivery.changed_since_base(run, self.cfg), ci="pending")
         summary.render_summary(run_dir, usage_mod.summarize([run_dir]), base=(self.cfg.repo or {}).get("base_branch", "main"),
                                delivering=True)
+        reviewers_pending = self._waiting_on(run) == REVIEWERS  # the pull request is open; its reviewers are not asked yet
         try:
             if run.pr is not None:  # back from a red-CI rework: the fix commits must reach the open pull request
                 gitops.push(run.worktree, run.pr.head)
             # Read who opens the pull request before anything is opened: if the read fails, no pull request exists yet
             # and the run stays where it was, so the next pass can try again.
-            opener = self.prs.current_user() if opening else None
-            sink = delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs)
+            opener = self._with_backoff(self.prs.current_user) if opening or reviewers_pending else None
+            sink = self._with_backoff(lambda: delivery.write_sink(run_dir, self.cfg, tracker=self.tracker, prs=self.prs))
         except FactoryError as e:
-            if e.code != "git.hook_failed":
+            if e.code == "git.hook_failed":
+                # A repo pre-push hook refused the push: rework, with the hook's output in the feedback (module 8, 17A).
+                return self._push_hook_failed(run, run_dir, lock, e, result)
+            if rework.classify(e) != "transient":
                 raise
-            # A repo pre-push hook refused the push: rework, with the hook's output in the feedback (module 8, 17A).
-            return self._push_hook_failed(run, run_dir, lock, e, result)
+            return self._wait_for_infra(run, run_dir, lock, DELIVER, e, result)
         if sink.pr is not None:
-            if opening:
-                self.prs.request_reviewers(sink.pr, delivery.reviewers_for(run, pr_author=opener))
+            # Recorded before its reviewers are asked: a failed request leaves the pull request in run.json, so the next
+            # pass asks again and never opens a second pull request.
             run.pr = sink.pr
+            if (opening or reviewers_pending) and not self._ask_reviewers(run, run_dir, lock, opener, result):
+                return result
+            if run.infra_wait is not None:  # the waited-on operation got through: the wait is over (infra_recovered)
+                operation = self._waiting_on(run)
+                rework.infra_recovered(run)
+                state.append_event(run_dir, "infra_recovered", operation=operation)
             run.status = "awaiting_approval"
             result.attention = run.attention = notify.attention_for(run, now=self.clock.now().isoformat())
             state.write_run(run_dir, run, lock=lock)
@@ -1211,6 +1235,47 @@ class Engine:
         state.write_run(run_dir, run, lock=lock)
         state.append_event(run_dir, "run_done", sink=sink.sink, target=sink.target)
         return result
+
+    def _ask_reviewers(self, run: Run, run_dir: Path, lock: Lock, opener: str | None, result: TickResult) -> bool:
+        """Ask the run's reviewers, with backoff. False when GitHub stayed down: the run now waits as `retrying`."""
+        reviewers = delivery.reviewers_for(run, pr_author=opener)
+        try:
+            self._with_backoff(lambda: self.prs.request_reviewers(run.pr, reviewers))
+        except FactoryError as e:
+            if rework.classify(e) != "transient":
+                raise
+            self._wait_for_infra(run, run_dir, lock, REVIEWERS, e, result)
+            return False
+        return True
+
+    def _with_backoff(self, call):
+        """An infrastructure call with the module 8 retries: three tries, waits of 5 s and 30 s, on a transient error."""
+        return rework.with_backoff(call, clock=self.clock)
+
+    def _wait_for_infra(self, run: Run, run_dir: Path, lock: Lock, operation: str, error: FactoryError,
+                        result: TickResult) -> TickResult:
+        """Three tries of an infrastructure call failed (module 8). The first failure starts the wait: the run is
+        `retrying`, with the operation and the start time in run.json. A later pass that fails again keeps that start
+        time, and blocks the run once `infra_wait_hours` have passed. The lock is released when the pass returns."""
+        if run.infra_wait is None:
+            rework.start_infra_wait(run, operation=operation, error=error, clock=self.clock)
+            state.append_event(run_dir, "infra_waiting", operation=operation, since=run.infra_wait.since,
+                               error=error.message)
+        else:
+            hours = float((self.cfg.repo or {}).get("infra_wait_hours", 6))
+            routing = rework.infra_tick(run, operation=operation, error=error, clock=self.clock, wait_hours=hours)
+            if routing.action == "blocked":
+                rework.record_blocked(run_dir, run, routing)
+                result.attention = run.attention
+            else:
+                run.status = "retrying"  # _drive set it to running for this pass; it waits again until the next tick
+        state.write_run(run_dir, run, lock=lock)
+        return result
+
+    @staticmethod
+    def _waiting_on(run: Run) -> str | None:
+        """The operation a retrying run waits on: the words before the colon in infra_wait.last_error."""
+        return run.infra_wait.last_error.split(": ", 1)[0] if run.infra_wait is not None else None
 
     def _push_hook_failed(self, run: Run, run_dir: Path, lock: Lock, error: FactoryError, result: TickResult) -> TickResult:
         """A repo pre-push hook stopped the push at delivery. It routes like a failed gate on the last stage: the stage's
