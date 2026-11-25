@@ -70,7 +70,7 @@ A pilot, set on 2026-11-21: two medium tickets, followed by hand, with no change
 
 ## Build order
 
-Build phase 1a first (walking skeleton: Claude only, bug-fix and chore, macOS and Linux, read-only dashboard). Phase 1b adds the other workflows, plugins, MCP, practice packs and dashboard writes. The table is in spec section 1, "Phase split". Phase 2 items (Windows, answering by GitHub comment; Codex was moved into use by the owner on 2026-11-24 and is not built yet) are in `docs/design/phase-2.md`; do not build them in phase 1. Decisions D1 to D14 were the 2026-11-14 ADRs; they now sit as `Decisions` rows in the specs, and every later decision is a row or a `proposed` ADR. Do not reopen any of them without a new `proposed` ADR that changes the row.
+Build phase 1a first (walking skeleton: Claude only, bug-fix and chore, macOS and Linux, read-only dashboard). Phase 1b adds the other workflows, plugins, MCP, practice packs and dashboard writes. The table is in spec section 1, "Phase split". Phase 2 items (Windows, answering by GitHub comment; Codex was moved into use by the owner on 2026-11-24: a repo may set `harness: codex`, and its live proofs are open in P2-1) are in `docs/design/phase-2.md`; do not build them in phase 1. Decisions D1 to D14 were the 2026-11-14 ADRs; they now sit as `Decisions` rows in the specs, and every later decision is a row or a `proposed` ADR. Do not reopen any of them without a new `proposed` ADR that changes the row.
 
 
 Wave 0 (shared types, schemas, fakes) first. Then wave 1: 3, 6A, 7, 10, 14, 17A. Then wave 2: 4, 5, 8, 9, 11, 12, 17. Then wave 3: 13, 6B, 15. Then 16. See [the plan](docs/design/shared/20-dependencies-and-plan.md).

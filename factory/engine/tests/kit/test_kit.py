@@ -240,7 +240,7 @@ def test_doctor_in_the_cli_exits_1_when_a_check_fails_and_0_when_all_pass(repo, 
 def test_doctor_reports_a_bad_repo_config(repo, fake_kit):
     kit.init_repo(repo)
     assert by_name(kit.doctor(repo))["repo-config"].ok
-    (repo / ".factory" / "config" / "factory.yaml").write_text("base_branch: main\ntracker: github\nharness: codex\n")
+    (repo / ".factory" / "config" / "factory.yaml").write_text("base_branch: main\ntracker: github\nharness: gemini\n")
     r = by_name(kit.doctor(repo))["repo-config"]
     assert not r.ok and "factory.yaml" in r.detail
 
