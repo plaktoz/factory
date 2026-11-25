@@ -53,14 +53,14 @@ stages:
 
 **Built-in workflows and scope**
 
-In phase 1a this module builds loading, validation, `expand_tasks_from` and `expand_helpers`. The engine runs the three shipped workflows. Plugins, hooks, plugin `when` and `tasks_from` for plugins are phase 1b, and so are feature, new-app and research ([phase split](../phase-1.md#phase-split)). The research example below is described only so its shape can be built; no shipped file exists for it.
+In phase 1a this module builds loading, validation, `expand_tasks_from` and `expand_helpers`. The engine runs the three shipped workflows. Plugins, hooks, plugin `when` and `tasks_from` for plugins are phase 1b, and so are new-app and research ([phase split](../phase-1.md#phase-split)); `feature` ships in phase 1b with four stages (see the feature section below). The research example below is described only so its shape can be built; no shipped file exists for it.
 
 | Workflow | Phase | Shipped file | Where it is specified |
 | --- | --- | --- | --- |
 | `_triage` | 1a | `factory/workflows/_triage.yaml` | [module 4](04-intake-and-triage.md), which holds its YAML and the triage stop |
 | bug-fix | 1a | `factory/workflows/bug-fix.yaml` | This file, the example below; the failure classes in [module 8](08-gates-error-handling-and-rework.md) |
 | chore | 1a | `factory/workflows/chore.yaml` | This file, the example below |
-| feature | 1b | none yet; the proposed file is in the feature section below | A proposed stage list is below, pending ADR `2026-11-24-the-feature-workflow-stage-list`. It has no architecture stage. [Module 11](11-human-stops.md) gives one that feature runs when a rule fires, but no engine code evaluates that rule or reads a skill's architect packet. [Modules 3](03-kit-and-configuration.md) and [13](13-delivery.md) only name it |
+| feature | 1b | `factory/workflows/feature.yaml` | The feature section below. Four stages, no architecture stage (Decisions, `2026-11-24-the-feature-workflow-stage-list`). [Module 11](11-human-stops.md) gives an architecture stage that feature runs when a rule fires, but no engine code evaluates that rule or reads a skill's architect packet |
 | new-app | 1b | none | No stage list. [Module 11](11-human-stops.md) gives its architecture stage, which always runs |
 | research | 1b | none | This file, the example below (illustrative) |
 | reviewer-eval | phase 2 | `factory/workflows/reviewer-eval.yaml`, shipped in the kit | Not in this file. It is phase 2 work that stayed on main. It is its own workflow, not a stage in `bug-fix.yaml`: nothing starts it except a person who runs the eval by hand |
@@ -167,9 +167,9 @@ stages:
     on_fail: {goto: synthesize, max: 1}
 ```
 
-**Feature workflow (proposed, not shipped)**
+**Feature workflow**
 
-This is a proposal for the owner to review. No file exists in `factory/workflows/`. Keyword triage already picks `feature` for a request with the word "add" (`triage.py` `KEYWORDS`), and then `load_workflow("feature")` fails with `config.invalid: no workflow named 'feature'` (checked 2026-11-24 on this branch). Triage's load check (`triage_candidates`) does not stop that route, because it runs only on a low-confidence stop. The draft loads through `load_workflow` (checked 2026-11-24 against a copy in a temp folder, with the engine from this branch). Its skills all exist in `factory/skills/own/`, and every check it names is in `KNOWN_CHECKS`. Decision record: ADR `2026-11-24-the-feature-workflow-stage-list`.
+The shipped file is `factory/workflows/feature.yaml`. It has the four stages the owner chose (ADR `2026-11-24-the-feature-workflow-stage-list`, option 1, accepted 2026-11-25). Keyword triage sends a request with "add" to `feature`, and the file lets that route start (`triage.py` `KEYWORDS`).
 
 ```yaml
 name: feature
@@ -187,13 +187,11 @@ stages:
   - id: implement
     needs: [propose]
     tasks: [{id: change, skill: implement, scope: ["**"], helpers: {mode: off}, out: change.json}]
-    gate: [{schema: stage-report}, {check: scope-diff}, {check: lint-clean}]
+    gate: [{check: scope-diff}, {check: lint-clean}]
     on_fail: {goto: implement, max: 2}
-    on_conflict: {goto: implement, max: 1}
   - id: verify
     needs: [implement]
-    tasks: [{id: check, cmd: [scripts/check], out: check.junit.xml}]
-    gate: [{schema: test-report}]   # blocks the run when the stage reports 0 test cases
+    tasks: [{id: check, cmd: [scripts/check], out: check.log}]
     on_fail: {goto: implement, max: 2}
   - id: review
     needs: [verify]
@@ -206,13 +204,14 @@ stages:
 ```
 
 - **Human approval.** The approval sits on `propose`, as in bug-fix. The engine does not run a stage's gates when the stage has `approval: human` (`engine.py` `_run_stage` returns from `_human_stop`), so `propose` has no gate. Its plan is checked by the person at the stop.
-- **Implement.** One worker writes the change and its tests in the whole repo (scope `**`, as in chore), so no two parallel tasks overlap. `implement` loops to itself on a failed gate, as chore does, with the loop count of 2. `on_conflict` goes back to `implement` once, as bug-fix's `fix` does.
-- **Verify.** A `cmd` task runs the repo's own `scripts/check` and must write a JUnit file, `check.junit.xml`, because the `test-report` gate reads only JUnit output. A repo whose check writes no JUnit file blocks here with `gate.no_test_results`. The pilot repo's `scripts/check` runs `pytest -q` and writes none, so it needs a JUnit flag before this workflow can pass there.
+- **Implement.** One worker writes the change and its tests in the whole repo (scope `**`, as in chore), so no two parallel tasks overlap. `implement` loops to itself on a failed gate, with the loop count of 2, as chore does.
+- **Verify.** This stage is a `cmd` task that runs the repo's own `scripts/check`, as chore's verify does. It has no `test-report` gate, so it does not need a JUnit file to pass. The owner's ADR option 1 named a JUnit `test-report` gate on this stage. It is not in the shipped file, because the pilot repo's `scripts/check` writes no JUnit file and the gate would block every run there with `gate.no_test_results`. The per-project test mapping (which test command each language's project runs, and the JUnit report it writes) is the follow-up. Its design is in the next bullet.
+- **Verify follow-up: per-project test mapping.** Module 17A says verify runs `tasks_from: languages`, one `test` task per detected language whose files the run changed. No engine code reads `tasks_from: languages`, and `toolchains.language_tasks` has no caller. Wiring it means: the verify stage's task list comes from `language_tasks(worktree, cfg, "test", changed)` (through the stage's `tasks_from` or a dedicated expansion); each generated task has `out` set to a `*.junit.xml` file so that a cmd task counts as done (`adapters/worker/command.py` marks a task done only when its `out` file exists) and so that the stage's `test-report` gate can read it; and a stage with zero generated tasks (no language changed) passes. The TypeScript profile's `test` step already writes that JUnit file (below). The other profiles do not yet.
 - **Review.** Two review skills, as bug-fix does. `no-blocking-findings` blocks on a medium or high finding, and a finding sends the run back to `implement` once.
-- **No architecture stage.** Module 11's architecture stage is not in this list. Its trigger rule is not evaluated by any engine code, and no code turns a skill's architect packet into a decision file (`decisions.request` is called only for the triage and approval templates). A feature that needs an architecture choice cannot get one from this workflow until the owner decides how the rule and the packet are built (see the ADR's consequences).
+- **No architecture stage.** Module 11's architecture stage is not in this list. Its trigger rule is not evaluated by any engine code, and no code turns a skill's architect packet into a decision file (`decisions.request` is called only for the triage and approval templates). A feature that needs an architecture choice cannot get one from this workflow until the owner decides how the rule and the packet are built.
 - **Merge.** Feature is not in `auto.workflows`, so every feature pull request needs human review (module 13). Phase 1 keeps it that way.
 - **When a loop runs out.** Each `on_fail`, `on_conflict` and `on_reject` edge counts its own loops. When a loop would pass its `max`, the run is blocked for a person, with the reason naming the edge and its limit (`rework.py` `_go`). The `propose` approval has no limit: a rework answer goes to `propose` again, as the approval stop is always a person's choice.
-- **Test when built.** `load_workflow` on `factory/workflows/feature.yaml` returns no problems. `triage_rules` on a request whose title has the word "add" returns `feature`, and `triage_candidates` offers `feature` once it loads. A `verify` stage whose JUnit files hold zero test cases blocks with `gate.no_test_results`. Each becomes an acceptance criterion in this file when the workflow is built; none is ticked now.
+- **Test.** `test_feature_matches_the_owner_decided_shape` and `test_feature_has_no_architecture_stage` (`factory/engine/tests/workflow/test_workflow.py`) check the shape. `test_built_in_workflow_loads_without_problems[feature]` checks that it loads. `test_a_request_with_the_word_add_routes_to_the_shipped_feature_workflow` (`tests/intake/test_intake.py`) checks that the keyword route now loads. The verify stage's JUnit gate has no test here, because it is not in the file.
 
 **Plugins**
 
@@ -223,7 +222,7 @@ A plugin is a folder in `.factory/config/plugins/` with one manifest. `factory p
 name: frontend-review
 version: 0.1.0
 requires: {skills: [impeccable]}         # must be in skills.lock
-applies_to: [bug-fix]                     # goto fix exists only in bug-fix; feature and new-app have no stage list yet
+applies_to: [bug-fix]                     # goto fix exists only in bug-fix; feature has no fix stage and new-app has no stage list yet
 when: {changed_paths: ["web/**"]}        # skipped if no UI files changed
 insert:
   after: verify
@@ -387,12 +386,15 @@ class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec 
   - `Defaults`: `retries`, `timeout_minutes`, `checkpoint_every_minutes` and `max_restarts`, the `defaults:` key. Each has the value in the example above when a file omits it.
 - **Join-time keys.** `regenerate_at_join` lists files that are not joined from task changes, such as lockfiles and generated code. At each join, a task's edits to them are dropped from its diff. `join_cmd` is a command, as a list, that runs once after the last task joins, and only when `regenerate_at_join` is not empty. If it exits 0, the listed files are staged and committed as `chore: regenerate lockfiles at join`. If it exits non-zero, nothing is committed, and the join still succeeds. `shared_files` maps a file to the task that owns it. Load checks that the owner is a task, and a listed file clears the overlap check. The engine does not order the other tasks after the owner, so a workflow that needs that order must also add `needs`.
 
-- **Run and test:** `pytest factory/engine/tests/workflow` against the built-in workflows that ship in phase 1a (`_triage`, bug-fix, chore) and broken fixtures; `factory plugins enable frontend-review --json`.
+- **Run and test:** `pytest factory/engine/tests/workflow` against the built-in workflows that ship (`_triage`, bug-fix and chore in phase 1a, feature in phase 1b) and broken fixtures; `factory plugins enable frontend-review --json`.
 - **Errors:** all fail fast at load or enable; no run starts on an invalid workflow.
 
 Acceptance criteria:
 
-- [ ] All built-in workflows and `_triage` load without problems. (not ticked: test_built_in_workflow_loads_without_problems covers `_triage`, bug-fix and chore, the three that ship in phase 1a; the built-in feature, new-app and research workflows are phase 1b and have no file in `factory/workflows/` to load, so "all" is not yet testable)
+- [x] The feature workflow loads with the four stages in order (propose, implement, verify, review), `propose` is a human approval that rejects back to `propose`, and `implement` and `review` have the loop counts in the feature section. (test: factory/engine/tests/workflow/test_workflow.py::test_feature_matches_the_owner_decided_shape, ::test_feature_has_no_architecture_stage)
+- [x] A request whose keyword triage picks `feature` resolves to a workflow that loads, and `feature` is offered at a triage stop. (test: factory/engine/tests/intake/test_intake.py::test_a_request_with_the_word_add_routes_to_the_shipped_feature_workflow, ::test_triage_candidates_offer_only_workflows_that_load; factory/engine/tests/engine/test_engine.py::test_a_triage_stop_offers_only_workflows_that_load)
+- [ ] A feature run whose verify stage's report has zero test cases blocks with `gate.no_test_results`. (not ticked: the shipped verify stage has no test-report gate, because `scripts/check` writes no JUnit file; the per-project mapping that would give it one is the follow-up in the feature section, and the gate's own test is in test_verify_report.py)
+- [ ] All built-in workflows and `_triage` load without problems. (not ticked: new-app and research have no file in `factory/workflows/` yet, so "all" is not testable. The four that exist load: factory/engine/tests/workflow/test_workflow.py::test_built_in_workflow_loads_without_problems, parametrised over `_triage`, bug-fix, chore and feature)
 - [x] A cycle in `needs`, an unknown skill, an unknown check or an unknown `goto` stage are each reported with their path. (test: factory/engine/tests/workflow/test_workflow.py::test_a_needs_cycle_between_stages_is_reported_with_its_path, ::test_a_needs_cycle_between_tasks_is_reported_with_its_stage, ::test_an_unknown_skill_is_reported_with_its_path, ::test_an_unknown_check_is_reported_with_its_path, ::test_an_unknown_goto_is_reported_with_its_path)
 - [x] Two tasks that can run together with overlapping write scopes fail unless one `needs` the other or the file is in `shared_files`. (test: factory/engine/tests/workflow/test_workflow.py::test_two_parallel_tasks_with_overlapping_scopes_fail, ::test_a_needs_between_the_tasks_lifts_the_overlap, ::test_a_literal_file_in_shared_files_is_exempt)
 - [ ] A plugin whose `insert` is `after: verify` puts its stage immediately after `verify` in the merged workflow's stage list, records `plugin:<name>` as that stage's `source` in `run.json`, and leaves the workflow file on disk byte-for-byte unchanged. (not ticked: plugins are phase 1b; no plugin loader exists and tests/workflow has no plugin test)
@@ -441,3 +443,4 @@ A row changes only through a new `proposed` ADR in `docs/adr/`. To read a folded
 | A plugin task exits 0 on pass, 1 on a failed check and 2 on a task error. A result with no `status` is decided by `passed`. | A check that reports `passed: false` must not pass the gate. | None recorded: the owner's walkthrough option list is not in the repo (the ADR says so). | 2026-11-21-plugin-exit-codes-match-the-spec |
 | A research question list is plain questions. A `task_template` on the stage builds one task per question. | A plain list is the only form that shows just the questions, and the template keeps task settings in one place. | Full task objects written by the scope step. | 2026-11-21-research-questions-use-a-task-template (D2) |
 | A plugin stage inserted `after` a stage joins the chain: the stage that followed it waits for it. A manifest may mark the stage `blocking: false` (phase 1b) so it reports its results and a failure does not stop the next stage. | `after: verify` reads as in the chain, and making each author rewire the stages invites a check that blocks nothing. The non-blocking mode is the owner's addition, like GitLab's `allow_failure`. | The author lists which stages wait for the plugin (easy to write a plugin that gates nothing; a larger manifest format). | 2026-11-22-owner-calls D4 splice-into-chain |
+| The feature workflow has four stages: a human approves the plan (`propose`), one worker implements it (`implement`), the repo's check runs (`verify`), and two review skills check the result (`review`). No architecture stage. | Every stage runs a skill or check that exists today. The architect packet reaches no person, and no engine code evaluates the architecture rule, so an architecture stage would pause on a generic approval. | Option 2: an `architecture` stage before `propose`, which runs on every feature and reaches no person. Option 3: a second workflow for features that trip the rule, which needs a rule evaluator. | 2026-11-24-the-feature-workflow-stage-list |

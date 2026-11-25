@@ -30,7 +30,7 @@ variants:
 | Language | Detected by | Format | Lint | Test |
 | --- | --- | --- | --- | --- |
 | Java | `pom.xml`, `build.gradle` | Spotless (google-java-format) | Checkstyle or PMD | Maven or Gradle test |
-| TypeScript, JavaScript | `package.json` | Prettier | ESLint | `npm test` |
+| TypeScript, JavaScript | `package.json` | Prettier | ESLint | `npm test` with jest-junit, which writes `test.junit.xml` into the task folder (the profile's argv is a `node -e` wrapper, because a command runs with no shell; see `factory/languages/typescript.yaml`). Java, Python and Go do not write a report yet |
 | Python | `pyproject.toml` | `ruff format` | `ruff check` | `pytest` |
 | Go | `go.mod` | `gofmt` | `golangci-lint` | `go test ./...` |
 | C# | `*.csproj` | `dotnet format` | `dotnet format --verify-no-changes` | `dotnet test` |
