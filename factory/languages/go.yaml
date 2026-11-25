@@ -71,4 +71,5 @@ variants:
         with open(os.path.join(d, "test.junit.xml"), "w") as f:
             f.write("\n".join(out))
         sys.exit(rc)
+    tools: [go]
     build:        [go, build, ./...]

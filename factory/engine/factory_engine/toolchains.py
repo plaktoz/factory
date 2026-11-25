@@ -35,6 +35,8 @@ class Toolchain:
     commands: dict[str, list[str]]
     root: Path
     cache_env: dict[str, str] = field(default_factory=dict)
+    # The programs doctor checks, when a step is a wrapper whose argv[0] is an interpreter (a JUnit test step).
+    tools: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -105,7 +107,8 @@ def detect(worktree: Path, cfg: Config) -> list[Toolchain]:
             continue
         v = p["variants"][variant]
         found.append(Toolchain(name=p["name"], variant=variant, files=list(p.get("files") or []),
-                               commands={s: list(v[s]) for s in STEPS if v.get(s) is not None}, root=worktree))
+                               commands={s: list(v[s]) for s in STEPS if v.get(s) is not None}, root=worktree,
+                               tools=list(v.get("tools") or [])))
     return found
 
 
@@ -255,7 +258,7 @@ def doctor_checks(worktree: Path, cfg: Config) -> list:
     from shutil import which
     out = []
     for tc in detect(worktree, cfg):
-        tools = sorted({cmd[0] for cmd in tc.commands.values() if cmd})
+        tools = sorted({cmd[0] for cmd in tc.commands.values() if cmd} | set(tc.tools))
         for tool in tools:
             ok = find_tool(worktree, tool) is not None
             out.append(CheckResult(f"toolchain:{tc.name}:{tool}", ok, "installed" if ok else f"{tool} is not on PATH",

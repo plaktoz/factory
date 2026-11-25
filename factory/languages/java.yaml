@@ -38,6 +38,7 @@ variants:
                     shutil.copyfile(src, os.path.join(d, name))
         sys.exit(rc)
     build:        [mvn, -q, -DskipTests, package]
+    tools: [mvn]
   gradle:
     when: {any_file: [build.gradle, build.gradle.kts]}
     format:       [gradlew, spotlessApply]

@@ -15,4 +15,5 @@ variants:
       - python3
       - -c
       - "import os,sys,shutil\nd=os.environ.get('FACTORY_TASK_DIR')\nif not d:\n    sys.stderr.write('FACTORY_TASK_DIR is not set\\n');sys.exit(2)\np=shutil.which('pytest')\nif not p:\n    sys.stderr.write('pytest: command not found\\n');sys.exit(127)\nos.execv(p,['pytest','--junitxml='+os.path.join(d,'test.junit.xml')])"
+    tools: [pytest]
     build:        []

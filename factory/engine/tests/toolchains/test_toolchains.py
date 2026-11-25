@@ -223,6 +223,22 @@ def test_doctor_reports_a_missing_tool_before_any_run(tmp_path, monkeypatch):
     assert not mvn.ok and "install mvn" in mvn.hint
 
 
+def test_doctor_checks_the_test_tool_a_wrapped_test_step_runs_not_only_its_interpreter(tmp_path, monkeypatch):
+    """A test step is a python3 wrapper that runs the real tool (pytest, mvn, go). Doctor must still name that tool, or a
+    missing pytest is found at the verify stage instead of before the run."""
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n"})
+    names = {r.name: r for r in toolchains.doctor_checks(w, CFG)}
+    assert "toolchain:python:pytest" in names and not names["toolchain:python:pytest"].ok
+
+
+def test_doctor_still_checks_every_other_step_tool_and_the_wrapper_interpreter(tmp_path, monkeypatch):
+    monkeypatch.setenv("PATH", str(tmp_path / "empty"))
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    names = {r.name for r in toolchains.doctor_checks(w, CFG)}
+    assert {"toolchain:go:go", "toolchain:go:gofmt", "toolchain:go:golangci-lint", "toolchain:go:python3"} <= names
+
+
 def test_doctor_is_silent_about_tools_that_are_present(tmp_path, path_with):
     stub(path_with, "mvn")
     w = fixture(tmp_path, {"pom.xml": "<project/>"})
