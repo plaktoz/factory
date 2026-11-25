@@ -127,6 +127,7 @@ class TaskBranch:     task_id: str; branch: str; task_base: str
 
 @dataclass
 class JoinResult:     ok: bool; conflict_files: list[str]; hook_failed: bool; commits: list[str]
+                      hook_output: str | None = None   # a failing repo hook's output, for the feedback record (owner decision, 2026-11-25)
 
 @dataclass
 class SyncResult:     ok: bool; conflict_files: list[str]

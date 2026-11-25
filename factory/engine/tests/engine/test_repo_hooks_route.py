@@ -31,8 +31,8 @@ def _plant_in_change(worker, rel, text):
 
 def test_a_failing_repo_hook_on_the_join_commit_routes_the_run_back_to_implement(new_run, engine, repo):
     """The join commit runs the repo's pre-commit hook. A hook that always fails is rework: the stage's on_fail edge
-    sends the run back to `implement`, and the run branch returns to its pre-join commit. The hook's own output is
-    not in the feedback record yet (JoinResult carries no hook output; that is left for the owner)."""
+    sends the run back to `implement`, and the run branch returns to its pre-join commit. The hook's output is the
+    feedback record's output (JoinResult.hook_output, section 18)."""
     run_dir = new_run()
     work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
     script, writes = chore_script(run_dir, change=[ok(work("change", "change.json"))] * 4)
@@ -45,9 +45,26 @@ def test_a_failing_repo_hook_on_the_join_commit_routes_the_run_back_to_implement
     assert routed and routed[0].data["from_stage"] == "implement" and routed[0].data["to_stage"] == "implement"
     assert run.loops["implement->implement"] >= 1
     feedback = sorted((run_dir / "tasks" / "change" / "feedback").glob("*.json"))
-    assert feedback and "a repo hook failed on the join commit" in feedback[-1].read_text()
+    assert feedback and "lint: services/new.py line 1" in feedback[-1].read_text()  # the hook's output reaches the worker
     base = gitops.git(repo, "rev-parse", "main").stdout.strip()
     assert gitops.git(run.worktree, "rev-parse", "HEAD").stdout.strip() == base  # the failed join was undone
+
+
+def test_a_join_hook_that_fails_on_a_missing_tool_waits_for_infrastructure_and_is_not_rework(new_run, engine, repo):
+    """A join hook that fails because its tool is missing is transient (module 8): the run waits as `retrying` and no
+    rework is routed, so no feedback record is written for it."""
+    run_dir = new_run()
+    work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
+    script, writes = chore_script(run_dir, change=[ok(work("change", "change.json"))] * 4)
+    eng, worker = engine(script, writes)
+    _plant_in_change(worker, "services/new.py", "x = 2\n")
+    _install_hook(repo, "pre-commit", "echo 'sh: ruff: command not found' >&2\nexit 1")
+    eng.run(["bump-q1w2e"])
+    run = state.read_run(run_dir)
+    assert run.status == "retrying" and run.infra_wait is not None
+    assert "sh: ruff: command not found" in run.infra_wait.last_error  # run.json names the hook's output
+    assert not [e for e in state.read_events(run_dir) if e.type == "routed_back"]
+    assert not list((run_dir / "tasks" / "change" / "feedback").glob("*.json"))
 
 
 def test_checkpoints_skip_the_pre_commit_hook_and_only_the_join_runs_it(new_run, engine, repo):
@@ -122,3 +139,21 @@ def test_a_failing_pre_push_hook_routes_the_run_back_to_rework_and_does_not_cras
     feedback = sorted((run_dir / "tasks" / "change" / "feedback").glob("*.json"))
     assert feedback and "blocked by policy" in feedback[-1].read_text()  # the hook's output reaches the worker
     assert not any(r == "refs/heads/bump-q1w2e" for r in ls_remote(repo))  # nothing reached the remote
+
+
+def test_a_pre_push_hook_that_fails_on_a_missing_tool_waits_for_infrastructure_and_is_not_rework(new_run, engine, repo):
+    """A pre-push hook that fails because its tool is missing is transient (module 8): the run waits as `retrying`, no
+    rework is routed and nothing reaches the remote."""
+    from gitutil import ls_remote
+    run_dir = new_run()
+    work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
+    script, writes = chore_script(run_dir, change=[ok(work("change", "change.json"))] * 4,
+                                  check=[ok(work("check", "check.log"))] * 4)
+    eng, worker = engine(script, writes)
+    _plant_in_change(worker, "services/new.py", "x = 2\n")
+    _install_hook(repo, "pre-push", "echo 'pre-push: sh: twine: command not found' >&2\nexit 1")
+    eng.run(["bump-q1w2e"])
+    run = state.read_run(run_dir)
+    assert run.status == "retrying" and run.infra_wait is not None
+    assert not [e for e in state.read_events(run_dir) if e.type == "routed_back"]
+    assert not any(r == "refs/heads/bump-q1w2e" for r in ls_remote(repo))

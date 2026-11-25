@@ -77,9 +77,10 @@ def classify(failure: FactoryError | AttemptResult | GateResult | JoinResult) ->
     """One handling type for each failure (section 19). A result that did not fail is a programming error.
 
     A failed join is "rework" here, because ErrorKind has no conflict value. A caller that sees conflict_files must
-    route with route_conflict, which follows on_conflict. A join with hook_failed carries no hook output (JoinResult
-    has no field for it), so it is rework; a transient hook failure is only recognized when the caller passes the
-    hook's output in a git.hook_failed FactoryError or in a GateResult with code gate.hook_failed."""
+    route with route_conflict, which follows on_conflict. A join with hook_failed carries the hook's output in
+    JoinResult.hook_output, so it is read like any other hook output: a network or missing-tool error is transient and
+    anything else is rework. A hook's output also arrives in a git.hook_failed FactoryError or in a GateResult with code
+    gate.hook_failed."""
     if isinstance(failure, FactoryError):
         if failure.code == "git.hook_failed":
             return _hook_kind(failure.message)
@@ -103,6 +104,8 @@ def classify(failure: FactoryError | AttemptResult | GateResult | JoinResult) ->
         return "rework"
     if failure.ok:
         raise ValueError("a join that succeeded did not fail")
+    if failure.hook_failed and failure.hook_output:
+        return _hook_kind(failure.hook_output)
     return "rework"
 
 
@@ -156,7 +159,10 @@ def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: Gat
     if isinstance(result, JoinResult):
         gate, exit_code, failed = "join", None, []
         files = list(result.conflict_files)
-        output = ("merge conflict in:\n" + "\n".join(files)) if files else "a repo hook failed on the join commit"
+        if files:
+            output = "merge conflict in:\n" + "\n".join(files)
+        else:
+            output = result.hook_output or "a repo hook failed on the join commit"
     else:
         gate, output = result.gate, result.output_tail
         exit_code = result.details.get("exit_code")

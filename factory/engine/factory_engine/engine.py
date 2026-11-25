@@ -1055,7 +1055,12 @@ class Engine:
         pre_join = gitops.git(run.worktree, "rev-parse", "HEAD").stdout.strip()
         join = gitops.join(run.worktree, branches, regenerate=wf.regenerate_at_join, join_cmd=wf.join_cmd)
         if not join.ok:
-            routing = rework.route_conflict(run, wf, stage) if join.conflict_files else rework.route(run, wf, stage, "rework")
+            routing = rework.route_conflict(run, wf, stage) if join.conflict_files else rework.route(run, wf, stage, rework.classify(join))
+            if routing.action == "wait":
+                # A join hook that failed on the network or a missing tool is transient (module 8): the run waits, the
+                # next pass repeats the join, and run.json names the hook's last line. gitops.join reset the run branch.
+                error = FactoryError("git.network", f"the repo hook on the join commit failed: {join.hook_output.splitlines()[-1]}")
+                return self._wait_for_infra(run, run_dir, lock, stage.id, error, result)
             if routing.action == "goto":
                 rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=join, loop=routing.loop,
                                       max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run))

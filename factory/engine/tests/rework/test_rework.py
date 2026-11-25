@@ -114,6 +114,31 @@ def test_a_hook_failure_carries_its_output_into_the_feedback_record(tmp_path):
     assert doc["gate"] == "repo hook" and "ruff found 3 errors" in doc["output_tail"]
 
 
+def test_a_join_hook_failure_carries_its_output_into_the_feedback_record(tmp_path):
+    run_dir, run, wf = make_run(tmp_path)
+    join = JoinResult(False, [], True, [], hook_output="pre-commit: ruff found 3 errors in services/api/auth.py")
+    path = build_feedback(run_dir, from_stage="fix", to_stage="fix", result=join, loop=1, max_loops=2,
+                          task_ids=["backend"])
+    doc = json.loads(path.read_text())
+    assert doc["gate"] == "join" and "ruff found 3 errors" in doc["output_tail"]
+
+
+def test_a_join_hook_failure_without_output_keeps_the_fixed_sentence(tmp_path):
+    run_dir, run, wf = make_run(tmp_path)
+    path = build_feedback(run_dir, from_stage="fix", to_stage="fix", result=JoinResult(False, [], True, []), loop=1,
+                          max_loops=2, task_ids=["backend"])
+    assert json.loads(path.read_text())["output_tail"] == "a repo hook failed on the join commit"
+
+
+def test_a_join_hook_failing_on_a_network_or_missing_tool_error_is_transient_and_a_defect_is_rework():
+    for text in ("pre-commit: Could not resolve host: pypi.org", "pre-commit: ruff: command not found"):
+        assert classify(JoinResult(False, [], True, [], hook_output=text)) == "transient", text
+    assert classify(JoinResult(False, [], True, [], hook_output="pre-commit: ruff found 3 errors")) == "rework"
+    assert classify(JoinResult(False, [], True, [], hook_output=None)) == "rework"
+    # a conflict never reads the hook output
+    assert classify(JoinResult(False, ["a.py"], False, [], hook_output="command not found")) == "rework"
+
+
 def test_the_error_kind_a_module_raises_is_what_classify_returns():
     for code, entry in CATALOGUE.items():
         if code == "git.hook_failed":
