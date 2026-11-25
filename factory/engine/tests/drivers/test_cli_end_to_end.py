@@ -85,16 +85,20 @@ _REVIEW_FINDINGS = json.dumps({"schema_version": 1, "findings": [
     {"file": "services/api.py", "line": 1, "severity": "low", "rule": "naming", "message": "a nit"}]})
 
 
-def bug_fix_script(run_dir: Path) -> tuple[dict, dict]:
+REWORKED = {"backend", "frontend", "be-tests", "fe-tests", "e2e"}  # the tasks of `fix` and `verify`: they run again on a rework
+
+
+def bug_fix_script(run_dir: Path, *, verify_failures: int = 0) -> tuple[dict, dict]:
     """Triage and the ten bug-fix tasks, each with a valid artifact. `chore_script` is the model; its `rules` entry
-    is reused with a triage answer that picks bug-fix."""
+    is reused with a triage answer that picks bug-fix. Each failure of verify sends the run back to `fix`, so the tasks
+    of `fix` and `verify` get one more scripted attempt for each."""
     script, writes = chore_script(run_dir)
     script = {"rules": script["rules"]}
     triage = {**json.loads(TRIAGE_JSON), "type": "bug", "workflow": "bug-fix"}
     writes = {"rules": {"triage.json": json.dumps(triage)}}
     for task in BUG_FIX_TASKS:
         out = BUG_FIX_OUT[task]
-        script[task] = [ok(run_dir / "tasks" / task / "work" / out)]
+        script[task] = [ok(run_dir / "tasks" / task / "work" / out)] * (1 + (verify_failures if task in REWORKED else 0))
         if task in ("be-tests", "fe-tests", "e2e"):
             writes[task] = {out: _JUNIT_THREE_PASS}
         elif task in ("standards", "spec"):
@@ -161,6 +165,64 @@ def test_a_bug_fix_run_stops_at_propose_is_answered_by_decide_and_reaches_done(s
 
 
 CMD_TASKS = {"rules", "check", "be-tests", "fe-tests", "e2e"}  # the cmd tasks of the shipped workflows
+
+
+def test_a_bug_fix_run_with_one_rework_from_verify_ends_done_and_cleaned_up_after_the_human_merge(seeded, capsys,
+                                                                                                 monkeypatch):
+    """Section 20, first integration test: issue, run, triage, approval through `factory decide`, one rework from
+    verify, PR, human merge, cleanup. The gate `repro-now-passes.sh` fails the first time verify runs and passes the
+    second, so verify routes back to `fix` once (`on_fail: {goto: fix}`). After the merge the run is `done`, its run
+    worktree is gone from disk and `run_done` is in the events."""
+    monkeypatch.setattr(cli.api, "spawn_engine", lambda repo, run_id: None)
+    prs = FakePullRequests()
+    repro_now_passes: list[int] = []
+
+    def stub_runner(argv, ctx):
+        if argv == ["scripts/repro-now-passes.sh"]:
+            repro_now_passes.append(1)
+            return (1, "the repro still fails") if len(repro_now_passes) == 1 else (0, "")
+        return 0, ""
+
+    code, added = _cli(["add", "Fix the off-by-one in the report", "--type", "bug", "--repo", str(seeded), "--json",
+                        "--no-run"], capsys)
+    assert code == 0 and added["ok"] is True
+    run_id = added["data"]["run_id"]
+    run_dir = state.find_run(state.factory_home(), run_id).run_dir
+    script, writes = bug_fix_script(run_dir, verify_failures=1)
+    worker, command = _split_worker_and_command(script, writes, native=True)
+    factories = dict(worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
+                     tracker_factory=lambda repo, cfg: _tracker(), prs_factory=lambda repo, cfg: prs)
+
+    with gates.use_command_runner(stub_runner):
+        code, parked = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+        assert code == 3 and state.read_run(run_dir).stage == "propose", parked
+        packet = decisions.read_decision(run_dir, "propose", 1)["packet"]
+        code, decided = _cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", packet["sha"],
+                              "D1=approve"], capsys)
+        assert code == 0 and decided["data"]["status"] == "approved", decided
+        code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+    assert code == 3 and driven["data"]["runs"] == {run_id: "awaiting_approval"}, driven
+
+    run = state.read_run(run_dir)
+    assert run.loops == {"verify->fix": 1}  # one rework, from verify back to fix
+    events = [e.type for e in state.read_events(run_dir)]
+    assert events.count("gate_failed") == 1 and repro_now_passes  # the verify gate failed once, then passed
+    assert events.count("routed_back") == 1
+    assert sorted(c.task_id for c in worker.started if c.task_id in ("backend", "frontend")) == [
+        "backend", "backend", "frontend", "frontend"]  # `fix` ran twice
+    assert [c.task_id for c in command.started].count("be-tests") == 2  # and so did `verify`
+    assert run.pr is not None and prs.prs[run.pr.number].state == "open"
+    worktree = run.worktree
+    assert worktree.exists()  # the run keeps its worktree until the merge
+
+    prs.human_merge(run.pr)
+    with gates.use_command_runner(stub_runner):
+        code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+    assert code == 0 and driven["data"]["runs"] == {run_id: "done"}, driven
+    assert state.read_run(run_dir).status == "done"
+    assert not worktree.exists()  # cleanup: the run worktree is gone from disk
+    events = [e.type for e in state.read_events(run_dir)]
+    assert events.count("merged") == 1 and events.count("run_done") == 1
 
 
 def _split_worker_and_command(script, writes, *, native: bool = False):
