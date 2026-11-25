@@ -1,0 +1,35 @@
+{
+  "task": "verify-wiring",
+  "branch": "plaktoz/verify-wiring",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 3,
+  "lines": {
+    "product": 298,
+    "spec": 8,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-58-verify-wiring"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
