@@ -1194,6 +1194,9 @@ class Engine:
         saves nothing, because its answer is in the decision file and the next pass reads it again. A save that
         itself fails with an OSError is not fatal: the run waits as it did before the file existed, and the next pass
         works the route out again."""
+        if not save_route:
+            # A human rework saves no route, so a file a gate route left in the folder must not be applied to its wait.
+            rework.clear_pending_route(run_dir, lock=lock)
         if routing.action == "goto" and make_feedback is not None:
             doc, tasks = make_feedback(), self._tasks_of(wf, routing.goto, run_dir, run)
             try:

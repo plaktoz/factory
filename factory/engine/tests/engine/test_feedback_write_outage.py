@@ -183,6 +183,42 @@ stages:
 """
 
 
+def test_a_human_rework_wait_does_not_apply_a_route_left_by_an_earlier_gate_route(new_run, engine, repo, monkeypatch):
+    """A human rework saves no route, so a pending-route.json left by an earlier gate route must not be applied to its
+    feedback-write wait. The human answer is what routes the run."""
+    from factory_engine import decisions as D
+    run_dir = new_run()
+    work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
+    script = {"rules": [ok(work("rules", "triage.json"))],
+              "cause": [ok(work("cause", "cause.json"))] * 2,
+              "plan": [ok(work("plan", "plan.json"))] * 2,
+              "change": [ok(work("change", "change.json"))]}
+    writes = {"rules": {"triage.json": TRIAGE_JSON}, "cause": {"cause.json": "{}"},
+              "plan": {"plan.json": "{}"}, "change": {"change.json": "{}"}}
+    eng, _ = engine(script, writes)
+    wf_dir = repo / ".factory" / "config" / "workflows"
+    wf_dir.mkdir(parents=True, exist_ok=True)
+    (wf_dir / "chore.yaml").write_text(HUMAN_WORKFLOW)
+    assert eng.run([RUN]).runs[RUN] == "awaiting_approval"
+    visit = D.latest_visit(state.read_run(run_dir), "propose")
+    doc = D.read_decision(run_dir, "propose", visit)
+    D.record(run_dir, "propose", visit, packet_sha=doc["packet"]["sha"],
+             choices={d["id"]: "rework" for d in doc["packet"]["decisions"]}, notes="try again", by="owner", channel="cli")
+    # A route left in the folder by an earlier gate route (a crash after it was applied, before the file was removed).
+    stale = _pending_doc(from_stage="propose", goto="root-cause", reset=["root-cause"], loop_key="propose->root-cause:gate",
+                         tasks=["cause"])
+    stale["feedback"] = dict(stale["feedback"], from_stage="propose", to_stage="root-cause")
+    (run_dir / "pending-route.json").write_text(json.dumps(stale))
+
+    disk = FullDisk(monkeypatch, task="cause")
+    assert eng.run([RUN]).runs[RUN] == "retrying"
+    disk.full = False
+    assert eng.run([RUN]).runs[RUN] == "awaiting_approval"
+    run = state.read_run(run_dir)
+    assert run.loops == {"propose->root-cause:human": 1}  # the human route, not the stale gate route
+    assert not (run_dir / "pending-route.json").exists()
+
+
 def test_a_human_rework_whose_feedback_write_fails_keeps_its_route_and_routes_on_the_next_pass(new_run, engine, repo, monkeypatch):
     from factory_engine import decisions as D
     run_dir = new_run()
