@@ -35,6 +35,20 @@ def test_the_block_file_is_pending_and_is_the_file_for_the_stage_and_visit_the_b
     assert [e["kind"] for e in _events(run_dir, "attention_requested")] == ["blocked"]
 
 
+def test_a_triage_block_with_no_workflow_to_retry_writes_no_blocked_file(new_run, engine, monkeypatch):
+    """Triage can block a run with fewer than two loadable workflows. That run has no workflow, so retry, goto, skip and
+    abort cannot apply to it and no blocked file is written (module 11, "A blocked run's answer")."""
+    from test_engine import _triage_that_cannot_decide
+    from factory_engine import decisions as D
+
+    run_dir, eng = _triage_that_cannot_decide(new_run, engine)
+    monkeypatch.setattr(eng, "_loads", lambda wid: wid == "chore")
+    eng.run(["bump-q1w2e"])
+    assert state.read_run(run_dir).status == "blocked"
+    assert [e["stage"] for e in _events(run_dir, "run_blocked")] == ["triage"]
+    assert not D.decision_path(run_dir, "triage", 1).exists()
+
+
 def test_a_block_with_no_stage_to_name_writes_no_file_and_still_logs_the_block(new_run, repo, cfg, tracker, prs, clock):
     """A block can reach a run with no stage to name (a skip of the last stage leaves run.stage empty). The block is
     logged, but no decision file is written under an empty stage name."""
