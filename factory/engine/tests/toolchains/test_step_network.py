@@ -114,6 +114,23 @@ def test_the_maven_test_step_hands_mvn_a_proxy_settings_file_when_srt_sets_one(t
     assert not (task_dir / "maven-proxy-settings.xml").exists(), "the file holds the proxy password and must be removed"
 
 
+@pytest.mark.parametrize("bad", ["notaurl", "http://localhost", "http://user:pw@localhost:notaport"])
+def test_a_proxy_without_a_host_and_port_stops_the_step_before_mvn_runs(tmp_path, monkeypatch, task_dir, bad):
+    """A malformed HTTPS_PROXY exits 2 with a message, and mvn is never run (no argv recorded)."""
+    bins = tmp_path / "bin"
+    record = tmp_path / "mvn-argv.txt"
+    _stub_mvn(bins, record)
+    monkeypatch.setenv("PATH", f"{bins}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("HTTPS_PROXY", bad)
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    (proj / "pom.xml").write_text("<project/>")
+    r = subprocess.run(_maven_test_argv(), cwd=proj, env={**os.environ, "FACTORY_TASK_DIR": str(task_dir)},
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode == 2 and "HTTPS_PROXY must be a URL with a host and a port" in r.stderr
+    assert not record.exists(), "mvn must not run with a bad proxy"
+
+
 def test_the_proxy_settings_file_is_removed_even_when_mvn_fails(tmp_path, monkeypatch, task_dir):
     """A failing mvn still leaves no password file in the task folder (the finally in the step)."""
     bins = tmp_path / "bin"

@@ -32,7 +32,14 @@ variants:
         cmd = ['mvn', '-q', 'test']
         proxy = os.environ.get('HTTPS_PROXY')
         if proxy:
-            u = urllib.parse.urlsplit(proxy)
+            try:
+                u = urllib.parse.urlsplit(proxy)
+                host, port = u.hostname, u.port
+            except ValueError:
+                host, port = None, None
+            if not host or port is None:
+                sys.stderr.write("HTTPS_PROXY must be a URL with a host and a port\n")
+                sys.exit(2)
             user, pw = urllib.parse.unquote(u.username or ''), urllib.parse.unquote(u.password or '')
             path = os.path.join(d, 'maven-proxy-settings.xml')
             fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
