@@ -36,7 +36,23 @@ def test_each_schema_is_valid_draft_2020_12(name):
 @pytest.mark.parametrize("name", sorted(schemagen.FILE_TYPES))
 def test_schema_requires_every_dataclass_field_and_the_version(name):
     cls = schemagen.FILE_TYPES[name]
-    assert load(name)["required"] == ["schema_version", *[f.name for f in dataclasses.fields(cls)]]
+    optional = schemagen.OPTIONAL_FIELDS.get(name, set())
+    assert load(name)["required"] == ["schema_version", *[f.name for f in dataclasses.fields(cls) if f.name not in optional]]
+
+
+def test_a_task_file_from_before_worker_pgid_still_loads():
+    """task.json written before the worker_pgid field existed has no such key: it validates and reads as None."""
+    old = {k: v for k, v in TASK.items()}
+    assert "worker_pgid" not in old
+    check("task", old)
+    assert T.TaskState(**{k: v for k, v in old.items() if k != "schema_version"}).worker_pgid is None
+
+
+def test_worker_pgid_is_an_integer_or_null():
+    check("task", dict(TASK, worker_pgid=4242))
+    check("task", dict(TASK, worker_pgid=None))
+    with pytest.raises(jsonschema.ValidationError):
+        check("task", dict(TASK, worker_pgid="4242"))
 
 
 SOURCE = {"type": "github", "ref": "owner/payments-api#42", "title": "Login fails on expired token",

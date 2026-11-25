@@ -26,6 +26,11 @@ FILE_TYPES: dict[str, type] = {
     "usage": T.UsageRecord,
     "event": T.Event,
 }
+# file schema name -> fields that may be absent from a file written before the field existed. A field listed here is
+# not in the schema's "required" list. Each one has a dataclass default, so the reader fills it in.
+OPTIONAL_FIELDS: dict[str, set[str]] = {
+    "task": {"worker_pgid"},
+}
 SCHEMA_DIR = Path(__file__).resolve().parents[2] / "schemas"
 
 
@@ -67,16 +72,17 @@ def _type_schema(tp: Any, defs: dict[str, Any]) -> dict[str, Any]:
     raise TypeError(f"no JSON Schema rule for {tp!r}")
 
 
-def _object_schema(cls: type, defs: dict[str, Any]) -> dict[str, Any]:
+def _object_schema(cls: type, defs: dict[str, Any], optional: set[str] = frozenset()) -> dict[str, Any]:
     hints = typing.get_type_hints(cls)
     props = {f.name: _type_schema(hints[f.name], defs) for f in dataclasses.fields(cls)}
-    return {"type": "object", "properties": props, "required": list(props), "additionalProperties": False}
+    required = [n for n in props if n not in optional]
+    return {"type": "object", "properties": props, "required": required, "additionalProperties": False}
 
 
 def build(name: str) -> dict[str, Any]:
     cls = FILE_TYPES[name]
     defs: dict[str, Any] = {}
-    body = _object_schema(cls, defs)
+    body = _object_schema(cls, defs, OPTIONAL_FIELDS.get(name, set()))
     body["properties"] = {"schema_version": {"const": SCHEMA_VERSION}, **body["properties"]}
     body["required"] = ["schema_version", *body["required"]]
     schema = {

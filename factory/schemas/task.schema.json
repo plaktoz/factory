@@ -53,6 +53,16 @@
     },
     "checkpoints": {
       "type": "integer"
+    },
+    "worker_pgid": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
