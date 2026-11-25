@@ -131,3 +131,21 @@ def test_a_reviewer_request_that_fails_leaves_the_recorded_pull_request_alone_an
     assert _pass(eng) == "awaiting_approval"
     assert len(prs.prs) == 1 and prs.calls.count("create") == 1
     assert prs.prs[run.pr.number].reviewers == ["alice"] and state.read_run(run_dir).infra_wait is None
+
+
+def test_a_person_retries_a_run_blocked_by_an_outage_and_the_next_outage_starts_a_fresh_wait(new_run, engine, prs, clock):
+    run_dir = new_run()
+    script, writes = chore_script(run_dir)
+    eng, _ = engine(script, writes)
+    github = GitHubDown(prs)
+    _pass(eng)
+    clock.advance(6 * 3600)
+    _pass(eng)
+    assert state.read_run(run_dir).status == "blocked"
+    eng.retry(RUN)  # a person's retry is a new attempt: the old wait does not carry over
+    assert state.read_run(run_dir).infra_wait is None
+    assert _pass(eng) == "retrying"  # still down: a fresh wait starts, so the run is not blocked again at once
+    run = state.read_run(run_dir)
+    assert run.status == "retrying" and run.infra_wait.tries == 3
+    github.up = True
+    assert _pass(eng) == "awaiting_approval"
