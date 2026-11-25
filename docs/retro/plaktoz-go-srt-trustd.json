@@ -1,0 +1,54 @@
+{
+  "task": "go-srt-trustd",
+  "branch": "plaktoz/go-srt-trustd",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 3,
+  "lines": {
+    "product": 234,
+    "spec": 4,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-58-go-srt"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "go-test-step-gets-the-trustd-grant",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "df46e2180"
+    },
+    {
+      "id": "go-test-step-gets-the-trustd-grant",
+      "importance": "medium",
+      "category": "code",
+      "commit": "7558c29d7"
+    },
+    {
+      "id": "go-test-step-gets-the-trustd-grant",
+      "importance": "medium",
+      "category": "code",
+      "commit": "1ea8094b4"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

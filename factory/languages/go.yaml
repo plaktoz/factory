@@ -71,5 +71,12 @@ variants:
         with open(os.path.join(d, "test.junit.xml"), "w") as f:
             f.write("\n".join(out))
         sys.exit(rc)
+    # Go's TLS trust is a macOS keychain lookup that srt blocks, so the step names the trustd Mach service (module 9:
+    # the same grant as the Codex adapter's). Measured 2026-11-25 on a temp module requiring go-cmp, with the grant on and
+    # go.sum present: proxy.golang.org is needed (removed, the download is refused: `host is not on the allow list`).
+    # sum.golang.org, storage.googleapis.com and github.com were each removed in turn and the test still passed, so none is
+    # listed. Without the grant the proxy host alone fails: `tls: failed to verify certificate: x509: OSStatus -26276`.
+    network:
+      test: {allow: [proxy.golang.org], mach: [com.apple.trustd.agent]}
     tools: [go]
     build:        [go, build, ./...]

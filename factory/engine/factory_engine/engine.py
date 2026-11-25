@@ -88,7 +88,8 @@ def _spec_to_doc(spec: TaskSpec) -> dict:
             "helpers": {"mode": spec.helpers.mode, "max": spec.helpers.max, "split_hints": spec.helpers.split_hints,
                         "timeout_minutes": spec.helpers.timeout_minutes},
             "out": spec.out, "timeout_minutes": spec.timeout_minutes, "retries": spec.retries,
-            "max_interruptions": spec.max_interruptions, "network_domains": list(spec.network_domains)}
+            "max_interruptions": spec.max_interruptions, "network_domains": list(spec.network_domains),
+            "network_mach": list(spec.network_mach)}
 
 
 def _spec_from_doc(doc: dict) -> TaskSpec:
@@ -97,7 +98,8 @@ def _spec_from_doc(doc: dict) -> TaskSpec:
                     needs=doc["needs"], helpers=HelperPolicy(h["mode"], h["max"], h["split_hints"], h["timeout_minutes"]),
                     out=doc["out"], timeout_minutes=doc["timeout_minutes"], retries=doc["retries"], model=None,
                     when=None, max_interruptions=doc["max_interruptions"],
-                    network_domains=list(doc.get("network_domains") or []))
+                    network_domains=list(doc.get("network_domains") or []),
+                    network_mach=list(doc.get("network_mach") or []))
 
 
 class Engine:
@@ -854,7 +856,8 @@ class Engine:
             notes=notes.delivered_notes(run_dir, spec.id), progress=None, output_schema=None, model=spec.model,
             mcp=[], practices=[], artifact_name=spec.out or "artifact.json", bash=[],
             cmd=list(spec.cmd) if spec.cmd else None, run=spec.run, plugin_dir=None,
-            question=self._question_of(run_dir, stage, spec), network_domains=list(spec.network_domains))
+            question=self._question_of(run_dir, stage, spec), network_domains=list(spec.network_domains),
+            network_mach=list(spec.network_mach))
 
     @staticmethod
     def _question_of(run_dir: Path, stage: Stage, spec: TaskSpec) -> str | None:

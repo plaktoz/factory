@@ -154,7 +154,7 @@ def test_the_list_is_fixed_when_verify_starts_and_a_later_change_does_not_alter_
     assert frozen == [[{"id": "test-python", "cmd": frozen[0][0]["cmd"], "scope": [], "deny": [], "needs": [],
                         "helpers": {"mode": "off", "max": 0, "split_hints": [], "timeout_minutes": None},
                         "out": "test.junit.xml", "timeout_minutes": 30, "retries": 0, "max_interruptions": 3,
-                        "network_domains": []}]]
+                        "network_domains": [], "network_mach": []}]]
     assert sorted(c.task_id for c in worker.started if c.task_id.startswith("test-")) == ["test-python"]
 
 

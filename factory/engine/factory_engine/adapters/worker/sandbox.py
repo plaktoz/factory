@@ -64,6 +64,23 @@ def plain_hosts(value: object, where: str) -> list[str]:
     return list(value)
 
 
+# The one Mach service a profile step may ask srt for: macOS's trust daemon, which Go's TLS needs (module 9; the Codex
+# adapter's grant is the same service). A name outside this tuple is refused at load, so a profile cannot widen the sandbox.
+MACH_SERVICES = ("com.apple.trustd.agent",)
+
+
+def plain_mach(value: object, where: str) -> list[str]:
+    """The Mach services a profile step may look up under srt (module 9, module 17A `network`). Only the names in
+    MACH_SERVICES pass: any other service, a wildcard, an empty string or a non-string is refused with config.invalid."""
+    hint = f"the only service a step may name is {MACH_SERVICES[0]}"
+    if not isinstance(value, list):
+        raise FactoryError("config.invalid", f"{where}: mach must be a list of service names", hint=hint)
+    for s in value:
+        if not isinstance(s, str) or s not in MACH_SERVICES:
+            raise FactoryError("config.invalid", f"{where}: {s!r} is not a Mach service a step may look up", hint=hint)
+    return list(value)
+
+
 def _is_ip(text: str) -> bool:
     try:
         ipaddress.ip_address(text)
@@ -72,11 +89,16 @@ def _is_ip(text: str) -> bool:
     return True
 
 
-def srt_settings(worktree: Path, task_dir: Path, factory: Path | None = None, domains: list[str] | None = None) -> dict:
+def srt_settings(worktree: Path, task_dir: Path, factory: Path | None = None, domains: list[str] | None = None,
+                 mach: list[str] | None = None) -> dict:
     """The settings `srt` reads. It needs `denyWrite` and `deniedDomains` present, or it refuses to run (2026-11-14).
-    `domains` is the one task's allowance (module 9); it is empty unless the task's profile step names hosts."""
-    return {"filesystem": filesystem(worktree, task_dir, factory),
-            "network": {"allowedDomains": plain_hosts(list(domains or []), "network"), "deniedDomains": []}}
+    `domains` is the one task's allowance (module 9); it is empty unless the task's profile step names hosts. `mach` is
+    the one task's Mach lookups (Go's TLS trust); the key is written only when the step names one, so every other
+    command's file is the same as before."""
+    net: dict = {"allowedDomains": plain_hosts(list(domains or []), "network"), "deniedDomains": []}
+    if mach:
+        net["allowMachLookup"] = plain_mach(list(mach), "network")
+    return {"filesystem": filesystem(worktree, task_dir, factory), "network": net}
 
 
 def srt_bin() -> str | None:

@@ -53,11 +53,11 @@ def factory_home(tmp_path, monkeypatch) -> Path:
     return home
 
 
-def _profile(worktree: Path, body: str) -> None:
-    """A repo profile in the worktree's override folder, which replaces the shipped java profile for this test."""
+def _profile(worktree: Path, body: str, name: str = "java") -> None:
+    """A repo profile in the worktree's override folder, which replaces the shipped profile of that name for this test."""
     d = worktree / ".factory" / "config" / "languages"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "java.yaml").write_text(body)
+    (d / f"{name}.yaml").write_text(body)
 
 
 JAVA_WITH = """name: java
@@ -67,6 +67,16 @@ variants:
   maven:
     when: {file: pom.xml}
     test: [mvn, -q, test]
+    network: {test: %s}
+"""
+
+GO_WITH = """name: go
+detect: {any_file: [go.mod]}
+files: ["**/*.go"]
+variants:
+  go:
+    when: {file: go.mod}
+    test: [go, test, ./...]
     network: {test: %s}
 """
 
@@ -173,14 +183,17 @@ def test_the_shipped_java_maven_test_step_allows_only_the_maven_central_host():
     assert doc["variants"]["maven"]["network"] == {"test": ["repo.maven.apache.org"]}
 
 
-def test_no_shipped_profile_allows_a_host_for_any_step_but_java_test():
+def test_no_shipped_profile_allows_a_host_or_a_grant_for_any_step_but_the_java_and_go_test_steps():
+    """The shipped allowances are exactly two: Maven's one host and Go's proxy with the trustd grant. A new one is a
+    decision, so it changes this test too."""
     import yaml
     allowed = {}
     for p in sorted(KIT.glob("*.yaml")):
         for vname, v in (yaml.safe_load(p.read_text()).get("variants") or {}).items():
-            for step, hosts in (v.get("network") or {}).items():
-                allowed[(p.stem, vname, step)] = hosts
-    assert allowed == {("java", "maven", "test"): ["repo.maven.apache.org"]}
+            for step, spec in (v.get("network") or {}).items():
+                allowed[(p.stem, vname, step)] = spec
+    assert allowed == {("java", "maven", "test"): ["repo.maven.apache.org"],
+                       ("go", "go", "test"): {"allow": ["proxy.golang.org"], "mach": ["com.apple.trustd.agent"]}}
 
 
 @pytest.mark.parametrize("hosts", [
@@ -232,6 +245,97 @@ def test_a_profile_without_a_network_key_gets_no_hosts(tmp_path):
     assert all(tc.network == {} for tc in toolchains.detect(w, CFG))
 
 
+# ---- the mach grant (owner-verified 2026-11-25): a step names the one macOS Mach service it needs, and no other ----------
+
+@pytest.mark.parametrize("service", [
+    "com.apple.trustd.agent.extra",          # a longer name
+    "com.apple.SecurityServer",              # another service
+    "*",                                     # everything
+    "com.apple.*",                           # a wildcard
+    "",                                      # empty
+    42,                                      # not a string
+])
+def test_a_mach_service_other_than_trustd_is_refused_at_load(tmp_path, service):
+    """The only Mach grant a step may name is com.apple.trustd.agent (Go's TLS trust, verified 2026-11-25). Any other
+    service, a wildcard or a non-string is refused with config.invalid, so a profile cannot widen the sandbox."""
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    _profile(w, GO_WITH % ("{allow: [proxy.golang.org], mach: [%s]}" % (f'"{service}"' if isinstance(service, str) else service)),
+             name="go")
+    with pytest.raises(FactoryError) as e:
+        toolchains.detect(w, CFG)
+    assert e.value.code == "config.invalid"
+
+
+def test_a_mach_list_that_is_not_a_list_is_refused_at_load(tmp_path):
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    _profile(w, GO_WITH % "{allow: [proxy.golang.org], mach: com.apple.trustd.agent}", name="go")
+    with pytest.raises(FactoryError) as e:
+        toolchains.detect(w, CFG)
+    assert e.value.code == "config.invalid"
+
+
+def test_a_step_key_other_than_allow_or_mach_is_refused_at_load(tmp_path):
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    _profile(w, GO_WITH % "{allow: [proxy.golang.org], bogus: [x]}", name="go")
+    with pytest.raises(FactoryError) as e:
+        toolchains.detect(w, CFG)
+    assert e.value.code == "config.invalid"
+
+
+def test_the_shipped_go_test_step_names_the_proxy_and_the_trustd_grant_and_nothing_else():
+    """The four hosts of the first draft were measured on 2026-11-25: only proxy.golang.org is needed (with the grant)."""
+    import yaml
+    doc = yaml.safe_load((KIT / "go.yaml").read_text())
+    assert doc["variants"]["go"]["network"] == {"test": {"allow": ["proxy.golang.org"], "mach": ["com.apple.trustd.agent"]}}
+
+
+def test_the_go_test_task_settings_carry_the_grant_and_the_host(tmp_path, worktree, task_dir):
+    folder = tmp_path / "attempt"
+    folder.mkdir()
+    ctx = _ctx(worktree, task_dir, ["go", "test", "./..."], ["proxy.golang.org"], mach=["com.apple.trustd.agent"])
+    s = _settings_for(CommandAdapter({}), ctx, folder)
+    assert s["network"]["allowedDomains"] == ["proxy.golang.org"]
+    assert s["network"]["allowMachLookup"] == ["com.apple.trustd.agent"]
+
+
+def test_another_steps_settings_carry_no_grant_and_no_host(tmp_path, worktree, task_dir):
+    """The grant rides only with the step that names it. Another command, built by the same code, gets neither."""
+    adapter = CommandAdapter({})
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    go = _settings_for(adapter, _ctx(worktree, task_dir, ["go", "test", "./..."], ["proxy.golang.org"],
+                                     mach=["com.apple.trustd.agent"]), a)
+    other = _settings_for(adapter, _ctx(worktree, task_dir, ["npm", "test"], []), b)
+    assert "allowMachLookup" not in other["network"] or other["network"]["allowMachLookup"] == []
+    assert go["network"]["allowMachLookup"] == ["com.apple.trustd.agent"]
+
+
+def test_a_java_test_step_settings_carry_no_mach_grant(tmp_path, worktree, task_dir):
+    folder = tmp_path / "attempt"
+    folder.mkdir()
+    s = _settings_for(CommandAdapter({}), _ctx(worktree, task_dir, ["mvn", "-q", "test"], ["repo.maven.apache.org"]), folder)
+    assert "allowMachLookup" not in s["network"] or s["network"]["allowMachLookup"] == []
+
+
+def test_the_go_test_step_hands_its_grant_to_the_frozen_list_and_back(tmp_path):
+    """The verify stage freezes its test tasks in languages.json, so the grant must survive the round trip."""
+    from factory_engine.engine import _spec_from_doc, _spec_to_doc
+    spec = TaskSpec(id="test-go", skill=None, cmd=["go", "test", "./..."], run=None, scope=[], deny=[], needs=[],
+                    helpers=HelperPolicy("off", 0, [], None), out=None, timeout_minutes=30, retries=0, model=None,
+                    when=None, network_domains=["proxy.golang.org"], network_mach=["com.apple.trustd.agent"])
+    back = _spec_from_doc(_spec_to_doc(spec))
+    assert back.network_mach == ["com.apple.trustd.agent"] and back.network_domains == ["proxy.golang.org"]
+
+
+def test_a_frozen_list_without_the_mach_key_reads_with_no_grant():
+    from factory_engine.engine import _spec_from_doc
+    doc = {"id": "test-go", "cmd": ["go"], "scope": [], "deny": [], "needs": [],
+           "helpers": {"mode": "off", "max": 0, "split_hints": [], "timeout_minutes": None},
+           "out": "test.junit.xml", "timeout_minutes": 30, "retries": 0, "max_interruptions": 3, "network_domains": []}
+    assert _spec_from_doc(doc).network_mach == []
+
+
 # ---- the plumbing: a step's hosts reach its test task and nothing else ----------------------------------------------
 
 def test_the_java_test_task_carries_the_maven_host_and_the_other_java_steps_do_not(tmp_path):
@@ -269,11 +373,11 @@ def test_a_frozen_list_written_before_this_key_existed_reads_with_no_hosts():
 
 # ---- the srt settings: one task's allowance, not the others ---------------------------------------------------------
 
-def _ctx(worktree, task_dir, cmd, domains):
+def _ctx(worktree, task_dir, cmd, domains, mach=()):
     return TaskContext(run_id="run-1", task_id="test-java", stage="verify", attempt=1, skill=None, request=None,
                        worktree=worktree, task_dir=task_dir, scope=[], deny=[], helpers=None, feedback=[], notes=[],
                        progress=None, output_schema=None, model=None, mcp=[], practices=[], cmd=list(cmd),
-                       artifact_name="test.junit.xml", network_domains=list(domains))
+                       artifact_name="test.junit.xml", network_domains=list(domains), network_mach=list(mach))
 
 
 def _settings_for(adapter, ctx, folder):
@@ -441,3 +545,45 @@ def test_the_factory_home_stays_unreadable_when_a_host_is_allowed(tmp_path, work
     r = subprocess.run(sandbox.srt_command(shutil.which("srt"), settings, ctx.cmd), cwd=worktree, capture_output=True,
                        text=True, timeout=120)
     assert r.returncode != 0 and "secret" not in r.stdout
+
+
+# ---- the real sandbox: the shipped Go test step, under srt, resolves a module through the proxy with the grant ----------
+
+needs_go = pytest.mark.skipif(shutil.which("go") is None, reason="go is not on PATH (skipped cleanly)")
+
+
+def _go_proxy_reachable() -> bool:
+    import urllib.request
+    try:
+        urllib.request.urlopen("https://proxy.golang.org/", timeout=10).close()
+        return True
+    except Exception:
+        return False
+
+
+needs_go_proxy = pytest.mark.skipif(not _go_proxy_reachable(), reason="proxy.golang.org is not reachable (skipped cleanly)")
+
+
+@needs_srt
+@needs_go
+@needs_go_proxy
+def test_the_shipped_go_test_step_under_srt_downloads_a_module_with_its_grant_and_host(tmp_path, worktree, task_dir):
+    """The shipped Go test step, under srt, with its one host and the trustd grant: go-cmp downloads and the test passes.
+    Measured 2026-11-25 on a temp module (go 1.27.3, srt 0.0.83)."""
+    import yaml
+    (worktree / "go.mod").write_text("module probe\n\ngo 1.21\n\nrequire github.com/google/go-cmp v0.6.0\n")
+    (worktree / "go.sum").write_text(  # a real repo has one; go-cmp v0.6.0 and its go.mod sums, from the proxy
+        "github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=\n"
+        "github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=\n")
+    (worktree / "probe_test.go").write_text(
+        'package probe\n\nimport (\n\t"testing"\n\n\t"github.com/google/go-cmp/cmp"\n)\n\n'
+        'func TestCmp(t *testing.T) {\n\tif d := cmp.Diff(1, 1); d != "" {\n\t\tt.Fatal(d)\n\t}\n}\n')
+    argv = yaml.safe_load((KIT / "go.yaml").read_text())["variants"]["go"]["test"]
+    adapter = CommandAdapter(dict(os.environ))
+    ctx = _ctx(worktree, task_dir, argv, ["proxy.golang.org"], mach=["com.apple.trustd.agent"])
+    ctx.task_id = "test-go"
+    log = tmp_path / "go.log"
+    handle = adapter.start(ctx, harness("command"), log)
+    result = adapter.wait(handle, 600)
+    assert result.exit == "ok", log.read_text()[-2000:]
+    assert (task_dir / "test.junit.xml").is_file()
