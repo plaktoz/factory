@@ -4,6 +4,7 @@ The dashboard server start is replaced with a recorder, so no socket opens.
 """
 
 import json
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -136,13 +137,15 @@ def test_schedule_at_needs_a_time_and_a_name(tmp_path, monkeypatch, capsys):
 def test_schedule_at_takes_a_command_after_options_and_double_dash(tmp_path, monkeypatch):
     monkeypatch.setenv("FACTORY_HOME", str(tmp_path / "home"))
     seen = {}
+    # `cli.main` reads the real clock, so the time is built from it: a day ahead, to the minute, in the future on any run.
+    at = (datetime.now() + timedelta(days=1)).replace(second=0, microsecond=0)
 
     def fake_install_once(name, when, command, home, cwd):
-        seen.update(name=name, command=command)
+        seen.update(name=name, when=when, command=command)
         return tmp_path / "job"
 
     monkeypatch.setattr(cli.schedule_mod, "install_once", fake_install_once)
-    rc = cli.main(["schedule", "at", "--at", "2026-11-25T19:43", "--name", "pilot", "--", "python3", "-c", "1"])
+    rc = cli.main(["schedule", "at", "--at", at.strftime("%Y-%m-%dT%H:%M"), "--name", "pilot", "--", "python3", "-c", "1"])
 
     assert rc == 0
-    assert seen == {"name": "pilot", "command": ["python3", "-c", "1"]}
+    assert seen == {"name": "pilot", "when": at, "command": ["python3", "-c", "1"]}

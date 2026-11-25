@@ -9,6 +9,7 @@ detached child are recorders, and the tick is a recorder, so no process starts a
 """
 
 import json
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -208,16 +209,18 @@ def test_config_init_twice_says_the_file_already_exists(home, capsys):
 def test_schedule_at_writes_the_one_shot_entry_and_prints_the_shared_shape(home, tmp_path, monkeypatch, capsys):
     """`schedule at` takes its command after `--`; the entry goes to a temporary folder and nothing is loaded."""
     seen = {}
+    # `cli.main` reads the real clock, so the time is built from it: a day ahead, to the minute, in the future on any run.
+    at = (datetime.now() + timedelta(days=1)).replace(second=0, microsecond=0)
 
     def fake_install_once(name, when, command, home, cwd):
-        seen.update(name=name, command=command)
+        seen.update(name=name, when=when, command=command)
         return tmp_path / "job.plist"
 
     monkeypatch.setattr(cli.schedule_mod, "install_once", fake_install_once)
-    code = cli.main(["schedule", "at", "--at", "2026-11-25T19:43", "--name", "pilot", "--json", "--", "python3", "-c", "1"])
+    code = cli.main(["schedule", "at", "--at", at.strftime("%Y-%m-%dT%H:%M"), "--name", "pilot", "--json", "--", "python3", "-c", "1"])
     doc = _doc(capsys)
     _assert_shape(doc, code, ok=True)
-    assert code == EXIT_OK and seen == {"name": "pilot", "command": ["python3", "-c", "1"]}
+    assert code == EXIT_OK and seen == {"name": "pilot", "when": at, "command": ["python3", "-c", "1"]}
 
 
 ENGINE_ROWS = ["init", "upgrade", "add", "sync", "run", "decide", "check", "reopen", "open", "note", "retry", "goto",
