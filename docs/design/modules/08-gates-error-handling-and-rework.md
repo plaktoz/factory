@@ -51,7 +51,7 @@ A human rework writes the same record. The fields a gate does not have hold the 
 }
 ```
 
-**When a run is blocked**, its decision file offers these options, also available as commands:
+**When a run is blocked**, its decision file offers these options (a real block writes that file at the stage and visit its `run_blocked` event names; `factory/engine/tests/engine/test_blocked_run_writes_a_decision_file.py`), also available as commands:
 
 - `factory retry <run> [--stage <s>] [--note "..."]` runs the stage again once more, with your note queued on each task of the stage. A failed task starts again with a fresh state. Loop counters do not change, and `run_retried` is logged.
 - `factory goto <run> <stage>` routes the run to the blocked stage or any earlier one. That stage and every later stage start again. It takes no loop count, because a person chose the route, and `run_routed` is logged.
