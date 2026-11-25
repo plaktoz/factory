@@ -22,8 +22,8 @@ stages:
     on_fail: {goto: implement, max: 2}
   - id: verify
     needs: [implement]
-    tasks:
-      - {id: check, cmd: [scripts/check], out: check.log}
+    tasks_from: languages
+    gate: [{schema: test-report}]
     on_fail: {goto: implement, max: 2}
   - id: review
     needs: [verify]
