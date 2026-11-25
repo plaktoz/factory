@@ -134,6 +134,26 @@ def test_a_process_that_started_before_the_attempt_is_not_killed(recovering):
             other.wait()
 
 
+def test_a_group_is_not_killed_when_ps_cannot_report_its_start_time(recovering, monkeypatch):
+    """No `ps` (or an output that does not parse) means the leader's start time is unknown: the group is left alone and
+    recovery still finishes."""
+    eng, run_dir = recovering
+    _start_attempt(run_dir, "change")
+    left = _sleeper()
+    try:
+        _record_group(run_dir, "change", left.pid)
+        monkeypatch.setenv("PATH", "/nonexistent")
+        _recover(eng, run_dir)
+        monkeypatch.undo()
+        assert left.poll() is None
+        assert [e for e in state.read_events(run_dir) if e.type == "worker_killed"] == []
+        assert state.read_task(run_dir, "change").status == "interrupted"
+    finally:
+        if left.poll() is None:
+            os.killpg(left.pid, signal.SIGKILL)
+            left.wait()
+
+
 def test_a_task_with_no_recorded_group_is_recovered_as_before(recovering):
     eng, run_dir = recovering
     _start_attempt(run_dir, "change")

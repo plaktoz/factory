@@ -16,11 +16,12 @@ from datetime import datetime
 
 def _start_time(pid: int) -> datetime | None:
     """When the process started, in local time, or None when `ps` does not know the pid (it has exited)."""
-    out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, check=False).stdout
-    text = out.strip()
-    if not text:
-        return None
-    return datetime.strptime(text, "%a %b %d %H:%M:%S %Y").astimezone()
+    try:
+        out = subprocess.run(["ps", "-o", "lstart=", "-p", str(pid)], capture_output=True, text=True, check=False).stdout
+        text = out.strip()
+        return datetime.strptime(text, "%a %b %d %H:%M:%S %Y").astimezone() if text else None
+    except (OSError, ValueError):
+        return None  # no ps, or output of another shape: the start time is unknown, so the group is not killed
 
 
 def is_worker_group(pgid: int, attempt_started: datetime) -> bool:
