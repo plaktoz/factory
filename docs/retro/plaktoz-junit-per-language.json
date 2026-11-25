@@ -1,0 +1,35 @@
+{
+  "task": "junit-per-language",
+  "branch": "plaktoz/junit-per-language",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 7,
+  "lines": {
+    "product": 347,
+    "spec": 25,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-58-junit-per-language"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

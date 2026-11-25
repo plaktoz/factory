@@ -8,5 +8,68 @@ variants:
     format:       [gofmt, -w]
     format_check: [gofmt, -l]
     lint:         [golangci-lint, run]
-    test:         [go, test, ./...]
+    # A JUnit report, because the engine's test-report gate reads JUnit only (module 5). `go test` has no JUnit output, so
+    # python3 (standard library only) runs `go test -json ./...`, echoes the text output, and writes one case per test
+    # to FACTORY_TASK_DIR/test.junit.xml, where the engine globs. A package that fails with no failed test (a build
+    # error) is one failed case named for the package, so the report is never empty. go keeps its exit code.
+    test:
+      - python3
+      - -c
+      - |
+        import json, os, subprocess, sys
+        from xml.sax.saxutils import quoteattr
+        d = os.environ.get("FACTORY_TASK_DIR")
+        if not d:
+            sys.stderr.write("FACTORY_TASK_DIR is not set\n")
+            sys.exit(2)
+        try:
+            proc = subprocess.Popen(['go', 'test', '-json', './...'], stdout=subprocess.PIPE, text=True)
+        except FileNotFoundError:
+            sys.stderr.write("go: command not found\n")
+            sys.exit(127)
+        status, text, pkgs, pkg_status, pkg_text, build_text = {}, {}, [], {}, {}, {}
+        for line in proc.stdout:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                sys.stdout.write(line)
+                continue
+            if "ImportPath" in e:
+                if e.get("Action") == "build-output":
+                    sys.stdout.write(e.get("Output", ""))
+                    build_text.setdefault(e["ImportPath"], []).append(e.get("Output", ""))
+                continue
+            pkg, test, act = e.get("Package") or "", e.get("Test"), e.get("Action")
+            if pkg and pkg not in pkgs:
+                pkgs.append(pkg)
+            if act == "output":
+                sys.stdout.write(e.get("Output", ""))
+                (text if test else pkg_text).setdefault((pkg, test) if test else pkg, []).append(e.get("Output", ""))
+            elif act in ("pass", "fail", "skip"):
+                if test:
+                    status[(pkg, test)] = act
+                else:
+                    pkg_status[pkg] = act
+                    if e.get("FailedBuild"):
+                        pkg_text.setdefault(pkg, []).extend(build_text.get(e["FailedBuild"], []))
+        rc = proc.wait()
+        cases = []
+        for (pkg, test), act in status.items():
+            cases.append((pkg, test, act, "".join(text.get((pkg, test), []))))
+        for pkg in pkgs:
+            if pkg_status.get(pkg) == "fail" and not any(a == "fail" for (p, t), a in status.items() if p == pkg):
+                cases.append((pkg, pkg, "fail", "".join(pkg_text.get(pkg, []))))
+        out = ['<testsuite name="go test" tests="%d" failures="%d">' % (len(cases), sum(c[2] == "fail" for c in cases))]
+        for pkg, test, act, body in cases:
+            out.append("<testcase classname=%s name=%s>" % (quoteattr(pkg), quoteattr(test)))
+            if act == "fail":
+                out.append("<failure message=%s/>" % quoteattr(body[-2000:]))
+            elif act == "skip":
+                out.append("<skipped/>")
+            out.append("</testcase>")
+        out.append("</testsuite>")
+        with open(os.path.join(d, "test.junit.xml"), "w") as f:
+            f.write("\n".join(out))
+        sys.exit(rc)
+    tools: [go]
     build:        [go, build, ./...]
