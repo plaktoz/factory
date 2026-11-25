@@ -558,3 +558,69 @@ def test_the_maven_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
     r = subprocess.run(_profile_test_argv("java", "maven"), env=env, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the Go test step converts `go test -json` to a JUnit file in the task folder, under srt ----
+
+needs_go = pytest.mark.skipif(shutil.which("go") is None, reason="go is not on PATH")
+
+
+def _go_project(worktree: Path, body: str) -> None:
+    (worktree / "go.mod").write_text("module probe\n\ngo 1.21\n")
+    pkg = worktree / "p"
+    pkg.mkdir()
+    (pkg / "p_test.go").write_text("package p\n\nimport \"testing\"\n\n" + body)
+
+
+GO_PASS_AND_FAIL = ("func TestA(t *testing.T) {}\n\nfunc TestB(t *testing.T) { t.Fatal(\"boom\") }\n")
+GO_PASS = "func TestA(t *testing.T) {}\n\nfunc TestC(t *testing.T) {}\n"
+
+
+@needs_srt
+@needs_go
+def test_the_go_test_argv_converts_go_test_json_into_a_junit_file_in_the_task_folder_under_srt(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    from factory_engine import gates
+    _go_project(worktree, GO_PASS)
+    ctx = cmd_ctx(cmd=_profile_test_argv("go", "go"))
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=120)
+    assert result.exit == "ok", log.read_text()
+    report = task_dir / "test.junit.xml"
+    assert report.is_file()
+    parsed = gates.parse_junit([report])
+    assert parsed.total == 2 and parsed.failed == []
+    assert not list(worktree.rglob("*.xml"))
+
+
+@needs_srt
+@needs_go
+def test_a_failing_go_test_run_exits_one_and_names_the_failed_test_in_its_report(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    from factory_engine import gates
+    _go_project(worktree, GO_PASS_AND_FAIL)
+    ctx = cmd_ctx(cmd=_profile_test_argv("go", "go"))
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=120)
+    assert result.exit == "failed" and result.exit_code == 1
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 2 and parsed.failed == ["TestB"]
+
+
+@needs_go
+def test_a_package_that_does_not_build_is_a_failed_case_not_an_empty_report(tmp_path, task_dir, worktree):
+    import subprocess
+    from factory_engine import gates
+    (worktree / "go.mod").write_text("module probe\n\ngo 1.21\n")
+    (worktree / "p").mkdir()
+    (worktree / "p" / "p_test.go").write_text("package p\n\nfunc broken( {\n")
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir)}
+    r = subprocess.run(_profile_test_argv("go", "go"), cwd=worktree, env=env, capture_output=True, text=True)
+    assert r.returncode != 0
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 1 and parsed.failed == ["probe/p"]
+
+
+def test_the_go_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("go", "go"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr

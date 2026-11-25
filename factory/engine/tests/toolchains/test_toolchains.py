@@ -356,6 +356,8 @@ def test_the_gradle_test_step_keeps_its_shipped_argv_because_it_was_not_verified
     assert toolchains.detect(w, CFG)[0].commands["test"] == ["gradlew", "test"]
 
 
-def test_the_go_test_step_keeps_its_shipped_argv(tmp_path):
+def test_the_go_test_step_is_a_python_argv_that_runs_go_test_json_and_writes_a_junit_file(tmp_path):
     w = fixture(tmp_path, {"go.mod": "module x\n"})
-    assert toolchains.detect(w, CFG)[0].commands["test"] == ["go", "test", "./..."]
+    argv = toolchains.detect(w, CFG)[0].commands["test"]
+    assert argv[:2] == ["python3", "-c"]
+    assert "FACTORY_TASK_DIR" in argv[2] and "'-json'" in argv[2] and "test.junit.xml" in argv[2]
