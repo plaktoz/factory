@@ -110,7 +110,7 @@ def test_run_step_writes_its_log_and_refuses_an_unknown_step(tmp_path, path_with
     stub(path_with, "mvn", "echo hello-from-mvn")
     w = fixture(tmp_path, {"pom.xml": "<project/>"})
     log = tmp_path / "out" / "mvn.log"
-    toolchains.run_step(toolchains.detect(w, CFG)[0], "test", w, log=log)
+    toolchains.run_step(toolchains.detect(w, CFG)[0], "build", w, log=log)  # build is a bare mvn; test now needs a task folder
     assert "hello-from-mvn" in log.read_text()
     with pytest.raises(FactoryError, match="unknown step"):
         toolchains.run_step(toolchains.detect(w, CFG)[0], "deploy", w, log=log)
@@ -341,6 +341,19 @@ def test_the_python_test_step_is_a_python_argv_that_points_pytest_at_the_task_fo
     argv = toolchains.detect(w, CFG)[0].commands["test"]
     assert argv[:2] == ["python3", "-c"]
     assert "FACTORY_TASK_DIR" in argv[2] and "--junitxml=" in argv[2] and "test.junit.xml" in argv[2]
+
+
+def test_the_maven_test_step_is_a_python_argv_that_runs_mvn_and_copies_the_surefire_reports_to_the_task_folder(tmp_path):
+    w = fixture(tmp_path, {"pom.xml": "<project/>"})
+    argv = toolchains.detect(w, CFG)[0].commands["test"]
+    assert argv[:2] == ["python3", "-c"]
+    assert "FACTORY_TASK_DIR" in argv[2] and "surefire-reports" in argv[2] and ".junit.xml" in argv[2]
+    assert "'mvn','-q','test'" in argv[2].replace(" ", "")
+
+
+def test_the_gradle_test_step_keeps_its_shipped_argv_because_it_was_not_verified(tmp_path):
+    w = fixture(tmp_path, {"build.gradle": ""})
+    assert toolchains.detect(w, CFG)[0].commands["test"] == ["gradlew", "test"]
 
 
 def test_the_go_test_step_keeps_its_shipped_argv(tmp_path):

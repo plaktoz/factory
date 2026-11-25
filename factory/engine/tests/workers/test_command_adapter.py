@@ -482,3 +482,79 @@ def test_the_python_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
     r = subprocess.run(_profile_test_argv("python", "ruff"), env=env, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
     assert not list(tmp_path.rglob("*.xml"))
+
+
+# ---- item 58 follow-up: the Maven test step copies surefire's reports into the task folder, with the real mvn ----
+
+SUREFIRE_CACHED = (Path.home() / ".m2/repository/org/apache/maven/plugins/maven-surefire-plugin/3.2.5").is_dir()
+needs_mvn = pytest.mark.skipif(shutil.which("mvn") is None or not SUREFIRE_CACHED,
+                               reason="mvn and a cached surefire 3.2.5, compiler 3.13.0 and resources 3.3.1 are required (no network)")
+
+POM = """<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
+<groupId>p</groupId><artifactId>probe</artifactId><version>1</version>
+<properties><maven.compiler.source>17</maven.compiler.source><maven.compiler.target>17</maven.compiler.target>
+<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+<dependencies><dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.10.2</version><scope>test</scope></dependency></dependencies>
+<build><plugins>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version></plugin>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.3.1</version></plugin>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.2.5</version></plugin>
+</plugins></build></project>"""
+
+
+def _maven_project(worktree: Path, assertion: str) -> None:
+    (worktree / "pom.xml").write_text(POM)
+    tests = worktree / "src" / "test" / "java" / "p"
+    tests.mkdir(parents=True)
+    (tests / "ProbeTest.java").write_text(
+        "package p;\nimport org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n"
+        f"class ProbeTest {{ @Test void a() {{ assertTrue(true); }} @Test void b() {{ {assertion} }} }}\n")
+
+
+def _run_maven_step(worktree: Path, task_dir: Path):
+    import subprocess
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir)}
+    return subprocess.run(_profile_test_argv("java", "maven"), cwd=worktree, env=env, capture_output=True, text=True)
+
+
+@needs_mvn
+def test_the_maven_test_argv_copies_its_surefire_report_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real mvn, offline (MAVEN_ARGS=-o). The report lands where the engine globs
+    *.junit.xml. This runs without srt: srt gives mvn no network, and the cached plugins are read from ~/.m2."""
+    from factory_engine import gates
+    _maven_project(worktree, "assertEquals(2, 1 + 1);")
+    r = _run_maven_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    reports = sorted(task_dir.glob("*.junit.xml"))
+    assert len(reports) == 1 and gates.parse_junit(reports).total == 2
+
+
+@needs_mvn
+def test_a_failing_maven_test_run_exits_nonzero_and_still_leaves_its_report(task_dir, worktree):
+    from factory_engine import gates
+    _maven_project(worktree, "assertEquals(1, 2);")
+    r = _run_maven_step(worktree, task_dir)
+    assert r.returncode != 0
+    parsed = gates.parse_junit(sorted(task_dir.glob("*.junit.xml")))
+    assert parsed.total == 2 and parsed.failed == ["b"]
+
+
+@needs_mvn
+def test_a_stale_surefire_report_from_an_earlier_run_is_not_copied(task_dir, worktree):
+    """A build that fails before any test runs must not hand the gate the last run's report."""
+    stale = worktree / "target" / "surefire-reports"
+    stale.mkdir(parents=True)
+    old = stale / "TEST-old.xml"
+    old.write_text('<testsuite><testcase name="old"/></testsuite>')
+    os.utime(old, (1_000_000_000, 1_000_000_000))
+    (worktree / "pom.xml").write_text("<project>not a pom")
+    r = _run_maven_step(worktree, task_dir)
+    assert r.returncode != 0
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+def test_the_maven_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("java", "maven"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr

@@ -8,7 +8,35 @@ variants:
     format:       [mvn, -q, spotless:apply]
     format_check: [mvn, -q, spotless:check]
     lint:         [mvn, -q, checkstyle:check]
-    test:         [mvn, -q, test]
+    # A JUnit report, because the engine's test-report gate reads JUnit only (module 5). Surefire's `reportsDirectory`
+    # has no -D property (checked on surefire 3.2.5), so mvn writes TEST-*.xml under target/surefire-reports and python3
+    # copies each file this run wrote (newer than the run's start, so a stale report is never counted) into
+    # FACTORY_TASK_DIR as <path>.junit.xml, where the engine globs. mvn keeps its exit code; the copy runs on failure too.
+    test:
+      - python3
+      - -c
+      - |
+        import os, shutil, subprocess, sys, time
+        d = os.environ.get("FACTORY_TASK_DIR")
+        if not d:
+            sys.stderr.write("FACTORY_TASK_DIR is not set\n")
+            sys.exit(2)
+        start = time.time()
+        try:
+            rc = subprocess.call(['mvn', '-q', 'test'])
+        except FileNotFoundError:
+            sys.stderr.write("mvn: command not found\n")
+            sys.exit(127)
+        for root, dirs, files in os.walk("."):
+            dirs[:] = [x for x in dirs if x not in (".git", "node_modules")]
+            if os.path.basename(root) != "surefire-reports":
+                continue
+            for f in files:
+                src = os.path.join(root, f)
+                if f.startswith("TEST-") and f.endswith(".xml") and os.path.getmtime(src) >= start:
+                    name = os.path.relpath(src, ".").replace(os.sep, "__")[:-len(".xml")] + ".junit.xml"
+                    shutil.copyfile(src, os.path.join(d, name))
+        sys.exit(rc)
     build:        [mvn, -q, -DskipTests, package]
   gradle:
     when: {any_file: [build.gradle, build.gradle.kts]}
