@@ -56,6 +56,7 @@ class TaskContext:
     run: RunSpec | None = None                    # deterministic tasks: script or python
     plugin_dir: Path | None = None                # the plugin folder a script or python task runs from
     question: str | None = None                   # a task built from a question list (task_template): the question it answers
+    network_domains: list[str] = field(default_factory=list)  # hosts this task may reach under srt (module 17A network)
 
 
 @dataclass
