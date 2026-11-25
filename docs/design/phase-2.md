@@ -25,10 +25,10 @@ Phase 1b items (Codex used to be one) are in the [Phase split](phase-1.md#phase-
 **What phase 1 keeps so Codex is cheap to add.**
 
 - `WorkerAdapter` ([module 9](modules/09-worker-adapters-and-governed-helpers.md)) is harness-neutral. A Codex adapter implements `check`, `start`, `wait` and `stop` and declares `capabilities`.
-- `harness:` in `factory.yaml`, `routing:` per stage and the `harnesses:` map in the machine file stay. Phase 1 accepts only `claude` and fails fast on any other value with "Codex is phase 2". The owner decided on 2026-11-24 that a repo may choose Codex (the module 3 row `2026-11-24-a-repo-may-choose-codex`, which replaces the row below); the schema and `api.default_workers` do not accept it yet, so this sentence still describes the code.
+- `harness:` in `factory.yaml`, `routing:` per stage and the `harnesses:` map in the machine file stay. The owner decided on 2026-11-24 that a repo may choose Codex (the module 3 row `2026-11-24-a-repo-may-choose-codex`, which replaces the row below). The schema accepts `claude` and `codex`, `api.default_workers` builds `CodexAdapter` for `codex` and refuses any other value naming both (test: `tests/workers/test_default_workers.py`). A `codex` repo needs `harnesses.codex` in the machine file; without it, startup fails with "is not in the machine file". The four unticked proofs below stay open.
 - Workflows never name a harness, so adding one changes no workflow file.
 - The helper policy is stated in plain words in every prompt ([module 9](modules/09-worker-adapters-and-governed-helpers.md)), which Codex needs because it delegates only when asked.
-- `generate_shims` takes a list of harnesses; phase 1 passes `["claude"]`.
+- `generate_shims` takes a list of harnesses; the engine still passes `["claude"]` for a Codex repo too, so a Codex worker reads its skill from the `.claude/skills/factory-*` path the prompt names. Linking `.agents/skills` for Codex is open (it also changes the prompt's skill line).
 
 **Design already written** (moved from [phase 1 module 9](modules/09-worker-adapters-and-governed-helpers.md) unless noted)
 
@@ -73,6 +73,8 @@ class CodexAdapter(WorkerAdapter): ...           # name = "codex"
 - [x] Whether the sandbox enforces the deny-read rules from D7. Verified for `srt`: a sandboxed `cat` and `python3` fail to read a file in the factory home and a `~/.codex/auth.json`, and a write outside the worktree and task folder is refused. Test: `tests/workers/test_codex_adapter.py::test_the_codex_settings_block_reads_of_the_factory_home_and_the_codex_key_file`. Codex's own sandbox is off, so `srt` is the only layer.
 
 **Acceptance criteria to add back to phase 1 modules**
+
+A repo can choose Codex now, so the four unticked proofs (the isolation flags above, the same gate evidence on both harnesses, a live Codex smoke run, the router skill from Codex) are what a Codex run still lacks. None has been run.
 
 - [x] (9) Both adapters run headless in the task worktree, with only the declared environment plus `FACTORY_TASK_DIR`. Codex: `tests/workers/test_codex_adapter.py::test_the_worker_runs_headless_in_the_task_worktree`, `::test_the_child_gets_only_the_declared_variables_and_the_folders_the_adapter_sets`. Claude: `factory/engine/tests/workers/test_claude_adapter.py::test_the_worker_runs_headless_in_the_task_worktree` and `::test_the_child_gets_only_the_declared_variables_and_the_task_dir`. Both run against stubs, not the live CLI.
 - [ ] (9) The same request on Claude and Codex gives gate evidence of the same shape, with helpers off and on.

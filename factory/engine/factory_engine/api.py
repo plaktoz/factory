@@ -21,6 +21,7 @@ from . import usage as usage_mod
 from .adapters.tracker.base import TrackerAdapter
 from .adapters.worker.base import WorkerAdapter
 from .adapters.worker.claude import ClaudeAdapter
+from .adapters.worker.codex import CodexAdapter
 from .clock import SystemClock
 from .config import Config
 from .decisions import Outcome
@@ -29,7 +30,7 @@ from .errors import FactoryError
 from .gh import FileTracker, GitHubPullRequests, GitHubTracker
 from .housekeeping import GcPlan
 from .intake import SyncReport
-from .loadcfg import load_config
+from .loadcfg import load_config, resolve_harness
 from .notes import NoteRef
 from .prs import PullRequests
 from .types import CheckResult, RunRef, Source
@@ -44,12 +45,16 @@ def _gh_runner(repo: Path) -> Callable[[list[str]], subprocess.CompletedProcess]
 
 
 def default_workers(cfg: Config) -> dict[str, WorkerAdapter]:
-    """The configured harness, with its real adapter. Phase 1a has only the Claude harness in the schema."""
+    """The configured harness, with its real adapter. A codex repo needs its `harnesses.codex` entry in the machine
+    file: resolve_harness refuses a missing entry or an unset variable there, at startup, not at the first worker."""
     harness = (cfg.repo or {}).get("harness", "claude")
-    if harness != "claude":
-        raise FactoryError("config.invalid", f"harness {harness!r} has no adapter in this build",
-                           hint="set harness: claude in .factory/config/factory.yaml")
-    return {harness: ClaudeAdapter()}
+    if harness == "claude":
+        return {harness: ClaudeAdapter()}
+    if harness == "codex":
+        resolve_harness(cfg, harness, env=os.environ)
+        return {harness: CodexAdapter()}
+    raise FactoryError("config.invalid", f"harness {harness!r}: the accepted harnesses are claude and codex",
+                       hint="set harness: claude or harness: codex in .factory/config/factory.yaml")
 
 
 class _InboxStatusOnly:
