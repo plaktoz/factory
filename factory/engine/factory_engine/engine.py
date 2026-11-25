@@ -344,8 +344,15 @@ class Engine:
                         return "awaiting_approval"
                     continue
                 self._pass(run_dir, lock)
-                if state.read_run(run_dir).status == "retrying":
+                run = state.read_run(run_dir)
+                if run.status == "retrying":
                     return "retrying"  # the pass tried three times and failed: the next tick tries again
+                if run.infra_wait is not None and run.status != "blocked":
+                    # The pass got through without waiting again, so an earlier wait is over: clear it, as a recovery does.
+                    operation = self._waiting_on(run)
+                    rework.infra_recovered(run)
+                    state.write_run(run_dir, run, lock=lock)
+                    state.append_event(run_dir, "infra_recovered", operation=operation)
                 worked = True
             raise FactoryError("config.invalid", f"run {run_id} made no progress in 10000 passes",
                                hint="a routing loop is not reaching a stop; check the workflow's on_fail edges")

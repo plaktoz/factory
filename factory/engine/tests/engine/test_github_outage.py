@@ -149,3 +149,23 @@ def test_a_person_retries_a_run_blocked_by_an_outage_and_the_next_outage_starts_
     assert run.status == "retrying" and run.infra_wait.tries == 3
     github.up = True
     assert _pass(eng) == "awaiting_approval"
+
+
+def test_a_wait_left_by_an_earlier_outage_does_not_block_a_later_one_at_once(new_run, engine, prs, clock):
+    """A wait that outlived its outage (a stale record, as if a recovery had not cleared it) must not make a later
+    outage block the run at once. The later outage starts its own wait, so the run is retrying, not blocked."""
+    from factory_engine import rework
+    from factory_engine.errors import FactoryError as FE
+    run_dir = new_run()
+    script, writes = chore_script(run_dir)
+    eng, _ = engine(script, writes)
+    lock = state.acquire_lock(run_dir, "test")
+    run = state.read_run(run_dir)
+    rework.start_infra_wait(run, operation="check", error=FE("git.network", "down"), clock=clock)
+    state.write_run(run_dir, run, lock=lock)
+    state.release(lock)
+    clock.advance(6 * 3600)  # the stale wait is now older than infra_wait_hours
+    GitHubDown(prs)
+    _pass(eng)
+    run = state.read_run(run_dir)
+    assert run.status == "retrying" and run.infra_wait.since == clock.now().isoformat(timespec="seconds")
