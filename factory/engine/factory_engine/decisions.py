@@ -396,6 +396,15 @@ def _outcome_for(packet: Packet, choices: dict[str, str]) -> str:
     return outcome
 
 
+def clear_answered_blocked(run_dir: Path, stage: str, visit: int) -> None:
+    """Remove a blocked file that an earlier block's answer (retry, goto, skip or abort) already answered, so a new block at
+    the same visit asks again. A pending file, or a file of another kind, is left alone."""
+    path = decision_path(run_dir, stage, visit)
+    doc = try_read(path)
+    if doc is not None and kind_of(doc["packet"]) == "blocked" and _answered(doc["decision"]):
+        path.unlink()
+
+
 def reopen(run_dir: Path, stage: str, visit: int, *, by: str) -> None:
     """Unlock an approved decision so it can be answered again. A decision that is not approved is left alone."""
     doc = read_decision(run_dir, stage, visit)
