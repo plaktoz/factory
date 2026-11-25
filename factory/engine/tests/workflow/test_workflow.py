@@ -88,7 +88,8 @@ def test_bug_fix_matches_the_spec_shape(repo):
 
 
 def test_feature_matches_the_owner_decided_shape(repo):
-    """ADR 2026-11-24-the-feature-workflow-stage-list, option 1: four stages, no architecture stage."""
+    """ADR 2026-11-24-the-feature-workflow-stage-list, option 1: four stages, no architecture stage. Verify is one test
+    task per changed language with a test-report gate (owner decision 2026-11-25, `feature-verify-per-language`)."""
     wf = load_workflow(repo, CFG, "feature")
     assert wf.type == "feature" and wf.sink == "pull_request" and wf.policy.write is True
     assert wf.policy.deny_paths == [".github/**"]
@@ -101,7 +102,9 @@ def test_feature_matches_the_owner_decided_shape(repo):
     assert [g.check for g in implement.gate if g.check] == ["scope-diff", "lint-clean"]
     assert implement.on_fail.goto == "implement" and implement.on_fail.max == 2
     verify = next(s for s in wf.stages if s.id == "verify")
-    assert verify.needs == ["implement"] and [t.cmd for t in verify.tasks] == [["scripts/check"]]
+    assert verify.needs == ["implement"] and verify.tasks_from == "languages" and verify.tasks == []
+    assert [g.schema for g in verify.gate] == ["test-report"]
+    assert verify.on_fail.goto == "implement" and verify.on_fail.max == 2
     review = next(s for s in wf.stages if s.id == "review")
     assert sorted(t.skill for t in review.tasks) == ["review-spec", "review-standards"]
     assert [g.check for g in review.gate if g.check] == ["no-blocking-findings"]

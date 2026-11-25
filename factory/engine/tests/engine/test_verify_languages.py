@@ -8,6 +8,7 @@ import stat
 
 import pytest
 
+from factory_engine import decisions as D
 from factory_engine import state
 from factory_engine.adapters.worker.fake import ok
 
@@ -44,6 +45,20 @@ stages:
 """
 
 
+def _shipped_feature_implement_and_verify() -> str:
+    """The shipped feature workflow cut down to its implement and verify stages (no approval stop, no review), so a
+    test drives the real verify stage the owner shipped. The file is named chore so keyword-free triage picks it."""
+    import yaml
+    doc = yaml.safe_load((Path(__file__).resolve().parents[3] / "workflows" / "feature.yaml").read_text())
+    doc["name"] = doc["type"] = "chore"
+    doc["defaults"] = {**doc["defaults"], "retries": 0, "max_restarts": 0, "timeout_minutes": 5}
+    doc["stages"] = [s for s in doc["stages"] if s["id"] in ("implement", "verify")]
+    doc["stages"][0]["needs"] = []
+    for task in doc["stages"][0]["tasks"]:   # YAML 1.1 reads `off` as false; the schema wants the string back
+        task["helpers"]["mode"] = "off"
+    return yaml.safe_dump(doc, sort_keys=False)
+
+
 def _change_writes(worker, files):
     """The `change` worker writes the product files into its task worktree, so the implement join commits them."""
     real_start = worker.start
@@ -58,7 +73,7 @@ def _change_writes(worker, files):
     worker.start = start
 
 
-def _run(new_run, engine, files, test_tasks):
+def _run(new_run, engine, files, test_tasks, workflow=WORKFLOW):
     """Runs implement (writing `files`) then verify, with a scripted test task for each name in `test_tasks`."""
     run_dir = new_run()
     work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
@@ -71,7 +86,7 @@ def _run(new_run, engine, files, test_tasks):
     _change_writes(worker, files)
     wf_dir = eng.repo / ".factory" / "config" / "workflows"
     wf_dir.mkdir(parents=True)
-    (wf_dir / "chore.yaml").write_text(WORKFLOW)
+    (wf_dir / "chore.yaml").write_text(workflow)
     eng.run(["bump-q1w2e"])
     return run_dir, worker
 
@@ -149,3 +164,59 @@ def test_a_run_that_changed_no_tested_language_still_blocks_on_zero_test_cases(n
     assert run.status == "blocked"
     assert run.attention is not None and "no test results" in run.attention.summary
     assert any(e["code"] == "gate.no_test_results" for e in _events(run_dir, "gate_failed"))
+
+
+TS_AND_PY = {"package.json": "{}", "web/app.ts": "export const a = 1;\n",
+             "pyproject.toml": "[project]\nname = 'p'\n", "services/api.py": "x = 2\n"}
+
+FEATURE_TRIAGE = json.dumps({"schema_version": 1, "type": "feature", "workflow": "feature", "confidence": 1.0,
+                             "type_source": "explicit"})
+
+
+def _feature_run(new_run, engine, repo_files, test_tasks):
+    """Runs the shipped feature.yaml, unedited, through propose (a person approves it), implement, verify and review.
+    Each name in `test_tasks` is a scripted test task; review's two skills pass with no findings."""
+    run_dir = new_run()
+    work = lambda t, n: run_dir / "tasks" / t / "work" / n  # noqa: E731
+    script = {"rules": [ok(work("rules", "triage.json"))], "plan": [ok(work("plan", "plan.json"))],
+              "change": [ok(work("change", "change.json"))],
+              "standards": [ok(work("standards", "standards.json"))], "spec": [ok(work("spec", "spec.json"))]}
+    writes = {"rules": {"triage.json": FEATURE_TRIAGE}, "plan": {"plan.json": "{}"}, "change": {"change.json": "{}"},
+              "standards": {"standards.json": NO_FINDINGS}, "spec": {"spec.json": NO_FINDINGS}}
+    for task in test_tasks:
+        script[task] = [ok(work(task, "test.junit.xml"))]
+        writes[task] = {"test.junit.xml": JUNIT_TWO}
+    eng, worker = engine(script, writes)
+    _change_writes(worker, repo_files)
+    assert eng.run(["bump-q1w2e"]).runs["bump-q1w2e"] == "awaiting_approval"
+    visit = 1
+    doc = D.read_decision(run_dir, "propose", visit)
+    D.record(run_dir, "propose", visit, packet_sha=doc["packet"]["sha"],
+             choices={d["id"]: "approve" for d in doc["packet"]["decisions"]}, by="owner", channel="cli")
+    eng.run(["bump-q1w2e"])
+    return run_dir, worker
+
+
+NO_FINDINGS = json.dumps({"schema_version": 1, "findings": []})
+
+
+def test_the_shipped_feature_verify_stage_builds_one_test_task_per_changed_language(new_run, engine):
+    """Item 58, owner decision 2026-11-25: feature's verify is `tasks_from: languages` with a test-report gate, so a
+    repo changed in TypeScript and Python gets a test task for each, and `scripts/check` is not run."""
+    run_dir, worker = _feature_run(new_run, engine, TS_AND_PY, test_tasks=("test-python", "test-typescript"))
+    assert sorted(c.task_id for c in worker.started if c.task_id.startswith("test-")) == ["test-python", "test-typescript"]
+    assert "check" not in [c.task_id for c in worker.started]
+    run = state.read_run(run_dir)
+    assert run.status != "blocked"
+    assert json.loads((run_dir / "test-report.json").read_text()) == {"schema_version": 1, "total": 4, "failed": []}
+
+
+def test_a_feature_run_that_changes_no_tested_language_blocks_with_no_test_results(new_run, engine):
+    """T1 on the shipped feature verify stage: the run changed a file no profile tests, so it has 0 test cases and
+    blocks before review, and no pull request opens."""
+    run_dir, worker = _feature_run(new_run, engine, {"notes.txt": "hello\n"}, test_tasks=())
+    run = state.read_run(run_dir)
+    assert run.status == "blocked"
+    assert run.attention is not None and "no test results" in run.attention.summary
+    assert any(e["code"] == "gate.no_test_results" for e in _events(run_dir, "gate_failed"))
+    assert "standards" not in [c.task_id for c in worker.started]
