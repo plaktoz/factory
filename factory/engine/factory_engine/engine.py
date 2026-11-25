@@ -737,6 +737,10 @@ class Engine:
             self._copy_request(run_dir, spec)
         ctx = self._context(run, run_dir, stage, spec, attempt, worktree)
         handle = self._worker_for(spec).start(ctx, HarnessConfig(harness, None, [], {}), run_dir / "tasks" / spec.id / "worker.log")
+        # The worker runs in its own session (start_new_session), so its process group id is its pid. A fake has no proc.
+        proc = handle.data.get("proc")
+        ts.worker_pgid = proc.pid if proc is not None else None
+        state.write_task(run_dir, ts, lock=lock)
         return spec, (harness, handle), ts
 
     def _request_copy_for(self, run_dir: Path, spec: TaskSpec) -> bool:
@@ -858,6 +862,7 @@ class Engine:
         exit_ = "ok" if ok else "interrupted" if (outcome.exit == "killed" or job.restart_for_note) else "failed"
         usage_mod.finish_attempt(run_dir, spec.id, ts.attempt, exit=exit_, input_tokens=outcome.input_tokens,
                                  output_tokens=outcome.output_tokens, models=outcome.models_observed)
+        ts.worker_pgid = None  # the worker has ended, so its group is no longer one to end (module 6, recovery)
         if job.restart_for_note and not ok:
             self._reset_to_checkpoint(run_dir, ts, spec.id)
             ts.status = "pending"
