@@ -9,7 +9,7 @@ import json
 
 from engine_helpers import TRIAGE_JSON, chore_script
 
-from factory_engine import state
+from factory_engine import gitops, state
 from factory_engine.kit import STARTER_MERGE_POLICY
 
 RUN = "bump-q1w2e"
@@ -27,10 +27,19 @@ def _parked_chore(new_run, engine, type_source: str):
     _kit_policy(run_dir, CHORE_POLICY)
     script, writes = chore_script(run_dir)
     writes["rules"] = {"triage.json": json.dumps({**json.loads(TRIAGE_JSON), "type_source": type_source})}
-    eng, _ = engine(script, writes)
+    eng, worker = engine(script, writes)
+    real_start = worker.start
+
+    def start(ctx, conf, log):
+        if ctx.task_id == "change":  # the one-line change the chore makes, so the join commits a real diff
+            (ctx.worktree / "services" / "api.py").write_text("x = 2\n")
+        return real_start(ctx, conf, log)
+
+    worker.start = start
     assert eng.run([RUN]).runs == {RUN: "awaiting_approval"}
     run = state.read_run(run_dir)
     assert run.pr is not None and run.request.type_source == type_source
+    assert gitops.changed_files(run.worktree, "origin/main") == ["services/api.py"]  # a real one-line diff is on the branch
     return eng, run_dir, run.pr
 
 
