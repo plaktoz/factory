@@ -1,0 +1,35 @@
+{
+  "task": "real-block-writes-decision-file",
+  "branch": "plaktoz/real-block-writes-decision-file",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 3,
+  "lines": {
+    "product": 89,
+    "spec": 5,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-47-real-block-file"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

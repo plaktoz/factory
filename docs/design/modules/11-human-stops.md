@@ -213,7 +213,7 @@ class Outcome: status: str; choices: dict[str, str]; questions: dict[str, str]; 
 ```
 
 - **Run and test:** `pytest factory/engine/tests/decisions`, with packet fixtures that include HTML in option text; a browser test opens the page from disk and checks the copied command.
-- **Errors:** invalid YAML, a stale `--packet` or an unknown choice give `decision_rejected` with the reason, and the stop stays pending. A failed render leaves the YAML usable. Failed notifications retry and never block the run.
+- **Errors:** invalid YAML, a stale `--packet` or an unknown choice give `decision_rejected` with the reason, and the stop stays pending. A failed render leaves the YAML usable. A block logs `run_blocked` and then writes its file, both before `run.json` is saved, so a crash or an `OSError` in between leaves the event and perhaps the file, with `run.json` not yet blocked. What the next pass does then is not tested. Failed notifications retry and never block the run.
 
 Acceptance criteria:
 
