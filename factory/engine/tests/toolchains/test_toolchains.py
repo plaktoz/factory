@@ -314,6 +314,27 @@ def test_a_renamed_file_lists_its_new_path_and_not_its_old_path_or_a_cut_one(tmp
     assert gitops.task_changed_files(w, None) == ["fresh.py", "src/new_name.py"]
 
 
+# ---- item 58 wiring: each test task names the report the engine reads, and changed files no test task covers ----
+
+def test_each_generated_test_task_names_the_junit_file_the_engine_waits_for(tmp_path):
+    """The engine marks a cmd task done only when its `out` file exists in the task folder (module 9), so every
+    generated test task must name test.junit.xml, and its test step must write that file. Java did not: its step
+    copied each surefire report under a longer name, so the task never finished."""
+    w = fixture(tmp_path, {"pom.xml": "<project/>", "package.json": "{}", "pyproject.toml": "[project]\n"})
+    tasks = toolchains.language_tasks(w, CFG, "test", ["src/A.java", "web/app.ts", "a.py"])
+    assert sorted(t.id for t in tasks) == ["test-java", "test-python", "test-typescript"]
+    assert all(t.out == "test.junit.xml" for t in tasks)
+    java = next(p for p in toolchains.detect(w, CFG) if p.name == "java")
+    assert "test.junit.xml" in " ".join(java.commands["test"])
+
+
+def test_a_changed_file_no_test_task_covers_is_listed(tmp_path):
+    w = fixture(tmp_path, {"pom.xml": "<project/>", "package.json": "{}"})
+    changed = ["src/A.java", "web/app.ts", "src/main.rs", "README.md"]
+    assert toolchains.uncovered_files(w, CFG, "test", changed) == ["README.md", "src/main.rs"]
+    assert toolchains.uncovered_files(w, CFG, "test", ["src/A.java"]) == []
+
+
 # ---- item 2 (owner answer, 2026-11-22): formatter and lint steps run under srt, like cmd tasks and gate commands ----
 
 from factory_engine.adapters.worker import sandbox  # noqa: E402

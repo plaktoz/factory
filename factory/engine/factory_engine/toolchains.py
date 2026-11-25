@@ -239,16 +239,30 @@ def check_lint_clean(spec: GateSpec, ctx: GateContext) -> GateResult:
 def language_tasks(worktree: Path, cfg: Config, step: str, changed: list[str]) -> list[TaskSpec]:
     """One task per detected language whose files the run changed, for tasks_from: languages (module 17A, verify stage;
     owner decision D5, 2026-11-22). `changed` is the run's changed paths, relative to the worktree. Tasks run in
-    parallel: none depends on another."""
+    parallel: none depends on another. A test task names `test.junit.xml`, the file its step writes into the task
+    folder, so the engine waits for it."""
     from .types import HelperPolicy
     tasks = []
     for tc in detect(worktree, cfg):
         if step not in tc.commands or not any(_matches(f, tc.files) for f in changed):
             continue
+        out = "test.junit.xml" if step == "test" else None
         tasks.append(TaskSpec(id=f"{step}-{tc.name}", skill=None, cmd=tc.commands[step], run=None, scope=[],
-                              deny=[], needs=[], helpers=HelperPolicy("off", 0, [], None), out=None,
+                              deny=[], needs=[], helpers=HelperPolicy("off", 0, [], None), out=out,
                               timeout_minutes=30, retries=0, model=None, when=None))
     return tasks
+
+
+def uncovered_files(worktree: Path, cfg: Config, step: str, changed: list[str]) -> list[str]:
+    """The changed paths that no language task for `step` covers. A path is covered when a detected profile with that
+    step owns it by its source globs, or it is the profile's own build file (pom.xml, package.json), which belongs to
+    the language it configures. A run reports the rest, so a file nothing tested is named, not skipped silently."""
+    tcs = [tc for tc in detect(worktree, cfg) if step in tc.commands]
+    names = {tc.name for tc in tcs}
+    globs = sorted({g for tc in tcs for g in tc.files})
+    builds = [b for p in _profiles(worktree) if p["name"] in names
+              for b in ((p.get("detect") or {}).get("any_file") or [])]
+    return sorted(f for f in changed if not _matches(f, globs) and not _matches(f, builds))
 
 
 def doctor_checks(worktree: Path, cfg: Config) -> list:
