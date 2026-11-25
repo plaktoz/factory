@@ -11,7 +11,7 @@ import json
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, TypeVar
@@ -26,6 +26,7 @@ from .validate import validate
 
 if TYPE_CHECKING:
     from .decisions import Outcome  # module 11; imported for the annotation only
+    from .lock import Lock  # the run lock; imported for the annotation only
 
 T = TypeVar("T")
 # Waits between the three tries of an infrastructure call (module 8: "3 tries"). The spec also lists a 2 min delay;
@@ -67,6 +68,7 @@ class Routing:
     max: int = 0
     reason: str = ""
     code: str | None = None  # the error code of a block the engine raised itself, such as gate.no_test_results
+    key: str | None = None  # the run.loops key an edge route counts on; set by _go, None for other routings
 
 
 def _hook_kind(output: str) -> ErrorKind:
@@ -149,13 +151,11 @@ def _iso(when: datetime) -> str:
     return when.isoformat(timespec="seconds")
 
 
-def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: GateResult | JoinResult,
-                   loop: int, max_loops: int, task_ids: list[str]) -> Path:
-    """Write one feedback record into each task folder of the stage the run goes back to, and log routed_back.
+def feedback_doc(*, from_stage: str, to_stage: str, result: GateResult | JoinResult, loop: int, max_loops: int) -> dict:
+    """The feedback record of a gate, join or hook failure, as a document that is not yet written.
 
     Every field comes from the command's output: the exit code, the failing tests the gate read from JUnit XML, and
-    the files git reports. `max_loops` of 0 means the edge has no limit, and the record then shows the loop number.
-    Returns the first record written."""
+    the files git reports. `max_loops` of 0 means the edge has no limit, and the record then shows the loop number."""
     if isinstance(result, JoinResult):
         gate, exit_code, failed = "join", None, []
         files = list(result.conflict_files)
@@ -168,9 +168,30 @@ def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: Gat
         exit_code = result.details.get("exit_code")
         failed = list(result.details.get("failed_tests", []))
         files = list(result.details.get("changed_files", []))
-    doc = {"schema_version": SCHEMA_VERSION, "from_stage": from_stage, "to_stage": to_stage, "loop": loop,
-           "max": max_loops or loop, "gate": gate, "exit_code": exit_code, "failed_tests": failed,
-           "output_tail": output, "changed_files": files, "at": _iso(SystemClock().now())}
+    return {"schema_version": SCHEMA_VERSION, "from_stage": from_stage, "to_stage": to_stage, "loop": loop,
+            "max": max_loops or loop, "gate": gate, "exit_code": exit_code, "failed_tests": failed,
+            "output_tail": output, "changed_files": files, "at": _iso(SystemClock().now())}
+
+
+def human_feedback_doc(*, from_stage: str, to_stage: str, notes: str, loop: int, max_loops: int) -> dict:
+    """The feedback record of a human rework, as a document: gate "human", exit_code null, empty lists, and the notes.
+
+    A human rework has no gate, exit code or test, so those fields hold the values the schema allows for none. `notes`
+    is the operator's answer, and it is written even when empty, so the worker still sees that a person sent the stage
+    back."""
+    return {"schema_version": SCHEMA_VERSION, "from_stage": from_stage, "to_stage": to_stage, "loop": loop,
+            "max": max_loops or loop, "gate": "human", "exit_code": None, "failed_tests": [], "output_tail": "",
+            "changed_files": [], "at": _iso(SystemClock().now()), "notes": notes}
+
+
+def build_feedback(run_dir: Path, *, from_stage: str, to_stage: str, result: GateResult | JoinResult,
+                   loop: int, max_loops: int, task_ids: list[str]) -> Path:
+    """Write one feedback record into each task folder of the stage the run goes back to, and log routed_back.
+
+    Every field comes from the command's output: the exit code, the failing tests the gate read from JUnit XML, and
+    the files git reports. `max_loops` of 0 means the edge has no limit, and the record then shows the loop number.
+    Returns the first record written."""
+    doc = feedback_doc(from_stage=from_stage, to_stage=to_stage, result=result, loop=loop, max_loops=max_loops)
     return _write_records(run_dir, doc, task_ids, max_loops=max_loops)
 
 
@@ -178,12 +199,14 @@ def build_human_feedback(run_dir: Path, *, from_stage: str, to_stage: str, notes
                          task_ids: list[str]) -> Path:
     """Write the notes of a human rework as a feedback record into each task folder of the stage the run goes back to.
 
-    A human rework has no gate, exit code or test, so those fields hold the values the schema allows for none:
-    gate "human", exit_code null and empty lists. `notes` is the operator's answer, and it is written even when empty,
-    so the worker still sees that a person sent the stage back. Logs routed_back, as a gate rework does."""
-    doc = {"schema_version": SCHEMA_VERSION, "from_stage": from_stage, "to_stage": to_stage, "loop": loop,
-           "max": max_loops or loop, "gate": "human", "exit_code": None, "failed_tests": [], "output_tail": "",
-           "changed_files": [], "at": _iso(SystemClock().now()), "notes": notes}
+    Logs routed_back, as a gate rework does. See human_feedback_doc for the fields a human rework holds."""
+    doc = human_feedback_doc(from_stage=from_stage, to_stage=to_stage, notes=notes, loop=loop, max_loops=max_loops)
+    return _write_records(run_dir, doc, task_ids, max_loops=max_loops)
+
+
+def write_feedback(run_dir: Path, doc: dict, task_ids: list[str], *, max_loops: int) -> Path:
+    """Write a feedback document into each task folder and log routed_back. A folder that already holds this route's
+    record is skipped, so a repeated write adds nothing. Returns the first record."""
     return _write_records(run_dir, doc, task_ids, max_loops=max_loops)
 
 
@@ -270,7 +293,7 @@ def _go(run: Run, wf: Workflow, stage: Stage, goto: str, *, key: str, limit: int
     run.loops[key] = loop
     reset = _reset_from(run, wf, goto)
     run.stage, run.status, run.attention = goto, "running", None
-    return Routing("goto", goto=goto, reset=reset, loop=loop, max=limit or 0, reason=why)
+    return Routing("goto", goto=goto, reset=reset, loop=loop, max=limit or 0, reason=why, key=key)
 
 
 def route(run: Run, wf: Workflow, stage: Stage, failure: ErrorKind | Outcome) -> Routing:
@@ -375,3 +398,79 @@ def record_blocked(run_dir: Path, run: Run, routing: Routing) -> None:
     if routing.action != "blocked":
         raise ValueError("record_blocked takes the routing of a blocked run")
     append_event(run_dir, "run_blocked", stage=run.stage, reason=routing.reason, code=routing.code)
+
+
+# ---- the pending route (module 8, "Errors") ------------------------------------------------------------------------------
+
+PENDING_ROUTE_FILE = "pending-route.json"
+
+
+@dataclass
+class PendingRoute:
+    """A rework route whose feedback write failed with an OSError, saved in the run folder. Its fields mirror
+    factory/schemas/pending-route.schema.json. The next pass writes `feedback` into `tasks` and applies the route
+    without running the check again, so the rework is not dropped when that check would now pass."""
+
+    from_stage: str
+    goto: str
+    reset: list[str]
+    loop: int
+    max: int  # 0 when the edge has no limit
+    loop_key: str  # the run.loops key the route counts on
+    reason: str
+    code: str | None
+    tasks: list[str]  # the task folders the record goes into
+    feedback: dict  # the feedback record, as feedback_doc built it
+
+
+def pending_route_path(run_dir: Path) -> Path:
+    return run_dir / PENDING_ROUTE_FILE
+
+
+def _check_lock(lock: Lock, run_dir: Path) -> None:
+    if lock.path != run_dir / "lock":
+        raise FactoryError("state.locked", f"this process does not hold the lock on {run_dir.name}",
+                           hint="acquire the run lock before writing the pending route")
+
+
+def save_pending_route(run_dir: Path, route: PendingRoute, *, lock: Lock) -> None:
+    """Write pending-route.json atomically, checked against its schema. Refuses without the run's lock."""
+    _check_lock(lock, run_dir)
+    doc = {"schema_version": SCHEMA_VERSION, **asdict(route)}
+    validate(doc, "pending-route", file=str(pending_route_path(run_dir)))
+    write_json_atomic(pending_route_path(run_dir), doc)
+
+
+def read_pending_route(run_dir: Path) -> PendingRoute | None:
+    """The saved route, or None when there is none. A file that is not JSON or does not match its schema raises
+    config.invalid and is left in place: skipping it would drop the rework without a word."""
+    path = pending_route_path(run_dir)
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return None
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise FactoryError("config.invalid", f"{path}: not valid JSON: {e}",
+                           hint=f"fix or delete {path.name}; a run that waits on its feedback write keeps its route there") from e
+    validate(doc, "pending-route", file=str(path))
+    return PendingRoute(**{k: v for k, v in doc.items() if k != "schema_version"})
+
+
+def clear_pending_route(run_dir: Path, *, lock: Lock) -> None:
+    _check_lock(lock, run_dir)
+    pending_route_path(run_dir).unlink(missing_ok=True)
+
+
+def apply_pending_route(run: Run, wf: Workflow, pending: PendingRoute) -> Routing:
+    """What route() did when the saved route was decided, redone on the run read from disk: count the loop, reset the
+    stages from the target and point the run at it. The count is the saved one; the caller applies it once."""
+    if pending.goto not in [s.id for s in wf.stages]:
+        raise FactoryError("config.invalid", f"the saved route goes to {pending.goto!r}, which is not a stage of {wf.name}",
+                           hint=f"the workflow changed while the run waited; delete {PENDING_ROUTE_FILE} and run `factory retry`")
+    run.loops[pending.loop_key] = pending.loop
+    reset = _reset_from(run, wf, pending.goto)
+    run.stage, run.status, run.attention = pending.goto, "running", None
+    return Routing("goto", goto=pending.goto, reset=reset, loop=pending.loop, max=pending.max, reason=pending.reason,
+                   code=pending.code, key=pending.loop_key)

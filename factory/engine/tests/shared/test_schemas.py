@@ -28,7 +28,7 @@ def test_committed_schema_matches_its_dataclass(name):
     assert (SCHEMAS / f"{name}.schema.json").read_text() == schemagen.render(name)
 
 
-@pytest.mark.parametrize("name", sorted(schemagen.FILE_TYPES) + ["feedback"])
+@pytest.mark.parametrize("name", sorted(schemagen.FILE_TYPES) + ["feedback", "pending-route"])
 def test_each_schema_is_valid_draft_2020_12(name):
     jsonschema.Draft202012Validator.check_schema(load(name))
 

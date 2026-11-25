@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "factory/pending-route.schema.json",
+  "title": "pending-route",
+  "description": "A rework route saved in the run folder while its feedback write waits as retrying (module 8). Written by hand; factory_engine.rework.PendingRoute mirrors it, and a test compares the two. Only the run's lock holder writes it.",
+  "type": "object",
+  "properties": {
+    "schema_version": {"const": 1},
+    "from_stage": {"type": "string"},
+    "goto": {"type": "string"},
+    "reset": {"type": "array", "items": {"type": "string"}},
+    "loop": {"type": "integer", "minimum": 1},
+    "max": {"type": "integer", "minimum": 0},
+    "loop_key": {"type": "string"},
+    "reason": {"type": "string"},
+    "code": {"type": ["string", "null"]},
+    "tasks": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "feedback": {"$ref": "feedback.schema.json"}
+  },
+  "required": ["schema_version", "from_stage", "goto", "reset", "loop", "max", "loop_key", "reason", "code",
+               "tasks", "feedback"],
+  "additionalProperties": false
+}

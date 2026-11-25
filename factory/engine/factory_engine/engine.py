@@ -354,6 +354,13 @@ class Engine:
             for _ in range(10_000):  # a bound, so a routing bug cannot spin forever
                 run = state.read_run(run_dir)
                 if run.status == "retrying":  # a tick's engine repeats the waited-on operation (module 6, tick table)
+                    pending = rework.read_pending_route(run_dir)
+                    if pending is not None:
+                        # A saved route: write its record and apply it, with no check run again (module 8, "Errors").
+                        self._resume_route(run, run_dir, lock, pending)
+                        if state.read_run(run_dir).status == "retrying":
+                            return "retrying"  # the write failed again: the next tick repeats it
+                        continue
                     # A red-CI rework whose feedback write failed is repeated at the merge review: the route came from
                     # reading the pull request, so the next pass reads it again, and _finish would not read CI at all.
                     back_to_review = self._waiting_on(run) == FEEDBACK_CI
@@ -1073,9 +1080,8 @@ class Engine:
                 # next pass repeats the join, and run.json names the hook's last line. gitops.join reset the run branch.
                 error = FactoryError("git.network", f"the repo hook on the join commit failed: {join.hook_output.splitlines()[-1]}")
                 return self._wait_for_infra(run, run_dir, lock, stage.id, error, result)
-            return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.build_feedback(
-                run_dir, from_stage=stage.id, to_stage=routing.goto, result=join, loop=routing.loop,
-                max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run)))
+            return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.feedback_doc(
+                from_stage=stage.id, to_stage=routing.goto, result=join, loop=routing.loop, max_loops=routing.max))
         base = (self.cfg.repo or {}).get("base_branch", "main")
         run.signals = gitops.conflict_signals(self.repo, run, self._other_runs(run), base)
         report = None
@@ -1089,9 +1095,8 @@ class Engine:
             # Unspecified in modules 6 to 8; recorded as a decision in the module 6 file.
             gitops.git(run.worktree, "reset", "--hard", pre_join, check=False)
             routing = rework.route(run, wf, stage, rework.classify(failed))
-            return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.build_feedback(
-                run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
-                max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run)))
+            return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.feedback_doc(
+                from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop, max_loops=routing.max))
         self._set_stage(run, stage.id, "done").ended = self.clock.now().isoformat()
         state.append_event(run_dir, "stage_done", stage=stage.id)
         state.write_run(run_dir, run, lock=lock)
@@ -1166,38 +1171,89 @@ class Engine:
             return result
         routing = rework.route(run, wf, stage, outcome)
         # The operator's notes go to the stage the run is sent back to, as feedback its workers read (module 8).
-        write = (lambda: rework.build_human_feedback(
-            run_dir, from_stage=stage.id, to_stage=routing.goto, notes=outcome.notes, loop=routing.loop,
-            max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run))) if outcome.status == "rework" else None
-        return self._route_back(run, run_dir, lock, wf, stage, routing, result, write)
+        # A human rework saves no pending route: its notes are in the decision file, which the next pass reads again.
+        write = (lambda: rework.human_feedback_doc(
+            from_stage=stage.id, to_stage=routing.goto, notes=outcome.notes, loop=routing.loop,
+            max_loops=routing.max)) if outcome.status == "rework" else None
+        return self._route_back(run, run_dir, lock, wf, stage, routing, result, write, save_route=False)
 
     def _route_back(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, routing: rework.Routing,
-                    result: TickResult, write_feedback: Callable[[], object] | None, *, operation: str = FEEDBACK) -> TickResult:
+                    result: TickResult, make_feedback: Callable[[], dict] | None, *, operation: str = FEEDBACK,
+                    save_route: bool = True) -> TickResult:
         """Write the feedback record for a rework routing, then apply the routing (module 8). A write that fails with an
         OSError (disk full, permission) is an infrastructure error: three tries with backoff, then the run waits as
-        `retrying` and the routing is not applied, so no loop count moves. The next pass repeats the write, and the
-        writer skips a task folder that already holds this route's record, so each folder gets one record. Any other
-        error, a schema failure for one, is not an infrastructure error and raises.
+        `retrying` and the routing is not applied, so no loop count moves. Any other error, a schema failure for one,
+        is not an infrastructure error and raises.
 
-        What is kept: a human rework's route survives the wait, because its answer is in the decision file. A gate,
-        join, pre-push or red-CI route is re-derived by the next pass, which runs the check again; if that check then
-        passes, the rework is not written. Keeping that route needs the pending route saved in the run folder, a
-        shared-contract change (not built; see the module 8 text and the pull request)."""
-        if routing.action == "goto" and write_feedback is not None:
-            def attempt() -> object:
-                try:
-                    return write_feedback()
-                except OSError as e:  # the code hook failures wait under too; a new code would change section 18
-                    raise FactoryError("git.network", str(e)) from e
-
+        The route is saved in `pending-route.json` in the run folder before the run waits (`save_route`), so the next
+        pass writes the saved record and applies the saved route without running the check again: a gate, join,
+        pre-push or red-CI rework is not dropped when that check would now pass (`_resume_route`). A human rework
+        saves nothing, because its answer is in the decision file and the next pass reads it again. A save that
+        itself fails with an OSError is not fatal: the run waits as it did before the file existed, and the next pass
+        works the route out again."""
+        if routing.action == "goto" and make_feedback is not None:
+            doc, tasks = make_feedback(), self._tasks_of(wf, routing.goto, run_dir, run)
             try:
-                self._with_backoff(attempt)  # three tries; the writer skips a folder that already holds the record
+                self._write_feedback(run_dir, doc, tasks, routing.max)
             except FactoryError as e:
                 if e.code != "git.network":
                     raise  # a schema failure (config.invalid) is not an infrastructure error
+                if save_route:
+                    self._save_route(run_dir, lock, stage, routing, doc, tasks)
                 # route() changed `run` in memory; the run on disk still has the state before the routing.
-                return self._wait_for_infra(state.read_run(run_dir), run_dir, lock, operation, e, result)
+                return self._wait_on_feedback(state.read_run(run_dir), run_dir, lock, operation, e, result)
         return self._apply(run, run_dir, lock, wf, stage, routing, result)
+
+    def _write_feedback(self, run_dir: Path, doc: dict, tasks: list[str], max_loops: int) -> None:
+        """Three tries with backoff. The writer skips a task folder that already holds this route's record, so each
+        folder gets one record. An OSError is an infrastructure error and waits under `git.network`; a new code would
+        change section 18."""
+        def attempt() -> object:
+            try:
+                return rework.write_feedback(run_dir, doc, tasks, max_loops=max_loops)
+            except OSError as e:
+                raise FactoryError("git.network", str(e)) from e
+
+        self._with_backoff(attempt)
+
+    @staticmethod
+    def _save_route(run_dir: Path, lock: Lock, stage: Stage, routing: rework.Routing, doc: dict, tasks: list[str]) -> None:
+        route = rework.PendingRoute(from_stage=stage.id, goto=routing.goto, reset=list(routing.reset), loop=routing.loop,
+                                    max=routing.max, loop_key=routing.key, reason=routing.reason, code=routing.code,
+                                    tasks=tasks, feedback=doc)
+        try:
+            rework.save_pending_route(run_dir, route, lock=lock)
+        except OSError:
+            pass  # the disk that refused the record refuses this too: the next pass works the route out again
+
+    def _wait_on_feedback(self, run: Run, run_dir: Path, lock: Lock, operation: str, error: FactoryError,
+                          result: TickResult) -> TickResult:
+        """Wait for the feedback write to work. When the wait is over and the run is blocked, the saved route goes: a
+        person's `factory retry` runs the check again and works the route out from what it finds."""
+        self._wait_for_infra(run, run_dir, lock, operation, error, result)
+        if state.read_run(run_dir).status == "blocked":
+            rework.clear_pending_route(run_dir, lock=lock)
+        return result
+
+    def _resume_route(self, run: Run, run_dir: Path, lock: Lock, pending: rework.PendingRoute) -> None:
+        """The first step of the pass that repeats a feedback write (module 8, "Errors"): write the saved record, apply
+        the saved route as `_apply` does, and delete the file. The check is not run again. The loop count is the saved
+        one, so it moves once however many passes it took. If the write fails again the run keeps waiting, with the
+        file, until `infra_wait_hours` have passed."""
+        operation = self._waiting_on(run) or FEEDBACK
+        try:
+            self._write_feedback(run_dir, pending.feedback, pending.tasks, pending.max)
+        except FactoryError as e:
+            if e.code != "git.network":
+                raise
+            self._wait_on_feedback(run, run_dir, lock, operation, e, TickResult())
+            return
+        wf = self._load(run.workflow)
+        routing = rework.apply_pending_route(run, wf, pending)
+        rework.infra_recovered(run)
+        state.append_event(run_dir, "infra_recovered", operation=operation)
+        self._apply(run, run_dir, lock, wf, self._stage_of(wf, pending.from_stage), routing, TickResult())
+        rework.clear_pending_route(run_dir, lock=lock)
 
     def _apply(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, routing: rework.Routing,
                result: TickResult) -> TickResult:
@@ -1326,9 +1382,8 @@ class Engine:
         stage = wf.stages[-1]
         failed = rework.hook_failure_result(error)
         routing = rework.route(run, wf, stage, rework.classify(failed))
-        return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.build_feedback(
-            run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
-            max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run)))
+        return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.feedback_doc(
+            from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop, max_loops=routing.max))
 
     def _merge_review(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
         """Read the run's pull request (module 13, watch_pr). Merged ends the run and removes its worktree, closed aborts
@@ -1353,9 +1408,9 @@ class Engine:
             stage = wf.stages[-1]
             failed = GateResult(passed=False, gate="ci", code="gate.ci_red", output_tail=pr.checks_output, details={})
             routing = rework.route_red_ci(run, wf, stage)
-            return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.build_feedback(
-                run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
-                max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run)), operation=FEEDBACK_CI)
+            return self._route_back(run, run_dir, lock, wf, stage, routing, result, lambda: rework.feedback_doc(
+                from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop, max_loops=routing.max),
+                operation=FEEDBACK_CI)
         elif pr.ci == "green" and not delivery.green_check_done(run_dir):
             self._merge_at_green(run, run_dir)
         return result
