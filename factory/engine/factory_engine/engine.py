@@ -1267,7 +1267,7 @@ class Engine:
             run.stage, run.status = routing.goto, "running"
             self._reset_tasks(run, run_dir, wf, routing.reset)
         elif routing.action == "blocked":
-            rework.record_blocked(run_dir, run, routing)
+            self._record_block(run, run_dir, routing)
             result.attention = run.attention  # route() set the blocked item with its retry command
         elif routing.action == "aborted":
             state.append_event(run_dir, "run_aborted", reason=routing.reason)
@@ -1276,6 +1276,18 @@ class Engine:
         state.write_run(run_dir, run, lock=lock)
         result.routed_to = routing.goto
         return result
+
+    @staticmethod
+    def _record_block(run: Run, run_dir: Path, routing: rework.Routing) -> None:
+        """A run the engine blocks logs run_blocked and gets its blocked decision file (module 8: retry, goto, skip, abort)
+        at the stage it logs and its open visit. The caller holds the run lock. A file an earlier block's answer already
+        applied is replaced, so this block asks again."""
+        rework.record_blocked(run_dir, run, routing)
+        if not run.stage:  # no stage to name (a skip of the last stage left none): no file under an empty name
+            return
+        visit = decisions.latest_visit(run, run.stage)
+        decisions.clear_answered_blocked(run_dir, run.stage, visit)
+        decisions.request(run_dir, run.stage, visit, kind="blocked")
 
     def _reset_tasks(self, run: Run, run_dir: Path, wf: Workflow, stage_ids: list[str]) -> None:
         """Tasks of the stages sent back start again: their task.json goes, so each gets a fresh state. A `languages` stage
@@ -1369,7 +1381,7 @@ class Engine:
             hours = float((self.cfg.repo or {}).get("infra_wait_hours", 6))
             routing = rework.infra_tick(run, operation=operation, error=error, clock=self.clock, wait_hours=hours)
             if routing.action == "blocked":
-                rework.record_blocked(run_dir, run, routing)
+                self._record_block(run, run_dir, routing)
                 result.attention = run.attention
             else:
                 run.status = "retrying"  # _drive set it to running for this pass; it waits again until the next tick
