@@ -518,15 +518,15 @@ def _run_maven_step(worktree: Path, task_dir: Path):
 
 
 @needs_mvn
-def test_the_maven_test_argv_copies_its_surefire_report_into_the_task_folder(task_dir, worktree):
-    """The profile's own argv with the real mvn, offline (MAVEN_ARGS=-o). The report lands where the engine globs
-    *.junit.xml. This runs without srt: srt gives mvn no network, and the cached plugins are read from ~/.m2."""
+def test_the_maven_test_argv_writes_one_merged_junit_file_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real mvn, offline (MAVEN_ARGS=-o). Its reports are merged into test.junit.xml,
+    the file the engine waits for (module 17A). This runs without srt: srt gives mvn no network, and the cached
+    plugins are read from ~/.m2."""
     from factory_engine import gates
     _maven_project(worktree, "assertEquals(2, 1 + 1);")
     r = _run_maven_step(worktree, task_dir)
     assert r.returncode == 0, r.stdout + r.stderr
-    reports = sorted(task_dir.glob("*.junit.xml"))
-    assert len(reports) == 1 and gates.parse_junit(reports).total == 2
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
 
 
 @needs_mvn
@@ -535,7 +535,7 @@ def test_a_failing_maven_test_run_exits_nonzero_and_still_leaves_its_report(task
     _maven_project(worktree, "assertEquals(1, 2);")
     r = _run_maven_step(worktree, task_dir)
     assert r.returncode != 0
-    parsed = gates.parse_junit(sorted(task_dir.glob("*.junit.xml")))
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
     assert parsed.total == 2 and parsed.failed == ["b"]
 
 

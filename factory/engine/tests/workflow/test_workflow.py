@@ -246,6 +246,20 @@ def test_a_problem_names_the_file(repo):
     assert str(repo / ".factory" / "config" / "workflows" / "t.yaml") in e.message
 
 
+def test_a_languages_stage_takes_no_tasks_of_its_own(repo):
+    """Module 17A, verify wiring: a `languages` stage builds its test tasks, so static tasks next to it are refused at
+    load, not silently ignored."""
+    text = ("name: t\nstages:\n  - id: verify\n    tasks_from: languages\n"
+            "    tasks: [{id: extra, cmd: [make, test]}]\n")
+    err = fails(repo, text)
+    assert "languages stage" in str(err) and "takes no tasks" in str(err)
+
+
+def test_a_languages_stage_with_no_tasks_loads(repo):
+    wf = load_text(repo, "name: t\nstages:\n  - id: verify\n    tasks_from: languages\n")
+    assert wf.stages[0].tasks_from == "languages" and wf.stages[0].tasks == []
+
+
 def test_validate_workflow_returns_problems_as_a_list(repo):
     wf = load_workflow(repo, CFG, "chore")
     wf.stages[0].on_fail.goto = "ghost"

@@ -26,15 +26,18 @@ from . import usage as usage_mod
 from . import workflow as wf_mod
 from .adapters.worker.base import AttemptResult, HarnessConfig, TaskContext, WorkerAdapter
 from .adapters.worker.command import CommandAdapter
+from .atomic import write_json_atomic
 from .clock import SystemClock
 from .config import Config
 from .errors import FactoryError
 from .lock import Lock
-from .types import (AttentionItem, Clock, GateContext, GateResult, Request, Run, RunStatus, Stage, StageState,
-                    TaskBranch, TaskSpec, TaskState, UsageRecord, Workflow)
+from .types import (AttentionItem, Clock, GateContext, GateResult, HelperPolicy, Request, Run, RunStatus, Stage,
+                    StageState, TaskBranch, TaskSpec, TaskState, UsageRecord, Workflow)
 from .workflow import expand_helpers
 
 TRIAGE = "_triage"
+LANGUAGES = "languages"  # the `tasks_from` source that builds a verify stage's test tasks from the run's changed files
+LANGUAGES_FILE = "languages.json"  # the frozen list of those tasks, in the run folder (module 17A, verify wiring)
 NO_TEST_RESULTS = "no-test-results"  # the skip name of the T1 block, which is not a gate in the workflow
 POLL_SECONDS = 0.05  # how often the main thread looks at running workers; a restart waits for the next checkpoint
 # Run statuses that end a run, and those where the engine waits for a person or for infrastructure.
@@ -73,6 +76,23 @@ class _Running:
     thread: threading.Thread = field(default=None)  # type: ignore[assignment]
     outcome: AttemptResult | None = None
     restart_for_note: bool = False
+
+
+def _spec_to_doc(spec: TaskSpec) -> dict:
+    """A TaskSpec as JSON, every field, so the frozen languages list rebuilds the same spec (module 17A)."""
+    return {"id": spec.id, "cmd": spec.cmd, "scope": spec.scope, "deny": spec.deny, "needs": spec.needs,
+            "helpers": {"mode": spec.helpers.mode, "max": spec.helpers.max, "split_hints": spec.helpers.split_hints,
+                        "timeout_minutes": spec.helpers.timeout_minutes},
+            "out": spec.out, "timeout_minutes": spec.timeout_minutes, "retries": spec.retries,
+            "max_interruptions": spec.max_interruptions}
+
+
+def _spec_from_doc(doc: dict) -> TaskSpec:
+    h = doc["helpers"]
+    return TaskSpec(id=doc["id"], skill=None, cmd=doc["cmd"], run=None, scope=doc["scope"], deny=doc["deny"],
+                    needs=doc["needs"], helpers=HelperPolicy(h["mode"], h["max"], h["split_hints"], h["timeout_minutes"]),
+                    out=doc["out"], timeout_minutes=doc["timeout_minutes"], retries=doc["retries"], model=None,
+                    when=None, max_interruptions=doc["max_interruptions"])
 
 
 class Engine:
@@ -182,7 +202,7 @@ class Engine:
     def _retry(self, run_dir: Path, lock: Lock, stage: str | None, note: str | None, by: str) -> None:
         run, wf = self._blocked(run_dir)
         target = self._stage_of(wf, stage or run.stage)
-        for spec in self._specs(target, run_dir):
+        for spec in self._specs(target, run_dir, run):
             if (run_dir / "tasks" / spec.id / "task.json").is_file() and state.read_task(run_dir, spec.id).status == "failed":
                 (run_dir / "tasks" / spec.id / "task.json").unlink()  # a failed task starts again with a fresh state
             if note and note.strip():
@@ -205,7 +225,7 @@ class Engine:
             raise FactoryError("config.invalid", f"{target.id!r} is after the blocked stage {run.stage!r}",
                                hint="goto sends a run back to this stage or an earlier one")
         reset = rework._reset_from(run, wf, target.id)
-        self._reset_tasks(run_dir, wf, reset)
+        self._reset_tasks(run, run_dir, wf, reset)
         self._unblock(run, run_dir, lock, target.id)
         state.append_event(run_dir, "run_routed", to_stage=target.id, reset=reset, by=by)
 
@@ -413,7 +433,7 @@ class Engine:
             return self._finish(run, run_dir, lock, result)
         if not self._stage_ready(run, stage):
             return result
-        if stage.approval == "human" and self._stage_finished(run_dir, stage):
+        if stage.approval == "human" and self._stage_finished(run, run_dir, stage):
             return self._human_stop(run, run_dir, lock, wf, stage, result)
         return self._run_stage(run, run_dir, lock, wf, stage, result)
 
@@ -445,7 +465,7 @@ class Engine:
         stage = wf.stages[0]
         self._stage_running(run, run_dir, lock, stage.id)
         self._execute_tasks(run, run_dir, lock, wf, stage, result)
-        if not self._stage_finished(run_dir, stage):
+        if not self._stage_finished(run, run_dir, stage):
             return self._after_tasks(run, run_dir, lock, wf, stage, result)
         artifact = self._triage_artifact(run_dir)
         self._apply_triage_answer(run, run_dir, artifact)
@@ -558,13 +578,17 @@ class Engine:
     def _run_stage(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, result: TickResult) -> TickResult:
         self._stage_running(run, run_dir, lock, stage.id)
         self._execute_tasks(run, run_dir, lock, wf, stage, result)
-        if not self._stage_finished(run_dir, stage):
+        if not self._stage_finished(run, run_dir, stage):
             return self._after_tasks(run, run_dir, lock, wf, stage, result)
         if stage.approval == "human":
             return self._human_stop(run, run_dir, lock, wf, stage, result)
         return self._join_and_gate(run, run_dir, lock, wf, stage, result)
 
-    def _specs(self, stage: Stage, run_dir: Path | None = None) -> list[TaskSpec]:
+    def _specs(self, stage: Stage, run_dir: Path | None = None, run: Run | None = None) -> list[TaskSpec]:
+        if stage.tasks_from == LANGUAGES:
+            if run is None or run_dir is None:
+                return []  # no run to read the changed files from (the blocked-run actions build an engine with no run)
+            return self._language_specs(run, run_dir, stage)
         if stage.tasks_from and run_dir is not None:
             return wf_mod.expand_tasks_from(stage, self._tasks_from_artifact(run_dir, stage))
         first = next(iter(self.workers.values()), None)  # the blocked-run actions build an engine with no worker
@@ -574,13 +598,30 @@ class Engine:
             out.extend(expand_helpers(spec, native))
         return out
 
-    def _stage_finished(self, run_dir: Path, stage: Stage) -> bool:
+    def _language_specs(self, run: Run, run_dir: Path, stage: Stage) -> list[TaskSpec]:
+        """Module 17A, verify wiring: one test task per language the run changed. The list is decided once, when the
+        stage first starts (`_freeze_languages`), and read back from the run folder on every later tick, so a worker
+        that changes a file between ticks cannot change the stage's tasks."""
+        path = run_dir / LANGUAGES_FILE
+        if not path.is_file():
+            self._freeze_languages(run, run_dir, stage)
+        return [_spec_from_doc(doc) for doc in json.loads(path.read_text())]
+
+    def _freeze_languages(self, run: Run, run_dir: Path, stage: Stage) -> None:
+        base = (self.cfg.repo or {}).get("base_branch", "main")
+        changed = gitops.changed_files(run.worktree, gitops.base_ref(run.worktree, base))
+        specs = toolchains.language_tasks(run.worktree, self.cfg, "test", changed)
+        uncovered = toolchains.uncovered_files(run.worktree, self.cfg, "test", changed)
+        write_json_atomic(run_dir / LANGUAGES_FILE, [_spec_to_doc(s) for s in specs])
+        state.append_event(run_dir, "verify_languages", stage=stage.id, tasks=[s.id for s in specs], uncovered=uncovered)
+
+    def _stage_finished(self, run: Run, run_dir: Path, stage: Stage) -> bool:
         """Every task of the stage has a state and is done."""
-        return all(self._status_of(run_dir, s.id) == "done" for s in self._specs(stage, run_dir))
+        return all(self._status_of(run_dir, s.id) == "done" for s in self._specs(stage, run_dir, run))
 
     def _after_tasks(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, result: TickResult) -> TickResult:
         """A task that failed for good blocks the run: when retries run out the run is blocked (module 8)."""
-        if any(self._status_of(run_dir, s.id) == "failed" for s in self._specs(stage, run_dir)):
+        if any(self._status_of(run_dir, s.id) == "failed" for s in self._specs(stage, run_dir, run)):
             return self._apply(run, run_dir, lock, wf, stage, rework.route(run, wf, stage, "human"), result)
         return result
 
@@ -603,7 +644,7 @@ class Engine:
         the tasks already running finish. Each worker's `wait` runs in its own thread, because `wait` kills the worker
         at its timeout and cannot be polled. This thread owns the lock and does every state write: it records results,
         checkpoints, and restarts a worker when a note is queued (module 12). The threads only call `wait`."""
-        specs = self._specs(stage, run_dir)
+        specs = self._specs(stage, run_dir, run)
         running: dict[str, _Running] = {}
         try:
             while True:
@@ -701,7 +742,7 @@ class Engine:
     def _base_branches(self, run: Run, run_dir: Path, stage: Stage, spec: TaskSpec) -> list[str]:
         """The branches a task starts from (module 7): its dependencies' branches, or the run branch when it has none.
         A dependency that was skipped made no branch, so the branches it would have built on stand in for it."""
-        by_id = {s.id: s for s in self._specs(stage, run_dir)}
+        by_id = {s.id: s for s in self._specs(stage, run_dir, run)}
         out: list[str] = []
         for n in spec.needs:
             found = ([f"{run.run_id}--{n}"] if not self._was_skipped(run_dir, n)
@@ -998,7 +1039,7 @@ class Engine:
         `tasks_from` artifact may not exist yet."""
         wf = self._load(run.workflow or TRIAGE)
         stage = next((s for s in wf.stages if s.id == ts.stage), None)
-        specs = [] if stage is None else self._specs(stage, run_dir)
+        specs = [] if stage is None else self._specs(stage, run_dir, run)
         spec = next((s for s in specs if s.id == ts.task_id), None)
         if spec is None:
             raise FactoryError("config.invalid", f"task {ts.task_id} is not in stage {ts.stage} of the workflow",
@@ -1008,7 +1049,7 @@ class Engine:
     # ---- join, gates, routing --------------------------------------------------------------------------------------
 
     def _join_and_gate(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, result: TickResult) -> TickResult:
-        specs = self._specs(stage, run_dir)
+        specs = self._specs(stage, run_dir, run)
         branches = [TaskBranch(s.id, f"{run.run_id}--{s.id}", state.read_task(run_dir, s.id).task_base or run.run_id)
                     for s in specs if not self._was_skipped(run_dir, s.id)]
         pre_join = gitops.git(run.worktree, "rev-parse", "HEAD").stdout.strip()
@@ -1017,7 +1058,7 @@ class Engine:
             routing = rework.route_conflict(run, wf, stage) if join.conflict_files else rework.route(run, wf, stage, "rework")
             if routing.action == "goto":
                 rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=join, loop=routing.loop,
-                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
+                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run))
             return self._apply(run, run_dir, lock, wf, stage, routing, result)
         base = (self.cfg.repo or {}).get("base_branch", "main")
         run.signals = gitops.conflict_signals(self.repo, run, self._other_runs(run), base)
@@ -1034,7 +1075,7 @@ class Engine:
             routing = rework.route(run, wf, stage, rework.classify(failed))
             if routing.action == "goto":
                 rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
-                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
+                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run))
             return self._apply(run, run_dir, lock, wf, stage, routing, result)
         self._set_stage(run, stage.id, "done").ended = self.clock.now().isoformat()
         state.append_event(run_dir, "stage_done", stage=stage.id)
@@ -1082,9 +1123,9 @@ class Engine:
                 return failed
         return None
 
-    def _tasks_of(self, wf: Workflow, stage_id: str, run_dir: Path) -> list[str]:
+    def _tasks_of(self, wf: Workflow, stage_id: str, run_dir: Path, run: Run) -> list[str]:
         stage = next(s for s in wf.stages if s.id == stage_id)
-        return [s.id for s in self._specs(stage, run_dir)]
+        return [s.id for s in self._specs(stage, run_dir, run)]
 
     def _other_runs(self, run: Run) -> list[Run]:
         return [state.read_run(r.run_dir) for r in state.list_runs(self.home, key=run.repo_key) if r.run_id != run.run_id]
@@ -1113,14 +1154,14 @@ class Engine:
             # The operator's notes go to the stage the run is sent back to, as feedback its workers read (module 8).
             rework.build_human_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, notes=outcome.notes,
                                         loop=routing.loop, max_loops=routing.max,
-                                        task_ids=self._tasks_of(wf, routing.goto, run_dir))
+                                        task_ids=self._tasks_of(wf, routing.goto, run_dir, run))
         return self._apply(run, run_dir, lock, wf, stage, routing, result)
 
     def _apply(self, run: Run, run_dir: Path, lock: Lock, wf: Workflow, stage: Stage, routing: rework.Routing,
                result: TickResult) -> TickResult:
         if routing.action == "goto":
             run.stage, run.status = routing.goto, "running"
-            self._reset_tasks(run_dir, wf, routing.reset)
+            self._reset_tasks(run, run_dir, wf, routing.reset)
         elif routing.action == "blocked":
             rework.record_blocked(run_dir, run, routing)
             result.attention = run.attention  # route() set the blocked item with its retry command
@@ -1132,12 +1173,15 @@ class Engine:
         result.routed_to = routing.goto
         return result
 
-    def _reset_tasks(self, run_dir: Path, wf: Workflow, stage_ids: list[str]) -> None:
-        """Tasks of the stages sent back start again: their task.json goes, so each gets a fresh state."""
+    def _reset_tasks(self, run: Run, run_dir: Path, wf: Workflow, stage_ids: list[str]) -> None:
+        """Tasks of the stages sent back start again: their task.json goes, so each gets a fresh state. A `languages` stage
+        also drops its frozen list, so it is decided again from the new changes (module 17A, verify wiring)."""
         needs: dict[str, list[str]] = {}
         for sid in stage_ids:
             stage = next(s for s in wf.stages if s.id == sid)
-            for spec in self._specs(stage, run_dir):
+            if stage.tasks_from == LANGUAGES:
+                (run_dir / LANGUAGES_FILE).unlink(missing_ok=True)
+            for spec in self._specs(stage, run_dir, run):
                 needs[spec.id] = list(spec.needs)
                 (run_dir / "tasks" / spec.id / "task.json").unlink(missing_ok=True)
         if stage_ids and wf.name != TRIAGE:
@@ -1242,7 +1286,7 @@ class Engine:
         routing = rework.route(run, wf, stage, rework.classify(failed))
         if routing.action == "goto":
             rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
-                                  max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
+                                  max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run))
         return self._apply(run, run_dir, lock, wf, stage, routing, result)
 
     def _merge_review(self, run: Run, run_dir: Path, lock: Lock, result: TickResult) -> TickResult:
@@ -1270,7 +1314,7 @@ class Engine:
             routing = rework.route_red_ci(run, wf, stage)
             if routing.action == "goto":
                 rework.build_feedback(run_dir, from_stage=stage.id, to_stage=routing.goto, result=failed, loop=routing.loop,
-                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir))
+                                      max_loops=routing.max, task_ids=self._tasks_of(wf, routing.goto, run_dir, run))
             return self._apply(run, run_dir, lock, wf, stage, routing, result)
         elif pr.ci == "green" and not delivery.green_check_done(run_dir):
             self._merge_at_green(run, run_dir)

@@ -10,13 +10,15 @@ variants:
     lint:         [mvn, -q, checkstyle:check]
     # A JUnit report, because the engine's test-report gate reads JUnit only (module 5). Surefire's `reportsDirectory`
     # has no -D property (checked on surefire 3.2.5), so mvn writes TEST-*.xml under target/surefire-reports and python3
-    # copies each file this run wrote (newer than the run's start, so a stale report is never counted) into
-    # FACTORY_TASK_DIR as <path>.junit.xml, where the engine globs. mvn keeps its exit code; the copy runs on failure too.
+    # merges each report this run wrote (newer than the run's start, so a stale report is never counted) into one
+    # FACTORY_TASK_DIR/test.junit.xml, the file the engine waits for (module 9). mvn keeps its exit code; the merge runs
+    # on failure too. A build that writes no report leaves no file, so the task is not done.
     test:
       - python3
       - -c
       - |
-        import os, shutil, subprocess, sys, time
+        import os, subprocess, sys, time
+        import xml.etree.ElementTree as ET
         d = os.environ.get("FACTORY_TASK_DIR")
         if not d:
             sys.stderr.write("FACTORY_TASK_DIR is not set\n")
@@ -27,6 +29,7 @@ variants:
         except FileNotFoundError:
             sys.stderr.write("mvn: command not found\n")
             sys.exit(127)
+        suites = []
         for root, dirs, files in os.walk("."):
             dirs[:] = [x for x in dirs if x not in (".git", "node_modules")]
             if os.path.basename(root) != "surefire-reports":
@@ -34,8 +37,12 @@ variants:
             for f in files:
                 src = os.path.join(root, f)
                 if f.startswith("TEST-") and f.endswith(".xml") and os.path.getmtime(src) >= start:
-                    name = os.path.relpath(src, ".").replace(os.sep, "__")[:-len(".xml")] + ".junit.xml"
-                    shutil.copyfile(src, os.path.join(d, name))
+                    suites.append(ET.parse(src).getroot())
+        if suites:
+            merged = ET.Element("testsuites")
+            for s in suites:
+                merged.append(s)
+            ET.ElementTree(merged).write(os.path.join(d, "test.junit.xml"), encoding="utf-8", xml_declaration=True)
         sys.exit(rc)
     build:        [mvn, -q, -DskipTests, package]
     tools: [mvn]
