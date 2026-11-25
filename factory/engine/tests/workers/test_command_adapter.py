@@ -426,3 +426,201 @@ def test_the_typescript_test_argv_refuses_to_run_without_a_task_folder(tmp_path)
     env.pop("FACTORY_TASK_DIR", None)
     r = subprocess.run(_typescript_test_argv(), env=env, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the Python test step writes a JUnit file through the same mechanism, with the real pytest ----
+
+def _profile_test_argv(language: str, variant: str) -> list[str]:
+    import yaml
+    kit = Path(__file__).resolve().parents[3] / "languages" / f"{language}.yaml"
+    return yaml.safe_load(kit.read_text())["variants"][variant]["test"]
+
+
+needs_pytest = pytest.mark.skipif(shutil.which("pytest") is None, reason="pytest is not on PATH")
+
+
+def _pytest_project(worktree: Path, body: str) -> None:
+    (worktree / "pyproject.toml").write_text("[project]\nname = 'tmpproj'\n")
+    (worktree / "test_sample.py").write_text(body)
+
+
+@needs_srt
+@needs_pytest
+def test_the_python_test_argv_writes_a_junit_file_into_the_task_folder_under_srt(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    """The profile's own argv, run as a cmd task runs (CommandAdapter, under srt), with the real pytest on a temp project
+    outside the repo. The report lands in the task's work folder, where the engine globs *.junit.xml, and the worktree
+    gets no xml."""
+    from factory_engine import gates
+    _pytest_project(worktree, "def test_a():\n    assert 1 + 1 == 2\n\ndef test_b():\n    assert True\n")
+    ctx = cmd_ctx(cmd=_profile_test_argv("python", "ruff"))
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "ok", log.read_text()
+    report = task_dir / "test.junit.xml"
+    assert report.is_file()
+    assert gates.parse_junit([report]).total == 2
+    assert not list(worktree.rglob("*.xml"))
+
+
+@needs_srt
+@needs_pytest
+def test_a_failing_python_test_run_exits_one_and_still_leaves_its_report(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    from factory_engine import gates
+    _pytest_project(worktree, "def test_a():\n    assert True\n\ndef test_b():\n    assert 1 == 2\n")
+    ctx = cmd_ctx(cmd=_profile_test_argv("python", "ruff"))
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "failed" and result.exit_code == 1
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 2 and parsed.failed == ["test_b"]
+
+
+def test_the_python_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    """Without FACTORY_TASK_DIR the step exits 2 and runs no test, so the report cannot land in the worktree."""
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("python", "ruff"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+    assert not list(tmp_path.rglob("*.xml"))
+
+
+# ---- item 58 follow-up: the Maven test step copies surefire's reports into the task folder, with the real mvn ----
+
+SUREFIRE_CACHED = (Path.home() / ".m2/repository/org/apache/maven/plugins/maven-surefire-plugin/3.2.5").is_dir()
+needs_mvn = pytest.mark.skipif(shutil.which("mvn") is None or not SUREFIRE_CACHED,
+                               reason="mvn and a cached surefire 3.2.5, compiler 3.13.0 and resources 3.3.1 are required (no network)")
+
+POM = """<project xmlns="http://maven.apache.org/POM/4.0.0"><modelVersion>4.0.0</modelVersion>
+<groupId>p</groupId><artifactId>probe</artifactId><version>1</version>
+<properties><maven.compiler.source>17</maven.compiler.source><maven.compiler.target>17</maven.compiler.target>
+<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+<dependencies><dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.10.2</version><scope>test</scope></dependency></dependencies>
+<build><plugins>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.13.0</version></plugin>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-resources-plugin</artifactId><version>3.3.1</version></plugin>
+<plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId><version>3.2.5</version></plugin>
+</plugins></build></project>"""
+
+
+def _maven_project(worktree: Path, assertion: str) -> None:
+    (worktree / "pom.xml").write_text(POM)
+    tests = worktree / "src" / "test" / "java" / "p"
+    tests.mkdir(parents=True)
+    (tests / "ProbeTest.java").write_text(
+        "package p;\nimport org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n"
+        f"class ProbeTest {{ @Test void a() {{ assertTrue(true); }} @Test void b() {{ {assertion} }} }}\n")
+
+
+def _run_maven_step(worktree: Path, task_dir: Path):
+    import subprocess
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir)}
+    return subprocess.run(_profile_test_argv("java", "maven"), cwd=worktree, env=env, capture_output=True, text=True)
+
+
+@needs_mvn
+def test_the_maven_test_argv_copies_its_surefire_report_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real mvn, offline (MAVEN_ARGS=-o). The report lands where the engine globs
+    *.junit.xml. This runs without srt: srt gives mvn no network, and the cached plugins are read from ~/.m2."""
+    from factory_engine import gates
+    _maven_project(worktree, "assertEquals(2, 1 + 1);")
+    r = _run_maven_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    reports = sorted(task_dir.glob("*.junit.xml"))
+    assert len(reports) == 1 and gates.parse_junit(reports).total == 2
+
+
+@needs_mvn
+def test_a_failing_maven_test_run_exits_nonzero_and_still_leaves_its_report(task_dir, worktree):
+    from factory_engine import gates
+    _maven_project(worktree, "assertEquals(1, 2);")
+    r = _run_maven_step(worktree, task_dir)
+    assert r.returncode != 0
+    parsed = gates.parse_junit(sorted(task_dir.glob("*.junit.xml")))
+    assert parsed.total == 2 and parsed.failed == ["b"]
+
+
+@needs_mvn
+def test_a_stale_surefire_report_from_an_earlier_run_is_not_copied(task_dir, worktree):
+    """A build that fails before any test runs must not hand the gate the last run's report."""
+    stale = worktree / "target" / "surefire-reports"
+    stale.mkdir(parents=True)
+    old = stale / "TEST-old.xml"
+    old.write_text('<testsuite><testcase name="old"/></testsuite>')
+    os.utime(old, (1_000_000_000, 1_000_000_000))
+    (worktree / "pom.xml").write_text("<project>not a pom")
+    r = _run_maven_step(worktree, task_dir)
+    assert r.returncode != 0
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+def test_the_maven_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("java", "maven"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the Go test step converts `go test -json` to a JUnit file in the task folder, under srt ----
+
+needs_go = pytest.mark.skipif(shutil.which("go") is None, reason="go is not on PATH")
+
+
+def _go_project(worktree: Path, body: str) -> None:
+    (worktree / "go.mod").write_text("module probe\n\ngo 1.21\n")
+    pkg = worktree / "p"
+    pkg.mkdir()
+    (pkg / "p_test.go").write_text("package p\n\nimport \"testing\"\n\n" + body)
+
+
+GO_PASS_AND_FAIL = ("func TestA(t *testing.T) {}\n\nfunc TestB(t *testing.T) { t.Fatal(\"boom\") }\n")
+GO_PASS = "func TestA(t *testing.T) {}\n\nfunc TestC(t *testing.T) {}\n"
+
+
+@needs_srt
+@needs_go
+def test_the_go_test_argv_converts_go_test_json_into_a_junit_file_in_the_task_folder_under_srt(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    from factory_engine import gates
+    _go_project(worktree, GO_PASS)
+    ctx = cmd_ctx(cmd=_profile_test_argv("go", "go"))
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=120)
+    assert result.exit == "ok", log.read_text()
+    report = task_dir / "test.junit.xml"
+    assert report.is_file()
+    parsed = gates.parse_junit([report])
+    assert parsed.total == 2 and parsed.failed == []
+    assert not list(worktree.rglob("*.xml"))
+
+
+@needs_srt
+@needs_go
+def test_a_failing_go_test_run_exits_one_and_names_the_failed_test_in_its_report(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    from factory_engine import gates
+    _go_project(worktree, GO_PASS_AND_FAIL)
+    ctx = cmd_ctx(cmd=_profile_test_argv("go", "go"))
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path, timeout=120)
+    assert result.exit == "failed" and result.exit_code == 1
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 2 and parsed.failed == ["TestB"]
+
+
+@needs_go
+def test_a_package_that_does_not_build_is_a_failed_case_not_an_empty_report(tmp_path, task_dir, worktree):
+    import subprocess
+    from factory_engine import gates
+    (worktree / "go.mod").write_text("module probe\n\ngo 1.21\n")
+    (worktree / "p").mkdir()
+    (worktree / "p" / "p_test.go").write_text("package p\n\nfunc broken( {\n")
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir)}
+    r = subprocess.run(_profile_test_argv("go", "go"), cwd=worktree, env=env, capture_output=True, text=True)
+    assert r.returncode != 0
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 1 and parsed.failed == ["probe/p"]
+
+
+def test_the_go_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("go", "go"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
