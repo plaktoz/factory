@@ -6,8 +6,8 @@ so a failing test leaves nothing running. The tick's spawn (`api.spawn_engine`) 
 with the real Claude adapter, which a test cannot run; the spawned child here calls `Engine.run` with fake workers,
 which is what that command calls.
 
-One check is a strict xfail for item 60: nothing ends a worker a killed engine left behind, because task.json records
-no process group. The xfail names its exception, so only that failure passes the mark. Remove the mark when it passes.
+The left-over worker check runs the real recovery path: the killed engine records its worker's process group in task.json
+(item 63), and the resumed engine ends that group before it starts attempt 2.
 """
 
 import os
@@ -62,6 +62,8 @@ class Hang(FakeWorkerAdapter):
             p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(600)"], start_new_session=True,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             Path({leftover!r}).write_text(str(p.pid))
+            # The real adapters keep their process in handle.data["proc"]; the engine reads its pid as the group id.
+            handle.data["proc"] = p
         return handle
 
     def wait(self, handle, timeout_s):
@@ -181,9 +183,6 @@ def test_a_resume_after_a_resume_of_a_killed_run_recovers_once(killed_mid_fix, e
     assert events.count("task_interrupted") == 1
 
 
-@pytest.mark.xfail(strict=True, raises=NotEnded, reason=(
-    "item 60: task.json records no worker process group, so nothing ends a worker a killed engine left "
-    "(module 6 line 225; needs a schema change)"))
 def test_a_worker_the_killed_engine_left_behind_is_ended_before_a_new_attempt(killed_mid_fix, engine):
     run_dir, leftover = killed_mid_fix
     script, writes = chore_script(run_dir, change=[ok(run_dir / "tasks" / "change" / "work" / "change.json")] * 2)
