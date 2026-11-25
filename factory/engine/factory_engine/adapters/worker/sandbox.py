@@ -7,6 +7,7 @@ per-attempt settings file (claude.py). Deterministic tasks get them as an `srt` 
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import shlex
@@ -47,10 +48,35 @@ def filesystem(worktree: Path, task_dir: Path, factory: Path | None = None) -> d
             "allowWrite": allow_write(worktree, task_dir), "denyWrite": []}
 
 
-def srt_settings(worktree: Path, task_dir: Path, factory: Path | None = None) -> dict:
-    """The settings `srt` reads. It needs `denyWrite` and `deniedDomains` present, or it refuses to run (2026-11-14)."""
+_HOSTNAME = re.compile(r"^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$")
+
+
+def plain_hosts(value: object, where: str) -> list[str]:
+    """The hosts a profile step may reach under srt (module 9, module 17A `network`). Each is a plain lowercase hostname
+    with at least one dot. A scheme, a path, a port, a wildcard, an IP address and an empty string are refused with
+    config.invalid, because the allowance is a whole host and nothing else."""
+    hint = "list each host alone, lowercase, for example repo.maven.apache.org"
+    if not isinstance(value, list) or not all(isinstance(h, str) for h in value):
+        raise FactoryError("config.invalid", f"{where}: network hosts must be a list of hostnames", hint=hint)
+    for h in value:
+        if not _HOSTNAME.match(h) or _is_ip(h):
+            raise FactoryError("config.invalid", f"{where}: {h!r} is not a plain hostname", hint=hint)
+    return list(value)
+
+
+def _is_ip(text: str) -> bool:
+    try:
+        ipaddress.ip_address(text)
+    except ValueError:
+        return False
+    return True
+
+
+def srt_settings(worktree: Path, task_dir: Path, factory: Path | None = None, domains: list[str] | None = None) -> dict:
+    """The settings `srt` reads. It needs `denyWrite` and `deniedDomains` present, or it refuses to run (2026-11-14).
+    `domains` is the one task's allowance (module 9); it is empty unless the task's profile step names hosts."""
     return {"filesystem": filesystem(worktree, task_dir, factory),
-            "network": {"allowedDomains": [], "deniedDomains": []}}
+            "network": {"allowedDomains": plain_hosts(list(domains or []), "network"), "deniedDomains": []}}
 
 
 def srt_bin() -> str | None:

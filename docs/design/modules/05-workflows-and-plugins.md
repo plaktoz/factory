@@ -374,7 +374,7 @@ class Stage:    id: str; needs: list[str]; tasks: list[TaskSpec]; tasks_from: st
 @dataclass
 class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec | None; scope: list[str]; deny: list[str]
                 needs: list[str]; helpers: HelperPolicy; out: str | None; timeout_minutes: int
-                retries: int; model: str | None; when: dict | None; max_interruptions: int   # 3 when the file omits it
+                retries: int; model: str | None; when: dict | None; max_interruptions: int; network_domains: list[str]   # max_interruptions: 3 when the file omits it; network_domains: hosts this task may reach under srt (17A), [] when none
 ```
 
 - **Fields.** `GateSpec`, `RunSpec`, `OnFail` and `HelperPolicy` are defined in [section 18](../shared/18-shared-contracts.md). `Policy` and `Defaults` are not in section 18, so their fields are these, as in `types.py`:

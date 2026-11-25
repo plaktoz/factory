@@ -90,8 +90,9 @@ class CommandAdapter:
         return "python", runner, str(ctx.worktree)
 
     def _settings(self, ctx: TaskContext, folder: Path) -> Path:
+        # Only this task's own hosts go in; a task with none gets the empty allowance (module 9, module 17A `network`).
         path = folder / "srt-settings.json"
-        write_private(path, json.dumps(sandbox.srt_settings(ctx.worktree, ctx.task_dir)))
+        write_private(path, json.dumps(sandbox.srt_settings(ctx.worktree, ctx.task_dir, domains=ctx.network_domains)))
         return path
 
     def start(self, ctx: TaskContext, conf: HarnessConfig, log: Path) -> WorkerHandle:

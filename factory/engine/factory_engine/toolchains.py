@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from .adapters.worker.sandbox import plain_hosts
 from .config import Config
 from .errors import FactoryError
 from .types import GateContext, GateResult, GateSpec, TaskSpec
@@ -37,6 +38,8 @@ class Toolchain:
     cache_env: dict[str, str] = field(default_factory=dict)
     # The programs doctor checks, when a step is a wrapper whose argv[0] is an interpreter (a JUnit test step).
     tools: list[str] = field(default_factory=list)
+    # Per step, the registry hosts the step may reach under srt (module 17A `network`). A step not listed has none.
+    network: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -94,6 +97,19 @@ def _variant(profile: dict, worktree: Path) -> str | None:
     return None
 
 
+def _network(v: dict, where: str) -> dict[str, list[str]]:
+    """The `network` key of one variant: each step named in STEPS maps to a list of plain hostnames (module 17A). A step
+    name it does not know, or a host that is not a plain hostname, is refused at load, so no profile can widen the
+    sandbox by a typo or a wildcard."""
+    out: dict[str, list[str]] = {}
+    for step, hosts in (v.get("network") or {}).items():
+        if step not in STEPS:
+            raise FactoryError("config.invalid", f"{where}: network names step {step!r}, which is not one of {', '.join(STEPS)}",
+                               hint="key network by a step name: format, format_check, lint, test or build")
+        out[step] = plain_hosts(hosts, f"{where}.network.{step}")
+    return out
+
+
 def detect(worktree: Path, cfg: Config) -> list[Toolchain]:
     """Profiles that apply to this worktree, with their variant chosen (module 17A). A profile with no variant is
     not detected; a repo with two variants of one profile picks the first in the order the profile lists them."""
@@ -106,9 +122,10 @@ def detect(worktree: Path, cfg: Config) -> list[Toolchain]:
         if variant is None:
             continue
         v = p["variants"][variant]
+        where = f"languages/{p['name']}.yaml variant {variant}"
         found.append(Toolchain(name=p["name"], variant=variant, files=list(p.get("files") or []),
                                commands={s: list(v[s]) for s in STEPS if v.get(s) is not None}, root=worktree,
-                               tools=list(v.get("tools") or [])))
+                               tools=list(v.get("tools") or []), network=_network(v, where)))
     return found
 
 
@@ -140,7 +157,7 @@ def run_step(tc: Toolchain, step: Literal["format", "format_check", "lint", "tes
     args = cmd + ([f for f in (files or [])] if step in ("format", "lint") and files else [])
     # Under srt, like every cmd task and gate command (module 9; owner answer 2026-11-22). The environment is the minimal
     # base; the cache variables for this task are set by the adapter (module 9), not by this step's signature.
-    wrapped, folder = _sandboxed(worktree, args)
+    wrapped, folder = _sandboxed(worktree, args, tc.network.get(step, []))
     try:
         r = subprocess.run(wrapped, cwd=worktree, capture_output=True, text=True, env=_base_env())
     finally:
@@ -176,9 +193,10 @@ def _matches(path: str, globs: list[str]) -> bool:
     return any(fnmatch.fnmatch(path, g) or fnmatch.fnmatch(path, g.removeprefix("**/")) for g in globs)
 
 
-def _sandboxed(worktree: Path, args: list[str]) -> tuple[list[str], Path]:
+def _sandboxed(worktree: Path, args: list[str], domains: list[str] | None = None) -> tuple[list[str], Path]:
     """The srt command for one step, and the folder its settings file is in. The worktree is writable and the factory
-    home is denied, as for a worker. The caller removes the folder when the step is done."""
+    home is denied, as for a worker; `domains` is this step's own allowance (module 17A `network`, empty by default).
+    The caller removes the folder when the step is done."""
     import json
     import tempfile
     from .adapters.worker import sandbox
@@ -187,7 +205,7 @@ def _sandboxed(worktree: Path, args: list[str]) -> tuple[list[str], Path]:
     home_tmp.mkdir(parents=True, exist_ok=True)
     folder = Path(tempfile.mkdtemp(prefix="fmt-", dir=home_tmp))
     settings = folder / "srt-settings.json"
-    settings.write_text(json.dumps(sandbox.srt_settings(worktree, folder)))
+    settings.write_text(json.dumps(sandbox.srt_settings(worktree, folder, domains=list(domains or []))))
     return sandbox.srt_command(sandbox.require_srt(), settings, args), folder
 
 
@@ -249,7 +267,8 @@ def language_tasks(worktree: Path, cfg: Config, step: str, changed: list[str]) -
         out = "test.junit.xml" if step == "test" else None
         tasks.append(TaskSpec(id=f"{step}-{tc.name}", skill=None, cmd=tc.commands[step], run=None, scope=[],
                               deny=[], needs=[], helpers=HelperPolicy("off", 0, [], None), out=out,
-                              timeout_minutes=30, retries=0, model=None, when=None))
+                              timeout_minutes=30, retries=0, model=None, when=None,
+                              network_domains=list(tc.network.get(step, []))))
     return tasks
 
 
