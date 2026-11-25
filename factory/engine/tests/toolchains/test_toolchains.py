@@ -336,9 +336,13 @@ def test_the_typescript_test_step_is_a_node_argv_that_points_jest_junit_at_the_t
     assert "--reporters=jest-junit" in argv[2] and "'npm'" in argv[2]
 
 
-def test_the_java_python_and_go_test_steps_keep_their_shipped_argv(tmp_path):
-    w = fixture(tmp_path, {"pom.xml": "<project/>", "pyproject.toml": "[project]\n", "go.mod": "module x\n"})
-    tests = {t.name: t.commands["test"] for t in toolchains.detect(w, CFG)}
-    assert tests["java"] == ["mvn", "-q", "test"]
-    assert tests["python"] == ["pytest"]
-    assert tests["go"] == ["go", "test", "./..."]
+def test_the_python_test_step_is_a_python_argv_that_points_pytest_at_the_task_folder(tmp_path):
+    w = fixture(tmp_path, {"pyproject.toml": "[project]\n"})
+    argv = toolchains.detect(w, CFG)[0].commands["test"]
+    assert argv[:2] == ["python3", "-c"]
+    assert "FACTORY_TASK_DIR" in argv[2] and "--junitxml=" in argv[2] and "test.junit.xml" in argv[2]
+
+
+def test_the_go_test_step_keeps_its_shipped_argv(tmp_path):
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    assert toolchains.detect(w, CFG)[0].commands["test"] == ["go", "test", "./..."]

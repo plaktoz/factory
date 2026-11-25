@@ -426,3 +426,59 @@ def test_the_typescript_test_argv_refuses_to_run_without_a_task_folder(tmp_path)
     env.pop("FACTORY_TASK_DIR", None)
     r = subprocess.run(_typescript_test_argv(), env=env, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the Python test step writes a JUnit file through the same mechanism, with the real pytest ----
+
+def _profile_test_argv(language: str, variant: str) -> list[str]:
+    import yaml
+    kit = Path(__file__).resolve().parents[3] / "languages" / f"{language}.yaml"
+    return yaml.safe_load(kit.read_text())["variants"][variant]["test"]
+
+
+needs_pytest = pytest.mark.skipif(shutil.which("pytest") is None, reason="pytest is not on PATH")
+
+
+def _pytest_project(worktree: Path, body: str) -> None:
+    (worktree / "pyproject.toml").write_text("[project]\nname = 'tmpproj'\n")
+    (worktree / "test_sample.py").write_text(body)
+
+
+@needs_srt
+@needs_pytest
+def test_the_python_test_argv_writes_a_junit_file_into_the_task_folder_under_srt(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    """The profile's own argv, run as a cmd task runs (CommandAdapter, under srt), with the real pytest on a temp project
+    outside the repo. The report lands in the task's work folder, where the engine globs *.junit.xml, and the worktree
+    gets no xml."""
+    from factory_engine import gates
+    _pytest_project(worktree, "def test_a():\n    assert 1 + 1 == 2\n\ndef test_b():\n    assert True\n")
+    ctx = cmd_ctx(cmd=_profile_test_argv("python", "ruff"))
+    result, log = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "ok", log.read_text()
+    report = task_dir / "test.junit.xml"
+    assert report.is_file()
+    assert gates.parse_junit([report]).total == 2
+    assert not list(worktree.rglob("*.xml"))
+
+
+@needs_srt
+@needs_pytest
+def test_a_failing_python_test_run_exits_one_and_still_leaves_its_report(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    from factory_engine import gates
+    _pytest_project(worktree, "def test_a():\n    assert True\n\ndef test_b():\n    assert 1 == 2\n")
+    ctx = cmd_ctx(cmd=_profile_test_argv("python", "ruff"))
+    result, _ = run(CommandAdapter(dict(os.environ)), ctx, tmp_path)
+    assert result.exit == "failed" and result.exit_code == 1
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 2 and parsed.failed == ["test_b"]
+
+
+def test_the_python_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    """Without FACTORY_TASK_DIR the step exits 2 and runs no test, so the report cannot land in the worktree."""
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("python", "ruff"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+    assert not list(tmp_path.rglob("*.xml"))

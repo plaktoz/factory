@@ -8,5 +8,11 @@ variants:
     format:       [ruff, format]
     format_check: [ruff, format, --check]
     lint:         [ruff, check]
-    test:         [pytest]
+    # A JUnit report, because the engine's test-report gate reads JUnit only (module 5). A command runs with no shell, so
+    # python3 reads FACTORY_TASK_DIR (set for a cmd task) and execs pytest with --junitxml pointing there; the engine
+    # reads *.junit.xml in that folder. pytest keeps its own exit code (1 for a failed test), and the file lands anyway.
+    test:
+      - python3
+      - -c
+      - "import os,sys,shutil\nd=os.environ.get('FACTORY_TASK_DIR')\nif not d:\n    sys.stderr.write('FACTORY_TASK_DIR is not set\\n');sys.exit(2)\np=shutil.which('pytest')\nif not p:\n    sys.stderr.write('pytest: command not found\\n');sys.exit(127)\nos.execv(p,['pytest','--junitxml='+os.path.join(d,'test.junit.xml')])"
     build:        []
