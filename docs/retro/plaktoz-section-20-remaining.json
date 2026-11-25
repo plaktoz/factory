@@ -1,0 +1,35 @@
+{
+  "task": "section-20-remaining",
+  "branch": "plaktoz/section-20-remaining",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 6,
+  "lines": {
+    "product": 445,
+    "spec": 7,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "items-59-60-section-20-remaining"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
