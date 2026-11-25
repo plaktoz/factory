@@ -210,6 +210,7 @@ stages:
 - **Review.** Two review skills, as bug-fix does. `no-blocking-findings` blocks on a medium or high finding, and a finding sends the run back to `implement` once.
 - **No architecture stage.** Module 11's architecture stage is not in this list. Its trigger rule is not evaluated by any engine code, and no code turns a skill's architect packet into a decision file (`decisions.request` is called only for the triage and approval templates). A feature that needs an architecture choice cannot get one from this workflow until the owner decides how the rule and the packet are built.
 - **Merge.** Feature is not in `auto.workflows`, so every feature pull request needs human review (module 13). Phase 1 keeps it that way.
+- **When a loop runs out.** Each `on_fail`, `on_conflict` and `on_reject` edge counts its own loops. When a loop would pass its `max`, the run is blocked for a person, with the reason naming the edge and its limit (`rework.py` `_go`). The `propose` approval has no limit: a rework answer goes to `propose` again, as the approval stop is always a person's choice.
 - **Test.** `test_feature_matches_the_owner_decided_shape` and `test_feature_has_no_architecture_stage` (`factory/engine/tests/workflow/test_workflow.py`) check the shape. `test_built_in_workflow_loads_without_problems[feature]` checks that it loads. `test_a_request_with_the_word_add_routes_to_the_shipped_feature_workflow` (`tests/intake/test_intake.py`) checks that the keyword route now loads. The verify stage's JUnit gate has no test here, because it is not in the file.
 
 **Plugins**
@@ -221,7 +222,7 @@ A plugin is a folder in `.factory/config/plugins/` with one manifest. `factory p
 name: frontend-review
 version: 0.1.0
 requires: {skills: [impeccable]}         # must be in skills.lock
-applies_to: [bug-fix]                     # goto fix exists only in bug-fix; feature and new-app have no stage list yet
+applies_to: [bug-fix]                     # goto fix exists only in bug-fix; feature has no fix stage and new-app has no stage list yet
 when: {changed_paths: ["web/**"]}        # skipped if no UI files changed
 insert:
   after: verify
@@ -385,12 +386,15 @@ class TaskSpec: id: str; skill: str | None; cmd: list[str] | None; run: RunSpec 
   - `Defaults`: `retries`, `timeout_minutes`, `checkpoint_every_minutes` and `max_restarts`, the `defaults:` key. Each has the value in the example above when a file omits it.
 - **Join-time keys.** `regenerate_at_join` lists files that are not joined from task changes, such as lockfiles and generated code. At each join, a task's edits to them are dropped from its diff. `join_cmd` is a command, as a list, that runs once after the last task joins, and only when `regenerate_at_join` is not empty. If it exits 0, the listed files are staged and committed as `chore: regenerate lockfiles at join`. If it exits non-zero, nothing is committed, and the join still succeeds. `shared_files` maps a file to the task that owns it. Load checks that the owner is a task, and a listed file clears the overlap check. The engine does not order the other tasks after the owner, so a workflow that needs that order must also add `needs`.
 
-- **Run and test:** `pytest factory/engine/tests/workflow` against the built-in workflows that ship in phase 1a (`_triage`, bug-fix, chore) and broken fixtures; `factory plugins enable frontend-review --json`.
+- **Run and test:** `pytest factory/engine/tests/workflow` against the built-in workflows that ship (`_triage`, bug-fix and chore in phase 1a, feature in phase 1b) and broken fixtures; `factory plugins enable frontend-review --json`.
 - **Errors:** all fail fast at load or enable; no run starts on an invalid workflow.
 
 Acceptance criteria:
 
-- [ ] All built-in workflows and `_triage` load without problems. (test: factory/engine/tests/workflow/test_workflow.py::test_built_in_workflow_loads_without_problems, parametrised over `_triage`, bug-fix, chore and feature. Not ticked: new-app and research have no file in `factory/workflows/` yet, so "all" is not testable)
+- [x] The feature workflow loads with the four stages in order (propose, implement, verify, review), `propose` is a human approval that rejects back to `propose`, and `implement` and `review` have the loop counts in the feature section. (test: factory/engine/tests/workflow/test_workflow.py::test_feature_matches_the_owner_decided_shape, ::test_feature_has_no_architecture_stage)
+- [x] A request whose keyword triage picks `feature` resolves to a workflow that loads, and `feature` is offered at a triage stop. (test: factory/engine/tests/intake/test_intake.py::test_a_request_with_the_word_add_routes_to_the_shipped_feature_workflow, ::test_triage_candidates_offer_only_workflows_that_load; factory/engine/tests/engine/test_engine.py::test_a_triage_stop_offers_only_workflows_that_load)
+- [ ] A feature run whose verify stage's report has zero test cases blocks with `gate.no_test_results`. (not ticked: the shipped verify stage has no test-report gate, because `scripts/check` writes no JUnit file; the per-project mapping that would give it one is the follow-up in the feature section, and the gate's own test is in test_verify_report.py)
+- [ ] All built-in workflows and `_triage` load without problems. (not ticked: new-app and research have no file in `factory/workflows/` yet, so "all" is not testable. The four that exist load: factory/engine/tests/workflow/test_workflow.py::test_built_in_workflow_loads_without_problems, parametrised over `_triage`, bug-fix, chore and feature)
 - [x] A cycle in `needs`, an unknown skill, an unknown check or an unknown `goto` stage are each reported with their path. (test: factory/engine/tests/workflow/test_workflow.py::test_a_needs_cycle_between_stages_is_reported_with_its_path, ::test_a_needs_cycle_between_tasks_is_reported_with_its_stage, ::test_an_unknown_skill_is_reported_with_its_path, ::test_an_unknown_check_is_reported_with_its_path, ::test_an_unknown_goto_is_reported_with_its_path)
 - [x] Two tasks that can run together with overlapping write scopes fail unless one `needs` the other or the file is in `shared_files`. (test: factory/engine/tests/workflow/test_workflow.py::test_two_parallel_tasks_with_overlapping_scopes_fail, ::test_a_needs_between_the_tasks_lifts_the_overlap, ::test_a_literal_file_in_shared_files_is_exempt)
 - [ ] A plugin whose `insert` is `after: verify` puts its stage immediately after `verify` in the merged workflow's stage list, records `plugin:<name>` as that stage's `source` in `run.json`, and leaves the workflow file on disk byte-for-byte unchanged. (not ticked: plugins are phase 1b; no plugin loader exists and tests/workflow has no plugin test)
