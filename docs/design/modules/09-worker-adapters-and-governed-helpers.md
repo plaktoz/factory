@@ -2,7 +2,7 @@
 
 Part of the [phase 1 design](../phase-1.md#module-map). Build wave: 2. Contracts and acceptance criteria are in this file; shared types are in [section 18](../shared/18-shared-contracts.md). Terms such as run, stage, task, attempt and rework are defined in the [glossary](../phase-1.md#2-glossary).
 
-Every worker adapter implements one contract, so adding a harness changes no workflow file. Phase 1 ships the Claude adapter; the Codex adapter and its design are in `docs/design/phase-2.md`.
+Every worker adapter implements one contract, so adding a harness changes no workflow file. Phase 1 ships the Claude adapter, and a repo may choose the Codex adapter (`harness: codex`, module 3); its design and open proofs are in `docs/design/phase-2.md` P2-1.
 
 ```text
 run(task) -> {status, artifact_path, usage}

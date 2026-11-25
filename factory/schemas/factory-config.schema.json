@@ -16,7 +16,8 @@
     },
     "harness": {
       "enum": [
-        "claude"
+        "claude",
+        "codex"
       ]
     },
     "concurrency": {

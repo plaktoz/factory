@@ -12,7 +12,7 @@ The factory is a reusable kit that turns a request into reviewed work through a 
 
 **Vision**
 
-- Not bound to an OS, an LLM or a harness. Phase 1 runs Claude on macOS and Linux. Codex and Windows follow in phase 2 (`docs/design/phase-2.md`).
+- Not bound to an OS, an LLM or a harness. Phase 1 runs Claude on macOS and Linux; a repo may also choose Codex (owner decision 2026-11-24), whose remaining proofs are in `docs/design/phase-2.md` P2-1. Windows follows in phase 2.
 - Minimal intrusion: a repo gets the `factory/` kit, the factory skills and a `.factory/` folder. An update replaces `factory/` and the skill shims only.
 - Plugin-style workflows: stages adapt to the kind of work (bug fix, feature, new app, chore, research), and tasks inside a stage run in parallel.
 - The engine runs outside any LLM harness and decides everything that can be decided by code.
@@ -52,7 +52,7 @@ Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-depe
 
 | Area | Phase 1a (walking skeleton) | Phase 1b |
 | --- | --- | --- |
-| Harness | Claude, plus `CommandAdapter` and the fakes | Codex may be chosen (owner decision 2026-11-24; not built) |
+| Harness | Claude, plus `CommandAdapter` and the fakes | Codex may be chosen (owner decision 2026-11-24): `harness: codex` builds the Codex adapter; its live proofs are open in P2-1 |
 | Requests | CLI, markdown inbox and GitHub issues | - |
 | Workflows | `_triage`, bug-fix, chore | feature, new-app, research |
 | Gates, rework, human stops, notes, delivery, tokens, housekeeping | All | - |
@@ -78,7 +78,7 @@ flowchart TB
     st["State<br/>stage, task status"]
   end
   wl --> trk["Tracker adapter<br/>file, GitHub issues"]
-  sch --> wk["Worker adapters<br/>Claude; Codex in phase 2"]
+  sch --> wk["Worker adapters<br/>Claude; Codex by repo choice"]
   st --> sk["Skill resolution<br/>override, then locked upstream, then own"]
   wk --> wt["Task worktrees<br/>one per task, in parallel"]
 ```
@@ -127,7 +127,7 @@ Every request follows this path. A stage repeats until its gates pass, and a fai
 | Dashboard access | Localhost, Host and Origin checks, and a per-session token. |
 | Worker isolation | Tool allowlist, scrubbed environment, no GitHub token, and Claude Code's own sandbox on for every worker: reads of secrets denied, writes allowed only to the worktree and `$FACTORY_TASK_DIR`. `doctor` runs a canary each time. The factory writes no sandbox wrapper of its own. Residual risk stated in [module 9](modules/09-worker-adapters-and-governed-helpers.md). |
 | Operating systems | macOS and Linux in phase 1. Windows in phase 2. |
-| Harnesses | Claude only in phase 1. Codex is phase 2, and the adapter contract stays harness-neutral so it adds no workflow change. |
+| Harnesses | Claude by default. A repo may choose Codex (`harness: codex`, owner decision 2026-11-24); its live proofs are open in [phase 2](phase-2.md) P2-1. The adapter contract stays harness-neutral, so Codex adds no workflow change. |
 | Phases | Phase 1a is a walking skeleton; phase 1b adds the rest (see Phase split). |
 
 ### Shared sections

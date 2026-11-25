@@ -199,6 +199,16 @@ def test_codex_harness_resolves(tmp_path):
     assert (h.command, h.model, h.env) == ("codex", "gpt-5", {"OPENAI_API_KEY": "k"})
 
 
+def test_a_repo_config_with_harness_codex_validates():
+    validate({"base_branch": "main", "tracker": "github", "harness": "codex"}, "factory-config", file="factory.yaml")
+
+
+def test_a_repo_config_with_an_unknown_harness_names_both_accepted_ones():
+    with pytest.raises(FactoryError) as e:
+        validate({"base_branch": "main", "tracker": "github", "harness": "gemini"}, "factory-config", file="factory.yaml")
+    assert e.value.code == "config.invalid" and "claude" in e.value.message and "codex" in e.value.message
+
+
 def test_unknown_harness_fails_fast_naming_the_accepted_ones(tmp_path):
     home = write_home(tmp_path, "harnesses:\n  gemini:\n    command: gemini\n")
     cfg = load_config(None, env={"FACTORY_HOME": str(home)})
