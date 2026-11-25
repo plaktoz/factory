@@ -1,0 +1,42 @@
+{
+  "task": "ship-feature-workflow",
+  "branch": "plaktoz/ship-feature-workflow",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 2,
+  "lines": {
+    "product": 170,
+    "spec": 19,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-58-ship-feature"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "2026-11-24-the-feature-workflow-stage-list",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "e32977b40"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

@@ -470,16 +470,32 @@ def test_triage_candidates_offer_only_workflows_that_load(repo, cfg):
     offered = [wid for wid, _, _ in triage_candidates(make_request(title="Something vague"), loads)]
     assert offered == sorted(offered)  # equal keyword hits (none) fall back to workflow id order
     assert offered and all(loads(wid) for wid in offered)
-    # the shipped kit has bug-fix and chore only; feature, new-app and research are phase 1b and do not load yet
-    assert set(offered) == {"bug-fix", "chore"}
-    assert set(TYPE_WORKFLOW.values()) - set(offered) == {"feature", "new-app", "research"}
+    # the shipped kit has bug-fix, chore and feature (ADR 2026-11-24-the-feature-workflow-stage-list); new-app and
+    # research are phase 1b and do not load yet
+    assert set(offered) == {"bug-fix", "chore", "feature"}
+    assert set(TYPE_WORKFLOW.values()) - set(offered) == {"new-app", "research"}
 
 
 def test_a_workflow_that_does_not_load_is_never_offered_even_when_its_keywords_match(repo, cfg):
     from factory_engine.triage import triage_candidates
+    req = make_request(title="Scaffold a new app from scratch and investigate the options")  # new-app, research words
+    ids = [wid for wid, _, _ in triage_candidates(req, _kit_loads(repo, cfg))]
+    assert "new-app" not in ids and "research" not in ids
+
+
+def test_the_shipped_feature_workflow_is_offered_first_for_a_feature_request(repo, cfg):
+    from factory_engine.triage import triage_candidates
     req = make_request(title="Add support for dark mode and implement the toggle")  # feature keywords only
     ids = [wid for wid, _, _ in triage_candidates(req, _kit_loads(repo, cfg))]
-    assert "feature" not in ids
+    assert ids[0] == "feature"
+
+
+def test_a_request_with_the_word_add_routes_to_the_shipped_feature_workflow(repo, cfg):
+    """The route that failed before item 58: keyword triage picked `feature`, and loading it raised config.invalid."""
+    from factory_engine.workflow import load_workflow
+    r = triage_rules(make_request(title="Add a CSV export"), cfg)
+    assert r.workflow == "feature"
+    assert load_workflow(repo, cfg, r.workflow).name == "feature"
 
 
 def test_the_better_keyword_match_is_offered_first(cfg):

@@ -8,5 +8,11 @@ variants:
     format:       [npx, --no-install, prettier, --write]
     format_check: [npx, --no-install, prettier, --check]
     lint:         [npx, --no-install, eslint]
-    test:         [npm, test]
+    # A JUnit report, because the engine's test-report gate reads JUnit only (module 5). A command runs with no shell, so
+    # node reads FACTORY_TASK_DIR (set for a cmd task) and hands jest-junit its path; the engine reads *.junit.xml there.
+    # The project needs jest and jest-junit in its devDependencies; `npm test` is its own script, run with the reporters added.
+    test:
+      - node
+      - -e
+      - "const d=process.env.FACTORY_TASK_DIR;if(!d){console.error('FACTORY_TASK_DIR is not set');process.exit(2)}const r=require('child_process').spawnSync('npm',['test','--','--reporters=default','--reporters=jest-junit'],{stdio:'inherit',env:{...process.env,JEST_JUNIT_OUTPUT_FILE:require('path').join(d,'test.junit.xml')}});process.exit(r.status===null?1:r.status)"
     build:        [npm, run, build]
