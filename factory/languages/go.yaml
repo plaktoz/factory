@@ -27,24 +27,31 @@ variants:
         except FileNotFoundError:
             sys.stderr.write("go: command not found\n")
             sys.exit(127)
-        status, text, pkgs, pkg_status, pkg_text = {}, {}, [], {}, {}
+        status, text, pkgs, pkg_status, pkg_text, build_text = {}, {}, [], {}, {}, {}
         for line in proc.stdout:
             try:
                 e = json.loads(line)
             except ValueError:
                 sys.stdout.write(line)
                 continue
-            pkg, test, act = e.get("Package") or e.get("ImportPath") or "", e.get("Test"), e.get("Action")
+            if "ImportPath" in e:
+                if e.get("Action") == "build-output":
+                    sys.stdout.write(e.get("Output", ""))
+                    build_text.setdefault(e["ImportPath"], []).append(e.get("Output", ""))
+                continue
+            pkg, test, act = e.get("Package") or "", e.get("Test"), e.get("Action")
             if pkg and pkg not in pkgs:
                 pkgs.append(pkg)
-            if act in ("output", "build-output"):
+            if act == "output":
                 sys.stdout.write(e.get("Output", ""))
                 (text if test else pkg_text).setdefault((pkg, test) if test else pkg, []).append(e.get("Output", ""))
-            elif act in ("pass", "fail", "skip", "build-fail"):
+            elif act in ("pass", "fail", "skip"):
                 if test:
                     status[(pkg, test)] = act
                 else:
-                    pkg_status[pkg] = "fail" if act == "build-fail" else act
+                    pkg_status[pkg] = act
+                    if e.get("FailedBuild"):
+                        pkg_text.setdefault(pkg, []).extend(build_text.get(e["FailedBuild"], []))
         rc = proc.wait()
         cases = []
         for (pkg, test), act in status.items():
