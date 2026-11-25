@@ -18,6 +18,7 @@ from .paths import check_not_existing, check_outside_repo, render
 
 RUN_MARKER = ".factory-run.json"
 # Paths the engine never commits: the task's work folder and the generated shims (module 7).
+HOOK_OUTPUT_LINES = 200  # the same tail a gate keeps (gates.TAIL_LINES)
 NEVER_COMMITTED = (".factory-run.json", ".claude/skills/factory-", ".agents/skills/factory-")
 
 
@@ -236,7 +237,7 @@ def join(run_worktree: Path, tasks: list[TaskBranch], *, regenerate: list[str],
         r = _commit_with_hook_retry(run_worktree, f"task({task.task_id}): joined from {task.branch}")
         if r.returncode != 0:
             git(run_worktree, "reset", "--hard", start, check=False)
-            return JoinResult(ok=False, conflict_files=[], hook_failed=True, commits=[])
+            return JoinResult(ok=False, conflict_files=[], hook_failed=True, commits=[], hook_output=_hook_output(r))
         commits.append(git(run_worktree, "rev-parse", "HEAD").stdout.strip())
     if join_cmd and regenerate:
         r = subprocess.run(join_cmd, cwd=run_worktree, capture_output=True, text=True)
@@ -246,6 +247,12 @@ def join(run_worktree: Path, tasks: list[TaskBranch], *, regenerate: list[str],
                 "commit", "-m", "chore: regenerate lockfiles at join", check=False)
             commits.append(git(run_worktree, "rev-parse", "HEAD").stdout.strip())
     return JoinResult(ok=True, conflict_files=[], hook_failed=False, commits=commits)
+
+
+def _hook_output(r: subprocess.CompletedProcess) -> str:
+    """What a failed `git commit` printed: stderr, then stdout, the last HOOK_OUTPUT_LINES lines (what a gate keeps)."""
+    text = "\n".join(part.strip() for part in (r.stderr, r.stdout) if part and part.strip())
+    return "\n".join(text.splitlines()[-HOOK_OUTPUT_LINES:])
 
 
 def _commit_with_hook_retry(worktree: Path, message: str) -> subprocess.CompletedProcess:

@@ -95,7 +95,7 @@ def checkpoint(worktree: Path, task_id: str, n: int) -> str | None   # sha, or N
 def changed_files(worktree: Path, base_ref: str) -> list[str]
 def join(run_worktree: Path, tasks: list[TaskBranch], *, regenerate: list[str],   # TaskBranch: branch, task_base, in needs order
          join_cmd: list[str] | None) -> JoinResult                 # ok, or conflict with files; worktree reset on conflict;
-                                                            # repo hooks run on each task commit, failure -> hook_failed
+                                                            # repo hooks run on each task commit, failure -> hook_failed with hook_output
 def sync_base(run_worktree: Path, base: str) -> SyncResult  # ok, or conflict with files
 def push(worktree: Path, branch: str) -> None                      # runs pre-push hooks; failure raises git.hook_failed
 def snapshot_kit(repo: Path, base_ref: str, home: Path) -> str     # git archive of factory/ and .factory/config/ into kits/<hash>; returns the hash
@@ -123,7 +123,7 @@ class PullRequests(Protocol):
 Implementations: `FileTracker`, `GitHubTracker` (`gh`), `GitHubPullRequests` (`gh`), plus `FakeTracker` and `FakePullRequests` for other modules' tests.
 
 - **Run and test:** `pytest factory/engine/tests/gitops` against temp repos with a local bare remote; GitHub adapters against a recorded `gh` stub.
-- **Errors:** `index.lock` and network errors are transient. A rejected push gets a base sync and one retry, then needs a human. Expired auth needs a human, with `gh auth login` as the hint. An existing path fails fast. A conflict is returned, not raised. A repo pre-push hook that exits non-zero stops the push before any ref is sent; `push` raises `git.hook_failed` with the hook's output, and the engine routes it as rework through the last stage's `on_fail` edge (module 8). A refusal that names a ref (` ! [rejected]`) is `git.push_rejected`, not a hook failure. The join returns a failing task-commit hook as `hook_failed` in `JoinResult`, which carries no hook output (a shared contract, section 18, left for the owner). `gitops.reset_dependents` recreates task worktrees without the run marker, and no engine code calls it today.
+- **Errors:** `index.lock` and network errors are transient. A rejected push gets a base sync and one retry, then needs a human. Expired auth needs a human, with `gh auth login` as the hint. An existing path fails fast. A conflict is returned, not raised. A repo pre-push hook that exits non-zero stops the push before any ref is sent; `push` raises `git.hook_failed` with the hook's output, and the engine routes it as rework through the last stage's `on_fail` edge (module 8). A refusal that names a ref (` ! [rejected]`) is `git.push_rejected`, not a hook failure. The join returns a failing task-commit hook as `hook_failed` in `JoinResult`, with the hook's output in `JoinResult.hook_output` (stderr then stdout, the last 200 lines; a shared contract, section 18, owner decision 2026-11-25). The engine writes that output into the feedback record (module 8). `gitops.reset_dependents` recreates task worktrees without the run marker, and no engine code calls it today.
 
 Acceptance criteria:
 

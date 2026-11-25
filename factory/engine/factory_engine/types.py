@@ -211,6 +211,7 @@ class JoinResult:
     conflict_files: list[str]
     hook_failed: bool
     commits: list[str]
+    hook_output: str | None = None  # the failing repo hook's output (stderr then stdout, last 200 lines); None otherwise
 
 
 @dataclass

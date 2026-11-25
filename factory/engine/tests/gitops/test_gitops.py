@@ -214,6 +214,35 @@ def test_a_failing_repo_hook_on_a_task_commit_is_returned_as_hook_failed(repo, c
     assert run(rw, "rev-parse", "HEAD") == before
 
 
+def _join_with_hook(repo, cfg, script):
+    rw = start_run(repo, cfg)
+    a = make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    hooks = Path(run(rw, "rev-parse", "--path-format=absolute", "--git-path", "hooks"))
+    hooks.mkdir(parents=True, exist_ok=True)
+    (hooks / "pre-commit").write_text(f"#!/bin/sh\n{script}\n")
+    (hooks / "pre-commit").chmod(0o755)
+    return gitops.join(rw, [a], regenerate=[], join_cmd=None)
+
+
+def test_a_failing_repo_hook_on_the_join_commit_returns_the_hooks_output(repo, cfg):
+    """Module 7 and section 18: JoinResult.hook_output holds what the failing hook printed, on stderr or stdout."""
+    r = _join_with_hook(repo, cfg, "echo 'lint: services/api.py line 1' >&2\necho 'stdout: 1 error'\nexit 1")
+    assert r.hook_failed and "lint: services/api.py line 1" in r.hook_output and "stdout: 1 error" in r.hook_output
+
+
+def test_the_join_hook_output_is_the_tail_of_a_long_output(repo, cfg):
+    r = _join_with_hook(repo, cfg, "i=0\nwhile [ $i -lt 500 ]; do echo \"line $i\" >&2; i=$((i+1)); done\n"
+                                   "echo 'ruff: command not found' >&2\nexit 1")
+    assert "ruff: command not found" in r.hook_output and "line 0" not in r.hook_output.splitlines()
+    assert len(r.hook_output.splitlines()) <= 200
+
+
+def test_a_join_that_did_not_fail_on_a_hook_has_no_hook_output(repo, cfg):
+    rw = start_run(repo, cfg)
+    a = make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    assert gitops.join(rw, [a], regenerate=[], join_cmd=None).hook_output is None
+
+
 def test_the_engine_pushes_with_repo_hooks_and_a_failing_pre_push_hook_stops_the_push(repo, cfg):
     """Acceptance (module 7): repo hooks run on the push. The checkpoint skips them; the push does not."""
     rw = start_run(repo, cfg)
