@@ -321,6 +321,26 @@ def test_a_saved_route_is_applied_once_however_many_passes_repeat_the_write(outa
     assert _types(run_dir).count("routed_back") == 1
 
 
+def test_a_saved_route_is_not_applied_to_a_wait_on_another_operation(outage):
+    """A route left in the run folder (a crash between applying it and deleting the file) must not be applied when the
+    run later waits on another operation, such as delivery. Only the feedback write's own wait applies a saved route."""
+    run_dir, _worker, eng, disk = outage
+    with _gate(BuildFailsUntil(failures=1)):
+        assert eng.run([RUN]).runs[RUN] == "retrying"
+    lock = state.acquire_lock(run_dir, "test")
+    run = state.read_run(run_dir)
+    run.infra_wait.last_error = "deliver: GitHub is unreachable"
+    state.write_run(run_dir, run, lock=lock)
+    state.release(lock)
+    assert _pending(run_dir).is_file()  # the stale route is still in the folder
+
+    disk.full = False
+    with _gate(BuildFailsUntil(failures=0)):
+        eng.run([RUN])
+    assert "routed_back" not in _types(run_dir)  # the stale route was not applied to the delivery wait
+    assert state.read_run(run_dir).loops == {}
+
+
 def test_the_saved_route_names_the_routing_and_validates_against_its_schema(outage):
     run_dir, _worker, eng, _disk = outage
     with _gate(BuildFailsUntil(failures=1)):

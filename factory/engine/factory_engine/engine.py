@@ -49,6 +49,7 @@ DELIVER, REVIEWERS = "deliver", "request reviewers"
 FEEDBACK = "feedback write"  # a rework's feedback record could not be written to disk (module 8, "Errors")
 # The same write for a red-CI rework: its route came from reading the pull request, so the next pass reads it again.
 FEEDBACK_CI = "feedback write (red CI)"
+FEEDBACK_OPERATIONS = frozenset({FEEDBACK, FEEDBACK_CI})  # the waits a saved route in pending-route.json belongs to
 
 
 @dataclass
@@ -354,13 +355,15 @@ class Engine:
             for _ in range(10_000):  # a bound, so a routing bug cannot spin forever
                 run = state.read_run(run_dir)
                 if run.status == "retrying":  # a tick's engine repeats the waited-on operation (module 6, tick table)
-                    pending = rework.read_pending_route(run_dir)
+                    pending = rework.read_pending_route(run_dir) if self._waiting_on(run) in FEEDBACK_OPERATIONS else None
                     if pending is not None:
                         # A saved route: write its record and apply it, with no check run again (module 8, "Errors").
                         self._resume_route(run, run_dir, lock, pending)
                         if state.read_run(run_dir).status == "retrying":
                             return "retrying"  # the write failed again: the next tick repeats it
                         continue
+                    # Another operation's wait (delivery, reviewers) never applies a route saved for a feedback write.
+                    rework.clear_pending_route(run_dir, lock=lock)
                     # A red-CI rework whose feedback write failed is repeated at the merge review: the route came from
                     # reading the pull request, so the next pass reads it again, and _finish would not read CI at all.
                     back_to_review = self._waiting_on(run) == FEEDBACK_CI
