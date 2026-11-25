@@ -64,6 +64,30 @@ Both files are `accepted`. They were scored as if proposed, for calibration only
 | `docs/adr/2026-11-14-cmd-task-non-zero-exit-is-a-check-failure.md` | 1 | 1 | 2 | 2 | rework |
 | | 2 | 1 | 1 | 1 | rework |
 
+## Run 7: the Consequences spread after the new anchor (task 28, 2026-11-25)
+
+Question: does the sentence PR #206 added to the Consequences anchor ("a cost listed under the chosen option counts only if Consequences repeats it or points to it") narrow the spread of 3 or 4 seen in runs 1 to 5? The strong ADR was recovered with `git show f3884af^:docs/adr/2026-11-17-wire-commands-next.md` and copied to a temp file outside the repo, with `SKILL.md` as it stands on `origin/main` (`1e1e786`). Three fresh independent agents each read only those two files, were told to treat the ADR as `proposed`, and were told to skip `precheck.py`. The ADR is `status: accepted`, so the scorers ran on the file's text, not through the precheck. None saw this brief or another score. The scores are as the scorers returned them.
+
+| File | Run | Options | Justified | Consequences | Recommendation |
+| --- | --- | --- | --- | --- | --- |
+| `docs/adr/2026-11-17-wire-commands-next.md` | 7a | 4 | 3 | 2 | rework |
+| | 7b | 4 | 4 | 2 | rework |
+| | 7c | 4 | 3 | 2 | rework |
+
+Consequences evidence, as each scorer gave it:
+
+- 7a: "Missing: a Consequences section (expected after L24, before L26 Source). The costs at L23 sit under the chosen option, and nothing repeats them or points to them, so they do not count." The only commitment on later work is in Decision, "The remaining module 16 criteria come after it."
+- 7b: "missing: a Consequences section (expected after L24, before Source at L26). The deferral of four module 16 items and the engine-loop full-suite requirement appear only under the chosen option (L23). Under the 2026-11-25 owner rule they do not count unless Consequences repeats them or points to them."
+- 7c: "Missing: a Consequences section, which should come after Options considered (after L24). The costs sit under the chosen option (L23). The rule counts them only if Consequences repeats them or points to them, and there is no such section."
+
+Result:
+
+- **Spread of Consequences: one value, 2, in 3 of 3.** The check passes on the measure the task set (runs 1 to 5 gave 3 or 4).
+- **The recommendation did not vary between runs, but it moved against the earlier runs.** It is `rework` on 3 of 3, where runs 1 to 5 gave `needs-changes` on 4 and `ready` on 1. The cause is the level, not the spread: the ADR has no Consequences section, so with the new sentence the costs under the chosen option no longer count. The score fell from 3 or 4 to 2, and the lowest-score rule moves the file to `rework`.
+- **Justified still moves, 3 or 4.** It is 3, 4, 3 here. It did not decide the recommendation in this run, because Consequences was lower. 7a and 7c named the same gap: no opened file, test or command for the 2026-11-17 observation, and no reason why the wiring must come before the four module 16 items. 7b scored 4 on the same text, from the quote "Both were checked by running the engine." What stays ambiguous is whether a sentence that says a check was run, with no output cited, counts as evidence for a 4.
+- The anchor removed the variance on Consequences for this ADR. It did not touch the variance on Justified. This is one ADR and three scorers; it does not show that the anchor is steady on an ADR that has a thin Consequences section, where 3 against 4 is a judgment about how much to repeat.
+- The anchor was not changed in this run.
+
 ## What this shows
 
 - The weak ADR scored `rework` on both runs. The recommendation is stable for it.
