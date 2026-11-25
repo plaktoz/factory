@@ -39,7 +39,7 @@ def test_rework_counts_only_the_pull_requests_own_lines_that_a_later_commit_rewr
     (repo / "factory/x.py").write_text("a\nb1\nb2-fixed\nb3\nb4\n")
     _git(repo, "commit", "-q", "-am", "fix")
     end = _git(repo, "rev-parse", "HEAD")
-    monkeypatch.chdir(repo)
+    monkeypatch.setattr(sp, "REPO", repo)
     assert sp.rework(first, end) == (4, 1)
     assert sp.rework(second, end) == (2, 0)
     assert sp.rework(first, first) == (4, 0)
@@ -119,10 +119,41 @@ def test_a_file_moved_on_main_is_followed_and_a_deleted_file_counts_as_reworked(
     _git(repo, "mv", "factory/y.py", "factory/z.py")
     _git(repo, "commit", "-q", "-m", "move again")
     end = _git(repo, "rev-parse", "HEAD")
-    monkeypatch.chdir(repo)
+    monkeypatch.setattr(sp, "REPO", repo)
     assert sp.rework(merge, end) == (1, 0)
     _git(repo, "rm", "-q", "factory/z.py")
     _git(repo, "commit", "-q", "-m", "delete")
     gone = _git(repo, "rev-parse", "HEAD")
     assert sp.rework(merge, gone) == (1, 1)
 
+
+
+def test_every_gh_call_names_the_repository_so_the_script_runs_from_any_folder(monkeypatch):
+    calls = []
+
+    def recording_runner(*args):
+        calls.append(args)
+        return "[]" if args[0] == "gh" else ""
+
+    monkeypatch.setattr(sp, "run", recording_runner)
+    slug = "plaktoz/factory"
+    sp.spec_issues(slug)
+    sp.merged_prs(slug)
+    sp.defects(slug)
+    gh_calls = [c for c in calls if c[0] == "gh"]
+    assert len(gh_calls) == 3
+    for call in gh_calls:
+        i = call.index("-R")
+        assert call[i:i + 2] == ("-R", slug), call
+
+
+def test_the_repository_is_read_from_the_origin_remote_in_https_or_ssh_form(tmp_path):
+    repo = tmp_path / "r"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "remote", "add", "origin", "https://github.com/plaktoz/factory.git")
+    assert sp.repo_slug(repo) == "plaktoz/factory"
+    _git(repo, "remote", "set-url", "origin", "git@github.com:plaktoz/factory.git")
+    assert sp.repo_slug(repo) == "plaktoz/factory"
+    _git(repo, "remote", "set-url", "origin", "https://github.com/plaktoz/factory")
+    assert sp.repo_slug(repo) == "plaktoz/factory"
