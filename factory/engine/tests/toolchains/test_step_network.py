@@ -53,11 +53,11 @@ def factory_home(tmp_path, monkeypatch) -> Path:
     return home
 
 
-def _profile(worktree: Path, body: str) -> None:
-    """A repo profile in the worktree's override folder, which replaces the shipped java profile for this test."""
+def _profile(worktree: Path, body: str, name: str = "java") -> None:
+    """A repo profile in the worktree's override folder, which replaces the shipped profile of that name for this test."""
     d = worktree / ".factory" / "config" / "languages"
     d.mkdir(parents=True, exist_ok=True)
-    (d / "java.yaml").write_text(body)
+    (d / f"{name}.yaml").write_text(body)
 
 
 JAVA_WITH = """name: java
@@ -67,6 +67,16 @@ variants:
   maven:
     when: {file: pom.xml}
     test: [mvn, -q, test]
+    network: {test: %s}
+"""
+
+GO_WITH = """name: go
+detect: {any_file: [go.mod]}
+files: ["**/*.go"]
+variants:
+  go:
+    when: {file: go.mod}
+    test: [go, test, ./...]
     network: {test: %s}
 """
 
@@ -232,6 +242,97 @@ def test_a_profile_without_a_network_key_gets_no_hosts(tmp_path):
     assert all(tc.network == {} for tc in toolchains.detect(w, CFG))
 
 
+# ---- the mach grant (owner-verified 2026-11-25): a step names the one macOS Mach service it needs, and no other ----------
+
+@pytest.mark.parametrize("service", [
+    "com.apple.trustd.agent.extra",          # a longer name
+    "com.apple.SecurityServer",              # another service
+    "*",                                     # everything
+    "com.apple.*",                           # a wildcard
+    "",                                      # empty
+    42,                                      # not a string
+])
+def test_a_mach_service_other_than_trustd_is_refused_at_load(tmp_path, service):
+    """The only Mach grant a step may name is com.apple.trustd.agent (Go's TLS trust, verified 2026-11-25). Any other
+    service, a wildcard or a non-string is refused with config.invalid, so a profile cannot widen the sandbox."""
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    _profile(w, GO_WITH % ("{allow: [proxy.golang.org], mach: [%s]}" % (f'"{service}"' if isinstance(service, str) else service)),
+             name="go")
+    with pytest.raises(FactoryError) as e:
+        toolchains.detect(w, CFG)
+    assert e.value.code == "config.invalid"
+
+
+def test_a_mach_list_that_is_not_a_list_is_refused_at_load(tmp_path):
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    _profile(w, GO_WITH % "{allow: [proxy.golang.org], mach: com.apple.trustd.agent}", name="go")
+    with pytest.raises(FactoryError) as e:
+        toolchains.detect(w, CFG)
+    assert e.value.code == "config.invalid"
+
+
+def test_a_step_key_other_than_allow_or_mach_is_refused_at_load(tmp_path):
+    w = fixture(tmp_path, {"go.mod": "module x\n"})
+    _profile(w, GO_WITH % "{allow: [proxy.golang.org], bogus: [x]}", name="go")
+    with pytest.raises(FactoryError) as e:
+        toolchains.detect(w, CFG)
+    assert e.value.code == "config.invalid"
+
+
+def test_the_shipped_go_test_step_names_the_proxy_and_the_trustd_grant_and_nothing_else():
+    """The four hosts of the first draft were measured on 2026-11-25: only proxy.golang.org is needed (with the grant)."""
+    import yaml
+    doc = yaml.safe_load((KIT / "go.yaml").read_text())
+    assert doc["variants"]["go"]["network"] == {"test": {"allow": ["proxy.golang.org"], "mach": ["com.apple.trustd.agent"]}}
+
+
+def test_the_go_test_task_settings_carry_the_grant_and_the_host(tmp_path, worktree, task_dir):
+    folder = tmp_path / "attempt"
+    folder.mkdir()
+    ctx = _ctx(worktree, task_dir, ["go", "test", "./..."], ["proxy.golang.org"], mach=["com.apple.trustd.agent"])
+    s = _settings_for(CommandAdapter({}), ctx, folder)
+    assert s["network"]["allowedDomains"] == ["proxy.golang.org"]
+    assert s["network"]["allowMachLookup"] == ["com.apple.trustd.agent"]
+
+
+def test_another_steps_settings_carry_no_grant_and_no_host(tmp_path, worktree, task_dir):
+    """The grant rides only with the step that names it. Another command, built by the same code, gets neither."""
+    adapter = CommandAdapter({})
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    go = _settings_for(adapter, _ctx(worktree, task_dir, ["go", "test", "./..."], ["proxy.golang.org"],
+                                     mach=["com.apple.trustd.agent"]), a)
+    other = _settings_for(adapter, _ctx(worktree, task_dir, ["npm", "test"], []), b)
+    assert "allowMachLookup" not in other["network"] or other["network"]["allowMachLookup"] == []
+    assert go["network"]["allowMachLookup"] == ["com.apple.trustd.agent"]
+
+
+def test_a_java_test_step_settings_carry_no_mach_grant(tmp_path, worktree, task_dir):
+    folder = tmp_path / "attempt"
+    folder.mkdir()
+    s = _settings_for(CommandAdapter({}), _ctx(worktree, task_dir, ["mvn", "-q", "test"], ["repo.maven.apache.org"]), folder)
+    assert "allowMachLookup" not in s["network"] or s["network"]["allowMachLookup"] == []
+
+
+def test_the_go_test_step_hands_its_grant_to_the_frozen_list_and_back(tmp_path):
+    """The verify stage freezes its test tasks in languages.json, so the grant must survive the round trip."""
+    from factory_engine.engine import _spec_from_doc, _spec_to_doc
+    spec = TaskSpec(id="test-go", skill=None, cmd=["go", "test", "./..."], run=None, scope=[], deny=[], needs=[],
+                    helpers=HelperPolicy("off", 0, [], None), out=None, timeout_minutes=30, retries=0, model=None,
+                    when=None, network_domains=["proxy.golang.org"], network_mach=["com.apple.trustd.agent"])
+    back = _spec_from_doc(_spec_to_doc(spec))
+    assert back.network_mach == ["com.apple.trustd.agent"] and back.network_domains == ["proxy.golang.org"]
+
+
+def test_a_frozen_list_without_the_mach_key_reads_with_no_grant():
+    from factory_engine.engine import _spec_from_doc
+    doc = {"id": "test-go", "cmd": ["go"], "scope": [], "deny": [], "needs": [],
+           "helpers": {"mode": "off", "max": 0, "split_hints": [], "timeout_minutes": None},
+           "out": "test.junit.xml", "timeout_minutes": 30, "retries": 0, "max_interruptions": 3, "network_domains": []}
+    assert _spec_from_doc(doc).network_mach == []
+
+
 # ---- the plumbing: a step's hosts reach its test task and nothing else ----------------------------------------------
 
 def test_the_java_test_task_carries_the_maven_host_and_the_other_java_steps_do_not(tmp_path):
@@ -269,11 +370,11 @@ def test_a_frozen_list_written_before_this_key_existed_reads_with_no_hosts():
 
 # ---- the srt settings: one task's allowance, not the others ---------------------------------------------------------
 
-def _ctx(worktree, task_dir, cmd, domains):
+def _ctx(worktree, task_dir, cmd, domains, mach=()):
     return TaskContext(run_id="run-1", task_id="test-java", stage="verify", attempt=1, skill=None, request=None,
                        worktree=worktree, task_dir=task_dir, scope=[], deny=[], helpers=None, feedback=[], notes=[],
                        progress=None, output_schema=None, model=None, mcp=[], practices=[], cmd=list(cmd),
-                       artifact_name="test.junit.xml", network_domains=list(domains))
+                       artifact_name="test.junit.xml", network_domains=list(domains), network_mach=list(mach))
 
 
 def _settings_for(adapter, ctx, folder):

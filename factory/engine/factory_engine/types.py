@@ -319,6 +319,8 @@ class TaskSpec:
     # Hosts this one task may reach under srt, from its language profile step's `network` key (module 17A). Empty unless
     # a profile names them, so every other task keeps the sandbox's empty allowance (module 9).
     network_domains: list[str] = field(default_factory=list)
+    # Mach services this one task may look up under srt, from the same key (Go's TLS trust). Empty unless a profile names one.
+    network_mach: list[str] = field(default_factory=list)
 
 
 @dataclass
