@@ -322,3 +322,23 @@ def test_a_formatter_can_still_format_its_own_files_under_srt(tmp_path, path_wit
     stub(path_with, "ruff", 'if [ "$1" = format ]; then shift; for f in "$@"; do echo formatted > "$f"; done; fi; exit 0')
     [r] = toolchains.format_changed_files(w, CFG, ["a.py"], log_dir=tmp_path / "logs")
     assert r.ok and (w / "a.py").read_text() == "formatted\n"
+
+
+# ---- item 58 (owner correction, 2026-11-25): the TypeScript test step writes a JUnit report; the others are unchanged ----
+
+def test_the_typescript_test_step_is_a_node_argv_that_points_jest_junit_at_the_task_folder(tmp_path):
+    """Commands run with no shell, so $FACTORY_TASK_DIR is not expanded in an argv. The step is `node -e`, which reads
+    the variable the CommandAdapter sets for a cmd task and hands jest-junit its output path."""
+    w = fixture(tmp_path, {"package.json": "{}"})
+    argv = toolchains.detect(w, CFG)[0].commands["test"]
+    assert argv[:2] == ["node", "-e"]
+    assert "FACTORY_TASK_DIR" in argv[2] and "JEST_JUNIT_OUTPUT_FILE" in argv[2]
+    assert "--reporters=jest-junit" in argv[2] and "'npm'" in argv[2]
+
+
+def test_the_java_python_and_go_test_steps_keep_their_shipped_argv(tmp_path):
+    w = fixture(tmp_path, {"pom.xml": "<project/>", "pyproject.toml": "[project]\n", "go.mod": "module x\n"})
+    tests = {t.name: t.commands["test"] for t in toolchains.detect(w, CFG)}
+    assert tests["java"] == ["mvn", "-q", "test"]
+    assert tests["python"] == ["pytest"]
+    assert tests["go"] == ["go", "test", "./..."]

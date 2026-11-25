@@ -18,7 +18,7 @@ from factory_engine.workflow import expand_helpers, expand_tasks_from, load_work
 KIT = Path(__file__).resolve().parents[3]  # factory/
 CFG = Config(machine={}, repo={})
 
-BUILT_IN_1A = ["_triage", "bug-fix", "chore"]
+BUILT_IN_1A = ["_triage", "bug-fix", "chore", "feature"]
 
 
 @pytest.fixture(autouse=True)
@@ -85,6 +85,33 @@ def test_bug_fix_matches_the_spec_shape(repo):
     propose = next(s for s in wf.stages if s.id == "propose")
     assert propose.approval == "human" and propose.on_reject == "root-cause"
     assert all(s.source == "workflow" for s in wf.stages)
+
+
+def test_feature_matches_the_owner_decided_shape(repo):
+    """ADR 2026-11-24-the-feature-workflow-stage-list, option 1: four stages, no architecture stage."""
+    wf = load_workflow(repo, CFG, "feature")
+    assert wf.type == "feature" and wf.sink == "pull_request" and wf.policy.write is True
+    assert wf.policy.deny_paths == [".github/**"]
+    assert [s.id for s in wf.stages] == ["propose", "implement", "verify", "review"]
+    propose = next(s for s in wf.stages if s.id == "propose")
+    assert propose.approval == "human" and propose.on_reject == "propose"
+    assert [t.skill for t in propose.tasks] == ["propose"]
+    implement = next(s for s in wf.stages if s.id == "implement")
+    assert [t.skill for t in implement.tasks] == ["implement"] and implement.tasks[0].scope == ["**"]
+    assert [g.check for g in implement.gate if g.check] == ["scope-diff", "lint-clean"]
+    assert implement.on_fail.goto == "implement" and implement.on_fail.max == 2
+    verify = next(s for s in wf.stages if s.id == "verify")
+    assert verify.needs == ["implement"] and [t.cmd for t in verify.tasks] == [["scripts/check"]]
+    review = next(s for s in wf.stages if s.id == "review")
+    assert sorted(t.skill for t in review.tasks) == ["review-spec", "review-standards"]
+    assert [g.check for g in review.gate if g.check] == ["no-blocking-findings"]
+    assert review.on_fail.goto == "implement" and review.on_fail.max == 1
+    assert all(s.source == "workflow" for s in wf.stages)
+
+
+def test_feature_has_no_architecture_stage(repo):
+    wf = load_workflow(repo, CFG, "feature")
+    assert "architecture" not in [s.id for s in wf.stages]
 
 
 def test_chore_is_a_write_workflow_with_a_pull_request_sink(repo):

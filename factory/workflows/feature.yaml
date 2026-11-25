@@ -1,0 +1,35 @@
+name: feature
+type: feature
+sink: pull_request
+policy:
+  write: true
+  deny_paths: [".github/**"]
+defaults:
+  retries: 2
+  timeout_minutes: 30
+  checkpoint_every_minutes: 10
+  max_restarts: 3
+stages:
+  - id: propose
+    tasks: [{id: plan, skill: propose, out: plan.json}]
+    approval: human
+    on_reject: {goto: propose}
+  - id: implement
+    needs: [propose]
+    tasks:
+      - {id: change, skill: implement, scope: ["**"], helpers: {mode: off}, out: change.json}
+    gate: [{check: scope-diff}, {check: lint-clean}]
+    on_fail: {goto: implement, max: 2}
+  - id: verify
+    needs: [implement]
+    tasks:
+      - {id: check, cmd: [scripts/check], out: check.log}
+    on_fail: {goto: implement, max: 2}
+  - id: review
+    needs: [verify]
+    tasks:
+      - {id: standards, skill: review-standards, out: standards.json}
+      - {id: spec, skill: review-spec, out: spec.json}
+    join: all
+    gate: [{check: no-blocking-findings}]
+    on_fail: {goto: implement, max: 1}

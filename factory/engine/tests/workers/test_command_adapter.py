@@ -369,3 +369,60 @@ def test_worker_log_has_a_cmd_tasks_output_while_it_is_still_running(cmd_ctx, tm
     handle = adapter.start(ctx, harness("command"), log)
     seen, running = log_seen_while_running(adapter, handle, log, "step one")
     assert seen and running
+
+
+# ---- item 58: the TypeScript test step's own argv writes a JUnit file into the task folder under srt ----
+
+def _typescript_test_argv() -> list[str]:
+    import yaml
+    kit = Path(__file__).resolve().parents[3] / "languages" / "typescript.yaml"
+    return yaml.safe_load(kit.read_text())["variants"]["npm"]["test"]
+
+
+def _stub_npm(bin_dir: Path, body: str) -> dict[str, str]:
+    bin_dir.mkdir()
+    npm = bin_dir / "npm"
+    npm.write_text(f"#!/bin/sh\n{body}\n")
+    npm.chmod(0o755)
+    return {**os.environ, "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"}
+
+
+JUNIT_PASS = "<testsuite><testcase name=\"a\"/></testsuite>"
+JUNIT_FAIL = "<testsuite><testcase name=\"a\"><failure/></testcase></testsuite>"
+
+
+@needs_srt
+def test_the_typescript_test_argv_writes_its_junit_file_into_the_task_folder_under_srt(
+        cmd_ctx, tmp_path, factory_home, task_dir, worktree):
+    """The profile's own `node -e` argv, run as a cmd task runs (CommandAdapter, under srt). A stub `npm` on PATH stands
+    in for jest: it records its arguments and writes the file at $JEST_JUNIT_OUTPUT_FILE, which jest-junit would write.
+    The real jest run of this argv was checked by hand (item 58 PR body). The report must land in the task's work
+    folder, where the engine globs *.junit.xml, and the worktree must get no xml."""
+    env = _stub_npm(tmp_path / "bin", f'echo "$@" > "$FACTORY_TASK_DIR/npm.args"; echo \'{JUNIT_PASS}\' > "$JEST_JUNIT_OUTPUT_FILE"')
+    ctx = cmd_ctx(cmd=_typescript_test_argv())
+    ctx.artifact_name = "test.junit.xml"
+    result, log = run(CommandAdapter(env), ctx, tmp_path)
+    assert result.exit == "ok", log.read_text()
+    assert result.artifact == task_dir / "test.junit.xml" and result.artifact.is_file()
+    assert (task_dir / "npm.args").read_text().strip() == "test -- --reporters=default --reporters=jest-junit"
+    assert not list(worktree.glob("*.xml"))
+
+
+@needs_srt
+def test_a_failing_typescript_test_run_is_a_check_failure_and_keeps_its_report(
+        cmd_ctx, tmp_path, factory_home, task_dir):
+    env = _stub_npm(tmp_path / "bin", f"echo '{JUNIT_FAIL}' > \"$JEST_JUNIT_OUTPUT_FILE\"; exit 1")
+    ctx = cmd_ctx(cmd=_typescript_test_argv())
+    ctx.artifact_name = "test.junit.xml"
+    result, _ = run(CommandAdapter(env), ctx, tmp_path)
+    assert result.exit == "failed" and result.exit_code == 1
+    assert (task_dir / "test.junit.xml").is_file()
+
+
+def test_the_typescript_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    """Without FACTORY_TASK_DIR the step exits 2 and writes nothing, so the report cannot land in the worktree."""
+    import subprocess
+    env = _stub_npm(tmp_path / "bin", "exit 0")
+    env.pop("FACTORY_TASK_DIR", None)
+    r = subprocess.run(_typescript_test_argv(), env=env, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr

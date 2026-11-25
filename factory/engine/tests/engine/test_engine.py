@@ -534,13 +534,14 @@ def _triage_that_cannot_decide(new_run, engine):
 
 def test_a_triage_stop_offers_only_workflows_that_load(new_run, engine):
     run_dir, eng = _triage_that_cannot_decide(new_run, engine)
-    # the shipped kit has bug-fix and chore only; feature, new-app and research do not load in phase 1a
+    # the shipped kit has bug-fix, chore and feature; new-app and research do not load yet
     result = eng.run(["bump-q1w2e"])
     run = state.read_run(run_dir)
     assert result.runs["bump-q1w2e"] == "awaiting_approval" and result.exit_code == 3
     from factory_engine import decisions as D
     options = [o["id"] for o in D.read_decision(run_dir, "triage", 1)["packet"]["decisions"][0]["options"]]
-    assert sorted(options) == ["bug-fix", "chore"]
+    assert sorted(options) == ["bug-fix", "chore", "feature"]
+    assert "new-app" not in options and "research" not in options
     assert run.attention is not None and run.attention.kind == "triage"
 
 
