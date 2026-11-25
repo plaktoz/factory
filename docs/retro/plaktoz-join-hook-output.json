@@ -1,0 +1,48 @@
+{
+  "task": "join-hook-output",
+  "branch": "plaktoz/join-hook-output",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 2,
+  "lines": {
+    "product": 117,
+    "spec": 7,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-50-join-hook-output"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "section",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "b52bdf18c"
+    },
+    {
+      "id": "section",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "9c34e338d"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
