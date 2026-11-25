@@ -1,0 +1,48 @@
+{
+  "task": "feedback-write-retry",
+  "branch": "plaktoz/feedback-write-retry",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 3,
+  "lines": {
+    "product": 299,
+    "spec": 3,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "module-8-feedback-write-retry"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "rework-feedback-retry-on-next-tick",
+      "importance": "high",
+      "category": "spec and design",
+      "commit": "c32adab02"
+    },
+    {
+      "id": "rework-feedback-retry-on-next-tick",
+      "importance": "medium",
+      "category": "code",
+      "commit": "905984186"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
