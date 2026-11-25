@@ -103,6 +103,9 @@ def _semantic_problems(wf: Workflow) -> list[Problem]:
     task_graphs: dict[str, dict[str, list[str]]] = {}
     for s in wf.stages:
         where = f"stages.{s.id}"
+        if s.tasks_from == "languages" and s.tasks:
+            bad(f"{where}.tasks_from", "a languages stage builds its own test tasks, so it takes no tasks of its own",
+                "remove the tasks, or drop tasks_from to run them as written")
         local = {t.id for t in s.tasks}
         graph = {}
         for t in s.tasks:

@@ -96,6 +96,11 @@ def _has_ref(repo: Path, ref: str) -> bool:
     return git(repo, "rev-parse", "--verify", "--quiet", ref, check=False).returncode == 0
 
 
+def base_ref(repo: Path, base: str) -> str:
+    """The base a run is compared with: origin/<base> when it exists, else the local <base>."""
+    return f"origin/{base}" if _has_ref(repo, f"origin/{base}") else base
+
+
 def create_delivery_branch(worktree: Path, run_id: str) -> None:
     """A read-only run gets its branch only at delivery (module 7): `git switch -c <run>`."""
     git(worktree, "switch", "-c", run_id)
