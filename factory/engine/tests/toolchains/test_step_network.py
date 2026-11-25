@@ -183,14 +183,17 @@ def test_the_shipped_java_maven_test_step_allows_only_the_maven_central_host():
     assert doc["variants"]["maven"]["network"] == {"test": ["repo.maven.apache.org"]}
 
 
-def test_no_shipped_profile_allows_a_host_for_any_step_but_java_test():
+def test_no_shipped_profile_allows_a_host_or_a_grant_for_any_step_but_the_java_and_go_test_steps():
+    """The shipped allowances are exactly two: Maven's one host and Go's proxy with the trustd grant. A new one is a
+    decision, so it changes this test too."""
     import yaml
     allowed = {}
     for p in sorted(KIT.glob("*.yaml")):
         for vname, v in (yaml.safe_load(p.read_text()).get("variants") or {}).items():
-            for step, hosts in (v.get("network") or {}).items():
-                allowed[(p.stem, vname, step)] = hosts
-    assert allowed == {("java", "maven", "test"): ["repo.maven.apache.org"]}
+            for step, spec in (v.get("network") or {}).items():
+                allowed[(p.stem, vname, step)] = spec
+    assert allowed == {("java", "maven", "test"): ["repo.maven.apache.org"],
+                       ("go", "go", "test"): {"allow": ["proxy.golang.org"], "mach": ["com.apple.trustd.agent"]}}
 
 
 @pytest.mark.parametrize("hosts", [
@@ -542,3 +545,45 @@ def test_the_factory_home_stays_unreadable_when_a_host_is_allowed(tmp_path, work
     r = subprocess.run(sandbox.srt_command(shutil.which("srt"), settings, ctx.cmd), cwd=worktree, capture_output=True,
                        text=True, timeout=120)
     assert r.returncode != 0 and "secret" not in r.stdout
+
+
+# ---- the real sandbox: the shipped Go test step, under srt, resolves a module through the proxy with the grant ----------
+
+needs_go = pytest.mark.skipif(shutil.which("go") is None, reason="go is not on PATH (skipped cleanly)")
+
+
+def _go_proxy_reachable() -> bool:
+    import urllib.request
+    try:
+        urllib.request.urlopen("https://proxy.golang.org/", timeout=10).close()
+        return True
+    except Exception:
+        return False
+
+
+needs_go_proxy = pytest.mark.skipif(not _go_proxy_reachable(), reason="proxy.golang.org is not reachable (skipped cleanly)")
+
+
+@needs_srt
+@needs_go
+@needs_go_proxy
+def test_the_shipped_go_test_step_under_srt_downloads_a_module_with_its_grant_and_host(tmp_path, worktree, task_dir):
+    """The shipped Go test step, under srt, with its one host and the trustd grant: go-cmp downloads and the test passes.
+    Measured 2026-11-25 on a temp module (go 1.27.3, srt 0.0.83)."""
+    import yaml
+    (worktree / "go.mod").write_text("module probe\n\ngo 1.21\n\nrequire github.com/google/go-cmp v0.6.0\n")
+    (worktree / "go.sum").write_text(  # a real repo has one; go-cmp v0.6.0 and its go.mod sums, from the proxy
+        "github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=\n"
+        "github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=\n")
+    (worktree / "probe_test.go").write_text(
+        'package probe\n\nimport (\n\t"testing"\n\n\t"github.com/google/go-cmp/cmp"\n)\n\n'
+        'func TestCmp(t *testing.T) {\n\tif d := cmp.Diff(1, 1); d != "" {\n\t\tt.Fatal(d)\n\t}\n}\n')
+    argv = yaml.safe_load((KIT / "go.yaml").read_text())["variants"]["go"]["test"]
+    adapter = CommandAdapter(dict(os.environ))
+    ctx = _ctx(worktree, task_dir, argv, ["proxy.golang.org"], mach=["com.apple.trustd.agent"])
+    ctx.task_id = "test-go"
+    log = tmp_path / "go.log"
+    handle = adapter.start(ctx, harness("command"), log)
+    result = adapter.wait(handle, 600)
+    assert result.exit == "ok", log.read_text()[-2000:]
+    assert (task_dir / "test.junit.xml").is_file()
