@@ -15,11 +15,13 @@ import json
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from . import (decisions, delivery, gates, gitops, housekeeping, loadcfg, notes, notify, rework, shims, skills,
                state, summary, toolchains, triage)
 from . import slots as machine_slots
+from . import leftover
 from . import usage as usage_mod
 from . import workflow as wf_mod
 from .adapters.worker.base import AttemptResult, HarnessConfig, TaskContext, WorkerAdapter
@@ -29,7 +31,7 @@ from .config import Config
 from .errors import FactoryError
 from .lock import Lock
 from .types import (AttentionItem, Clock, GateContext, GateResult, Request, Run, RunStatus, Stage, StageState,
-                    TaskBranch, TaskSpec, TaskState, Workflow)
+                    TaskBranch, TaskSpec, TaskState, UsageRecord, Workflow)
 from .workflow import expand_helpers
 
 TRIAGE = "_triage"
@@ -737,6 +739,10 @@ class Engine:
             self._copy_request(run_dir, spec)
         ctx = self._context(run, run_dir, stage, spec, attempt, worktree)
         handle = self._worker_for(spec).start(ctx, HarnessConfig(harness, None, [], {}), run_dir / "tasks" / spec.id / "worker.log")
+        # The worker runs in its own session (start_new_session), so its process group id is its pid. A fake has no proc.
+        proc = handle.data.get("proc")
+        ts.worker_pgid = proc.pid if proc is not None else None
+        state.write_task(run_dir, ts, lock=lock)
         return spec, (harness, handle), ts
 
     def _request_copy_for(self, run_dir: Path, spec: TaskSpec) -> bool:
@@ -858,6 +864,7 @@ class Engine:
         exit_ = "ok" if ok else "interrupted" if (outcome.exit == "killed" or job.restart_for_note) else "failed"
         usage_mod.finish_attempt(run_dir, spec.id, ts.attempt, exit=exit_, input_tokens=outcome.input_tokens,
                                  output_tokens=outcome.output_tokens, models=outcome.models_observed)
+        ts.worker_pgid = None  # the worker has ended, so its group is no longer one to end (module 6, recovery)
         if job.restart_for_note and not ok:
             self._reset_to_checkpoint(run_dir, ts, spec.id)
             ts.status = "pending"
@@ -930,10 +937,12 @@ class Engine:
     def _recover(self, run_dir: Path, lock: Lock) -> None:
         """After a crash: close open attempts as interrupted, reset those tasks to their last checkpoint, and let them
         run again as new attempts. A task interrupted too often is failed (module 8: max_interruptions)."""
+        started = {task_id: rec.start for task_id, rec in self._open_starts(run_dir)}
         closed = usage_mod.close_open_attempts(run_dir)
         run = state.read_run(run_dir)
         for task_id, _attempt in closed:
             ts = state.read_task(run_dir, task_id)
+            self._end_left_over_worker(run_dir, ts, started.get(task_id))
             self._reset_to_checkpoint(run_dir, ts, task_id)
             interruptions = sum(1 for r in usage_mod.read_usage(run_dir, task_id) if r.exit == "interrupted")
             ts.status = "failed" if interruptions >= self._max_interruptions(run, run_dir, ts) else "interrupted"
@@ -942,6 +951,31 @@ class Engine:
         run.status = "running"
         state.write_run(run_dir, run, lock=lock)
         state.append_event(run_dir, "run_resumed")
+
+    @staticmethod
+    def _open_starts(run_dir: Path) -> list[tuple[str, UsageRecord]]:
+        """Each task's open attempt (exit `started`) with its write-ahead record. Reads only."""
+        out = []
+        tasks = run_dir / "tasks"
+        for tdir in sorted(tasks.iterdir()) if tasks.is_dir() else []:
+            for rec in usage_mod.read_usage(run_dir, tdir.name):
+                if rec.exit == "started":
+                    out.append((tdir.name, rec))
+        return out
+
+    @staticmethod
+    def _end_left_over_worker(run_dir: Path, ts: TaskState, started: str | None) -> None:
+        """Kill the worker group a crashed engine recorded for this task, if it is still the worker (module 6, item 63).
+
+        Killed only when the group leader started at or after the attempt's `started` record: a worker starts after that
+        record, so an older process with the same pid is not the worker. A recorded group that is gone is not an event."""
+        pgid = ts.worker_pgid
+        if pgid is None or started is None:
+            return
+        if leftover.is_worker_group(pgid, datetime.fromisoformat(started)):
+            leftover.kill_group(pgid)
+            state.append_event(run_dir, "worker_killed", task_id=ts.task_id, pgid=pgid)
+        ts.worker_pgid = None
 
     def _max_interruptions(self, run: Run, run_dir: Path, ts: TaskState) -> int:
         """The task's own `max_interruptions` (module 8). Only the task's stage is expanded, because a later stage's

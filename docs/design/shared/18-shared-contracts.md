@@ -134,6 +134,7 @@ class SyncResult:     ok: bool; conflict_files: list[str]
 @dataclass
 class TaskState:      task_id: str; stage: str; status: TaskStatus; attempt: int; restarts: int
                       task_base: str | None; worktree: Path | None; checkpoints: int
+                      worker_pgid: int | None = None   # the attempt's worker group; absent in task.json written before it (item 63)
 
 @dataclass
 class Event:          seq: int; ts: str; type: str; run_id: str; data: dict

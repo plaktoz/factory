@@ -229,6 +229,9 @@ class TaskState:
     task_base: str | None
     worktree: Path | None
     checkpoints: int
+    # Process group of the attempt's worker, set while it runs and cleared when it ends. A task.json written before the
+    # field existed has none, so it is optional in task.schema.json (schemagen.OPTIONAL_FIELDS).
+    worker_pgid: int | None = None
 
 
 @dataclass
