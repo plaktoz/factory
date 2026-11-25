@@ -155,6 +155,7 @@ The dashboard derives one more, `stale`, when a run's status is `running` but no
   lock             owner, pid and heartbeat of the owning engine
   decisions/       <stage>.<n>.yaml decision file and <stage>.<n>.html decision page, one pair per visit to a stage
   merge.json       result of the merge policy
+  pending-route.json  a rework route saved while its feedback write waits as retrying (module 8); removed once applied or blocked
   summary.md       the final run summary
   tasks/backend/   engine-owned: the worker never writes here
     task.json      task state (JSON)
