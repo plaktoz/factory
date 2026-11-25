@@ -316,6 +316,9 @@ class TaskSpec:
     model: str | None
     when: dict | None
     max_interruptions: int = DEFAULT_MAX_INTERRUPTIONS
+    # Hosts this one task may reach under srt, from its language profile step's `network` key (module 17A). Empty unless
+    # a profile names them, so every other task keeps the sandbox's empty allowance (module 9).
+    network_domains: list[str] = field(default_factory=list)
 
 
 @dataclass

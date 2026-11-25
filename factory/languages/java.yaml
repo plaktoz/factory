@@ -8,6 +8,10 @@ variants:
     format:       [mvn, -q, spotless:apply]
     format_check: [mvn, -q, spotless:check]
     lint:         [mvn, -q, checkstyle:check]
+    # Maven reaches Maven Central only (owner decision, 2026-11-25). Under srt the step may reach that one host, and
+    # nothing else: this step's `network` key is the only allowance a Java command gets (module 9, module 17A).
+    network:
+      test: [repo.maven.apache.org]
     # A JUnit report, because the engine's test-report gate reads JUnit only (module 5). Surefire's `reportsDirectory`
     # has no -D property (checked on surefire 3.2.5), so mvn writes TEST-*.xml under target/surefire-reports and python3
     # merges each report this run wrote (newer than the run's start, so a stale report is never counted) into one
@@ -17,18 +21,44 @@ variants:
       - python3
       - -c
       - |
-        import os, subprocess, sys, time
+        import os, subprocess, sys, time, urllib.parse
         import xml.etree.ElementTree as ET
         d = os.environ.get("FACTORY_TASK_DIR")
         if not d:
             sys.stderr.write("FACTORY_TASK_DIR is not set\n")
             sys.exit(2)
+        # Under srt, Maven's resolver ignores the JVM proxy properties srt's agent sets (measured 2026-11-25), so the
+        # proxy from HTTPS_PROXY goes into a settings file in the task folder. Outside srt there is no proxy and no file.
+        cmd = ['mvn', '-q', 'test']
+        proxy = os.environ.get('HTTPS_PROXY')
+        if proxy:
+            try:
+                u = urllib.parse.urlsplit(proxy)
+                host, port = u.hostname, u.port
+            except ValueError:
+                host, port = None, None
+            if not host or port is None:
+                sys.stderr.write("HTTPS_PROXY must be a URL with a host and a port\n")
+                sys.exit(2)
+            user, pw = urllib.parse.unquote(u.username or ''), urllib.parse.unquote(u.password or '')
+            path = os.path.join(d, 'maven-proxy-settings.xml')
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                f.write('<settings><proxies><proxy><id>srt</id><active>true</active><protocol>https</protocol>'
+                        '<host>%s</host><port>%s</port><username>%s</username><password>%s</password>'
+                        '<nonProxyHosts>localhost|127.0.0.1</nonProxyHosts></proxy></proxies></settings>'
+                        % (u.hostname, u.port, user, pw))
+            cmd = ['mvn', '-q', '-s', path, 'test']
         start = time.time()
         try:
-            rc = subprocess.call(['mvn', '-q', 'test'])
+            rc = subprocess.call(cmd)
         except FileNotFoundError:
             sys.stderr.write("mvn: command not found\n")
             sys.exit(127)
+        finally:
+            # The file holds srt's proxy password, so it is removed when mvn ends, on success or failure.
+            if proxy:
+                os.remove(path)
         suites = []
         for root, dirs, files in os.walk("."):
             dirs[:] = [x for x in dirs if x not in (".git", "node_modules")]
