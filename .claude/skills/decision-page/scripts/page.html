@@ -10,7 +10,7 @@
 @media (prefers-color-scheme:dark){:root{--bg:#161614;--card:#1f1f1c;--ink:#ececE8;--mute:#9a9a92;--line:#34342f;--accent:#7ca3ff;--accent-bg:#1e2a4a;--pro:#5fcf8a;--con:#ff8a80;--rec:#f2c260;--rec-bg:#3a2f12}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
-main{max-width:860px;margin:0 auto;padding:24px 16px 120px}
+main{max-width:860px;margin:0 auto;padding:24px 16px 120px;overflow-wrap:anywhere}
 h1{font-size:22px;margin:0 0 4px}
 .sub{color:var(--mute);margin:0 0 20px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin:0 0 16px}
@@ -82,21 +82,21 @@ D.forEach(d=>{
   const cur=(state[d.id]&&state[d.id].choice)||recOf(d);
   const el=document.createElement("section");el.className="card";
   el.innerHTML=
-   `<h2>${esc(d.id)}. ${esc(d.title)}</h2><p class="tag">${esc(d.ref)}</p>`+
+   `<h2>${esc(d.id)}. ${esc(d.title)}</h2>${d.ref?`<p class="tag">${esc(d.ref)}</p>`:""}`+
    (d.trigger?`<p class="tag">Asked because: ${esc(d.trigger)}. ${esc(d.trigger_detail||"")}</p>`:"")+
-   (d.today ? (d.question?`<p class="q">${esc(d.question)}</p>`:"")+
-     `<div class="ta"><div><b>Today</b>${esc(d.today)}</div><div><b>After the recommended option</b>${esc(d.after)}</div></div>`+
-     `<div class="pv"><b>What it looks like</b><pre>${esc(d.preview)}</pre></div>`
-   : `<div class="ctx"><b>Context</b>${esc(d.context)}</div>`)+
+   (d.question?`<p class="q">${esc(d.question)}</p>`:"")+
+   ((d.today||d.after)?`<div class="ta">`+(d.today?`<div><b>Today</b>${esc(d.today)}</div>`:"")+(d.after?`<div><b>After the recommended option</b>${esc(d.after)}</div>`:"")+`</div>`:"")+
+   (d.preview?`<div class="pv"><b>What it looks like</b><pre>${esc(d.preview)}</pre></div>`:"")+
+   (d.context?`<div class="ctx"><b>Context</b>${esc(d.context)}</div>`:"")+
    `<div class="opts">`+d.options.map(o=>
      `<label class="opt"><input type="radio" name="${esc(d.id)}" value="${esc(o.id)}" ${o.id===cur?"checked":""}>`+
      `<span class="name">${esc(o.name)}</span>${o.recommended?'<span class="rec">Recommended</span>':""}`+
      (o.see?`<span class="see">What you'll see: ${esc(o.see)}</span>`:"")+
      (o.asks?`<span class="asks">Asks of you: ${esc(o.asks)}</span>`:"")+
-     `<div class="pc"><ul class="pro">${o.pros.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${o.cons.map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div>`+
+     (((o.pros||[]).length||(o.cons||[]).length)?`<div class="pc"><ul class="pro">${(o.pros||[]).map(x=>"<li>"+esc(x)+"</li>").join("")}</ul><ul class="con">${(o.cons||[]).map(x=>"<li>"+esc(x)+"</li>").join("")}</ul></div>`:"")+
      (o.how?`<details class="how"><summary>How it works</summary>${esc(o.how)}</details>`:"")+`</label>`).join("")+
    `<label class="opt"><input type="radio" name="${esc(d.id)}" value="unsure" ${cur==="unsure"?"checked":""}><span class="name">Not sure: I have a question</span></label></div>`+
-   `<p class="why">Why recommended: ${esc(d.why)}</p>`+
+   (d.why?`<p class="why">Why recommended: ${esc(d.why)}</p>`:"")+
    `<textarea data-q="${esc(d.id)}" placeholder="Question or note (optional)">${esc((state[d.id]&&state[d.id].note)||"")}</textarea>`;
   list.appendChild(el);
 });
