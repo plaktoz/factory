@@ -1,7 +1,8 @@
 """Workflows (module 5): load a workflow file, validate it, and expand helper tasks.
 
-Lookup is .factory/config/workflows/<name>.yaml, then factory/workflows/<name>.yaml (the kit the run uses). Plugins
-are phase 1b and are not applied here. Every problem found at load stops the run before a worker starts.
+Lookup is .factory/config/workflows/<name>.yaml, then factory/workflows/<name>.yaml (the kit the run uses). Each enabled
+plugin that names the workflow is merged in (plugins.py) after the file is checked. Every problem found at load stops
+the run before a worker starts.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ from . import skills
 from .config import Config
 from .errors import FactoryError
 from .skills import resolve_skill
-from .types import (DEFAULT_MAX_INTERRUPTIONS, Defaults, GateSpec, HelperPolicy, OnFail, Policy, Problem, Stage, TaskSpec, Workflow)
+from .types import (DEFAULT_MAX_INTERRUPTIONS, Defaults, GateSpec, HelperPolicy, OnFail, Policy, Problem, RunSpec, Stage, TaskSpec,
+                    Workflow)
 from .validate import SCHEMA_DIR
 from .yamlio import FactoryLoader, load_yaml
 
@@ -34,7 +36,7 @@ KNOWN_CHECKS = frozenset({
 })
 
 
-def load_workflow(repo: Path, cfg: Config, name: str) -> Workflow:
+def load_workflow(repo: Path, cfg: Config, name: str, *, apply_plugins: bool = True) -> Workflow:
     """Lookup .factory/config/workflows, then the kit's workflows; parse; validate; check skill names.
 
     Raises config.invalid listing every problem, with the file and the path inside it. Nothing starts on a failure.
@@ -58,6 +60,22 @@ def load_workflow(repo: Path, cfg: Config, name: str) -> Workflow:
         problems.append(Problem(str(path), None, f"name: {wf.name!r} does not match the file name {name!r}",
                                 f"set name: {name}"))
     problems += _skill_problems(wf, repo, cfg, str(path))
+    if problems:
+        _raise(problems)
+    if apply_plugins:
+        wf = _with_plugins(repo, cfg, wf, str(path))
+    return wf
+
+
+def _with_plugins(repo: Path, cfg: Config, wf: Workflow, file: str) -> Workflow:
+    """Apply each enabled plugin that names this workflow, in name order, then check the merged result (module 5)."""
+    from . import plugins
+
+    for entry in plugins.applied_to(repo, cfg, wf.name):
+        plugins.check_requires(entry["manifest"], repo, entry["name"])  # a run refuses to start (module 5 Safety)
+        plugins.check_os(entry["manifest"], plugins.plugin_dir(repo, entry["name"]), entry["name"])
+        wf = plugins.merge_insert(wf, entry["manifest"], entry["name"])
+    problems = [replace(p, file=file) for p in validate_workflow(wf, cfg)]
     if problems:
         _raise(problems)
     return wf
@@ -114,9 +132,10 @@ def _semantic_problems(wf: Workflow) -> list[Problem]:
                     bad(f"{where}.tasks.{t.id}.needs", f"unknown task {n!r} in stage {s.id!r}",
                         "task order runs inside one stage; name a task of this stage")
             graph[t.id] = [n for n in t.needs if n in local]
-            if (t.skill is None) == (t.cmd is None):
+            # Module 5: a task sets exactly one of skill, cmd or run (run is a plugin's script or function).
+            if [t.skill is not None, t.cmd is not None, t.run is not None].count(True) != 1:
                 bad(f"{where}.tasks.{t.id}", "set exactly one of skill and cmd",
-                    "skill runs a worker; cmd runs a command without an LLM")
+                    "skill runs a worker; cmd runs a command without an LLM; run runs a plugin script or function")
         task_graphs[s.id] = graph
         cycle = _cycle(graph)
         if cycle:
@@ -355,7 +374,7 @@ def _parse_task(t: dict, defaults: Defaults) -> TaskSpec:
         id=t["id"],
         skill=t.get("skill"),
         cmd=t.get("cmd"),
-        run=None,
+        run=_parse_run(t["run"]) if t.get("run") is not None else None,
         scope=list(t.get("scope", [])),
         deny=list(t.get("deny", [])),
         needs=list(t.get("needs", [])),
@@ -368,6 +387,11 @@ def _parse_task(t: dict, defaults: Defaults) -> TaskSpec:
         when=t.get("when"),
         max_interruptions=t.get("max_interruptions", DEFAULT_MAX_INTERRUPTIONS),
     )
+
+
+def _parse_run(r: dict) -> RunSpec:
+    """A plugin task's `run:` (module 5): exactly one of script or python, and its args (RunSpec checks the one-of)."""
+    return RunSpec(script=r.get("script"), python=r.get("python"), args=list(r.get("args", [])))
 
 
 def _parse_gate(g: dict) -> GateSpec:

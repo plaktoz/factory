@@ -88,6 +88,11 @@ def resolve_skill(name: str, repo: Path, cfg: Config) -> SkillRef:
                        hint="add the skill to factory/skills/own/, or an override in .factory/config/overrides/skills/")
 
 
+def lock_allow(repo: Path) -> dict[str, list[str]]:
+    """The allowlist in skills.lock, by source. A plugin's `requires.skills` must name skills in it (module 5)."""
+    return dict(_lock(repo).get("allow") or {})
+
+
 def _locked_path(repo: Path, skill: str) -> Path | None:
     lock = _lock(repo)
     for source, names in (lock.get("allow") or {}).items():
