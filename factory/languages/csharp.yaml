@@ -32,12 +32,14 @@ variants:
             sys.exit(127)
         ns = "{http://microsoft.com/schemas/VisualStudio/TeamTest/2010}"
         trx = os.path.join(results, "results.trx")
+        cases = []
         if os.path.isfile(trx):
-            cases = []
             for r in ET.parse(trx).getroot().iter(ns + "UnitTestResult"):
                 outcome = r.get("outcome")
                 msg = r.find(f"{ns}Output/{ns}ErrorInfo/{ns}Message")
                 cases.append((r.get("testName", ""), outcome, (msg.text or "") if msg is not None else ""))
+        # A run with no test result (vstest aborted before any test ran) writes no file, so the task is not done.
+        if cases:
             out = ['<testsuite name="dotnet test" tests="%d" failures="%d">' % (len(cases), sum(c[1] == "Failed" for c in cases))]
             for name, outcome, text in cases:
                 out.append("<testcase classname=%s name=%s>" % (quoteattr(name.rpartition(".")[0]), quoteattr(name.rpartition(".")[2])))

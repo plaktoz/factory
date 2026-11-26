@@ -801,6 +801,26 @@ def test_a_failing_dotnet_test_run_exits_nonzero_names_the_failed_test_and_marks
     assert skipped == ["C"]
 
 
+def test_a_dotnet_run_that_aborts_with_an_empty_trx_leaves_no_report_so_the_task_is_not_done(tmp_path, task_dir, monkeypatch):
+    """vstest can abort before it runs a test (a socket it cannot bind, measured under srt 2026-11-26): it still writes a
+    TRX, with no results, and exits 1. A JUnit file with 0 cases would look like a run, so the step writes none. A stand-in
+    `dotnet` makes that TRX; the real tool's abort needs srt's local binding, which the factory does not grant."""
+    import stat
+    import subprocess
+    bins = tmp_path / "bin"
+    bins.mkdir()
+    fake = bins / "dotnet"
+    fake.write_text('#!/bin/sh\nfor a in "$@"; do last="$prev"; prev="$a"; done\n'
+                    'mkdir -p "$prev"\n'
+                    'printf \'<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><Results/></TestRun>\' '
+                    '> "$prev/results.trx"\nexit 1\n')
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    env = {**os.environ, "PATH": f"{bins}{os.pathsep}{os.environ['PATH']}", "FACTORY_TASK_DIR": str(task_dir)}
+    r = subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert r.returncode == 1
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
 @needs_dotnet
 def test_a_dotnet_build_error_leaves_no_report_so_the_task_is_not_done(task_dir, worktree):
     """A project that does not build runs no test and writes no trx, so no JUnit file (the engine's gate then blocks)."""
