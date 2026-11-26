@@ -1,0 +1,35 @@
+{
+  "task": "module-11-stop-kinds",
+  "branch": "plaktoz/module-11-stop-kinds",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 1,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "module-11-2026-11-26"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
