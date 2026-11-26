@@ -392,33 +392,6 @@ def delete_chained_branches(repo: Path, run_id: str, needs: dict[str, list[str]]
     return deleted
 
 
-def reset_dependents(repo: Path, cfg: Config, run_id: str, reworked: str, needs: dict[str, list[str]]) -> list[str]:
-    """A task was reworked: every task that needs it, directly or not, is reset and recreated from its new branch
-    (module 7). Returns the recreated task ids, dependencies first. Uses create_task_worktree, remove_worktree and
-    delete_branch from the contract."""
-    affected = {t for t in needs if reworked in _all_needs(t, needs)}
-    recreated = []
-    for task_id in sorted(affected, key=lambda t: _depth(t, needs)):
-        branch = f"{run_id}--{task_id}"
-        for wt in _worktrees_on(repo, branch):
-            remove_worktree(wt, force=True)
-        if _has_ref(repo, branch):
-            delete_branch(repo, branch)
-        bases = [f"{run_id}--{n}" for n in needs[task_id]] or [run_id]
-        create_task_worktree(repo, cfg, run_id, task_id, base_branches=bases)
-        recreated.append(task_id)
-    return recreated
-
-
-def _all_needs(task_id: str, needs: dict[str, list[str]], seen: frozenset[str] = frozenset()) -> set[str]:
-    out: set[str] = set()
-    for n in needs.get(task_id, []):
-        if n in seen:
-            raise FactoryError("config.invalid", f"tasks need each other in a cycle at {n!r}", hint="remove the cycle from `needs`")
-        out |= {n} | _all_needs(n, needs, seen | {task_id})
-    return out
-
-
 def _worktrees_on(repo: Path, branch: str) -> list[Path]:
     out = git(repo, "worktree", "list", "--porcelain").stdout
     found, current = [], None

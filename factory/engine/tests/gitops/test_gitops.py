@@ -583,33 +583,6 @@ def test_deleting_in_the_wrong_order_would_be_seen(repo, cfg):
     assert gitops.delete_chained_branches(repo, "run-1", {"b": ["a"], "a": []}) == []  # already gone; no error
 
 
-def test_a_reworked_task_resets_and_recreates_the_tasks_that_need_it(repo, cfg):
-    start_run(repo, cfg)
-    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
-    make_task(repo, cfg, "run-1", "b", {"web/only_b.js": "b's own work\n"}, bases=["run-1--a"])
-    make_task(repo, cfg, "run-1", "c", {"web/c.js": "c"}, bases=["run-1--b"])
-    # a is reworked: it gets a new change on its branch
-    tw_a = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--a"
-    (tw_a / "services" / "api.py").write_text("x = 'a, reworked'\n")
-    gitops.checkpoint(tw_a, "a", 2)
-    needs = {"a": [], "b": ["a"], "c": ["b"]}
-    recreated = gitops.reset_dependents(repo, cfg, "run-1", "a", needs)
-    assert recreated == ["b", "c"]  # dependencies first; a itself is not touched
-    tw_b = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--b"
-    assert (tw_b / "services" / "api.py").read_text() == "x = 'a, reworked'\n"  # b sees a's NEW branch
-    assert not (tw_b / "web" / "only_b.js").exists()  # b's own old work (a file only b created) was reset
-    assert run(tw_a, "rev-parse", "HEAD") == run(repo, "rev-parse", "run-1--a")  # a untouched
-
-
-def test_a_task_that_does_not_need_the_reworked_one_is_left_alone(repo, cfg):
-    start_run(repo, cfg)
-    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
-    make_task(repo, cfg, "run-1", "d", {"web/d.js": "d"})
-    before = run(repo, "rev-parse", "run-1--d")
-    assert gitops.reset_dependents(repo, cfg, "run-1", "a", {"a": [], "d": []}) == []
-    assert run(repo, "rev-parse", "run-1--d") == before
-
-
 def test_a_cycle_in_needs_is_refused(repo, cfg):
     with pytest.raises(FactoryError, match="cycle"):
         gitops.delete_chained_branches(repo, "run-1", {"a": ["b"], "b": ["a"]})
@@ -663,21 +636,3 @@ def _factory_files(wt):
             if any(p == "factory" or p.startswith(".factory") for p in rel.split("/")) and not rel.startswith(shims):
                 found.append(rel)
     return sorted(found)
-
-
-@pytest.mark.xfail(strict=True, reason="gitops.reset_dependents recreates task worktrees through create_task_worktree, "
-                   "which does not call mark_run; only engine.py does. Remove this mark when the marker is written there.")
-def test_tasks_recreated_by_reset_dependents_hold_the_run_marker_and_no_other_factory_file(repo, cfg, tmp_path):
-    """Module 7: every worktree the factory creates holds `.factory-run.json` and no other factory file except the shims.
-    The engine marks each worktree it creates; a task worktree that reset_dependents recreates must match."""
-    start_run(repo, cfg)
-    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
-    make_task(repo, cfg, "run-1", "b", {"web/b.js": "b\n"}, bases=["run-1--a"])
-    tw_a = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--a"
-    (tw_a / "services" / "api.py").write_text("x = 'a, reworked'\n")
-    gitops.checkpoint(tw_a, "a", 2)
-    assert gitops.reset_dependents(repo, cfg, "run-1", "a", {"a": [], "b": ["a"]}) == ["b"]
-    tw_b = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--b"
-    assert (tw_b / gitops.RUN_MARKER).is_file(), "the recreated task worktree has no .factory-run.json"
-    assert _factory_files(tw_b) == [gitops.RUN_MARKER]
-    assert run(tw_b, "status", "--porcelain") == ""  # the marker is excluded from git, so it is no change
