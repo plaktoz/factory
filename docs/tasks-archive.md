@@ -115,6 +115,8 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Older Log entries
 
+- 2026-11-24 (items 51 and 53, PR #178, merged `eb60b07`): spec criteria in modules 5, 8, 11 and 17. Module 8 line 113 and module 11 line 218 ticked with tests (`tests/gates/test_gate_runner_real.py`, `tests/engine/test_fix_routes_back_to_root_cause.py`); module 11's "every stop kind" criterion stays open, with its reason; the strict xfail `test_blocked_run_writes_a_decision_file.py` is item 47's. Module 5's bug-fix example and module 17's `Skipped.reason` list and `prs` sentence corrected. Left: module 8's `auth` and `model_not_found` rows; module 11 L11 versus the merge review. Evidence: 90 passed, 1 xfailed; docs checks pass; the `docs-checks` run on the pull request passed.
+
 - 2026-11-24 (item 52, PR #177, merged `5de737a`): module 16's command-table criterion ticked for every row except `factory plugins enable|disable` (its own unticked phase 1b line); the three defects fixed (`usage --since` traceback, `note` missing task traceback, launcher argparse errors ignoring `--json`). Evidence: engine drivers 116 passed; launcher 206 passed; the `docs-checks` run passed. Left: module 16's failure behaviour for a dead detached engine (revise-spec blocking item).
 
 - 2026-11-24 (item 55 D1, PR #175, merged `777a531`): `.github/workflows/docs-checks.yml` runs the four docs checks on each pull request and each push to `main`; the GitHub run passed. Left: the owner's settings, `allow_auto_merge` and the required `docs-checks` check on `main`; D2 to D5 are not touched by this PR.
