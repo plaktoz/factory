@@ -1,0 +1,8 @@
+{
+  "name": "report-page",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "test": "mkdir -p \"${FACTORY_TASK_DIR:-../.out}\" && node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=\"${FACTORY_TASK_DIR:-../.out}/fe.junit.xml\""
+  }
+}
