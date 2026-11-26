@@ -115,6 +115,8 @@ Not started, by owner scope: waves 1 to 4, phase 1b items, phase 2.
 
 ## Older Log entries
 
+- 2026-11-24 (item 52, PR #177, merged `5de737a`): module 16's command-table criterion ticked for every row except `factory plugins enable|disable` (its own unticked phase 1b line); the three defects fixed (`usage --since` traceback, `note` missing task traceback, launcher argparse errors ignoring `--json`). Evidence: engine drivers 116 passed; launcher 206 passed; the `docs-checks` run passed. Left: module 16's failure behaviour for a dead detached engine (revise-spec blocking item).
+
 - 2026-11-24 (item 55 D1, PR #175, merged `777a531`): `.github/workflows/docs-checks.yml` runs the four docs checks on each pull request and each push to `main`; the GitHub run passed. Left: the owner's settings, `allow_auto_merge` and the required `docs-checks` check on `main`; D2 to D5 are not touched by this PR.
 - 2026-11-24 (backlog review, branch `plaktoz/tasks-backlog-2026-11-24`, the merge session's edit at the owner's request): read every module file, `phase-2.md` and `decisions.md` against `main` at `984e533`, found 16 worktrees and five pieces of unpushed work, and filed the result as items 46 to 61 here; pasted the 20 missing task records (the three entries below); the owner answered five cards (item 55). Evidence: engine suite `-n 8` 1111 passed, 2 skipped, 1 xfailed, 1 failed (item 47); launcher suite 159 passed; `records`, `links`, `criteria` and `contracts` pass. Drafts and the evidence tables are in `.scratch/backlog-2026-11-24/` (not tracked). Left: items 47 to 61.
 

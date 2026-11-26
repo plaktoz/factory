@@ -1,0 +1,35 @@
+{
+  "task": "tasks-log-2026-11-26",
+  "branch": "plaktoz/tasks-log-2026-11-26",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 0,
+    "process": 9
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "tasks-log-2026-11-26"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
