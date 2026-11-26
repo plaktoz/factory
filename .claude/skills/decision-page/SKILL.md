@@ -3,7 +3,7 @@ name: decision-page
 description: Turn open decisions into a one-file HTML page the user answers in one sitting (each card shows today, after, a preview and what each option changes for them), whose button builds a prompt to paste back. Use when decisions need the user's call, a review finds choices only they can make, or the user asks for "the html format".
 ---
 
-Put each open decision on a page the user answers in one sitting, then act on the pasted prompt. Write every card from the **user's side**: what they see or do now, and what they would see or do after. How it is built is secondary, one line behind "How it works".
+The page exists so a decision can be made and a prompt generated. Put each open decision on a page the user answers in one sitting, then act on the pasted prompt. Write every card from the **user's side**: what they see or do now, and what they would see or do after. How it is built is secondary, one line behind "How it works".
 
 ## Where the page lives, and why nothing may stay only on it
 
@@ -13,12 +13,19 @@ The page (`<name>.json` and the `<name>.html` rendered from it) is created in **
 
 ## Steps
 
-1. **Triage first.** Work through every finding yourself. Fix what a check can settle (run it, show the output). A bug fix or record upkeep is a commit, not a card. Apply the recommended option yourself and add one line to `docs/decisions.md`, unless the choice meets a **stop trigger** in `AGENTS.md` (Working rules). A finding the spec already answers is a build task, not a card. If a finding needs a machine or login you do not have, make it a task. Keep for the page only the stop triggers, at most one page a day and at most five cards (`render.py` refuses a sixth); decide the rest at the recommendation and log them. Done when each finding is fixed with evidence, logged in `docs/decisions.md`, made a task, or listed as a card with its `trigger`. If nothing is left, do not build a page.
+1. **Triage first.** Take each finding yourself, in this order, and stop at the first rule that fits. A card is the last resort, not the default.
+   1. **A check can settle it:** run the check and show its output. A bug fix or record upkeep is a commit, not a card.
+   2. **The spec already answers it:** it is a build task.
+   3. **It needs a machine or a login you do not have:** make it a task.
+   4. **It meets no stop trigger** in `AGENTS.md` (Working rules): take the recommended option, keep working, and add one line to `docs/decisions.md`.
+   5. **It meets a stop trigger:** it becomes a card, named with its `trigger`.
+
+   Aim for one page a day and at most five cards. `render.py` only warns on a sixth card and still writes the page, so the limit is yours to keep. Decide the rest at the recommendation and log them. Triage is done when every finding has exactly one outcome: fixed with evidence, logged, made a task, or a card. If no card is left, do not build a page.
 2. **Check facts before writing options.** A fact in a card (a tool, a flag, a file, what a run does) is looked up by running something (`--help`, a probe, a test run), not remembered or read off the source. Done when every factual claim has a command behind it, and a claim you only read in code says so on the card.
 3. **Write `decisions.json`** to the schema below, in `.scratch/<name>.json` (create the folder if it is missing). Never write the page under `docs/`: it would be tracked, and the record is a `Decisions` row in the spec (or a `proposed` ADR while the card waits).
 4. **Read it as an outsider.** For each option, answer from its `see` and `asks` alone: what changes for someone who has never seen the codebase? If you cannot, rewrite the card. Done when every option passes.
-5. **Render.** Run `python3 -I .claude/skills/decision-page/scripts/render.py .scratch/<name>.json`. It validates the JSON, refuses builder words in `see` and unexplained ids in the question, today and after, writes `<name>.html` beside it, and exits non-zero on any problem. Done when it prints the card count and exits 0.
-6. **Prove the page works** with `node .claude/skills/decision-page/scripts/check.mjs .scratch/<name>.html` (needs `puppeteer`; see the script header). It checks each card's question, Today and After, preview, and options, then clicks an option, writes a note, generates the prompt, reloads, and fails if a choice is lost. Done when it prints `ALL CHECKS PASSED`.
+5. **Render.** Run `python3 -I .claude/skills/decision-page/scripts/render.py .scratch/<name>.json`. It writes `<name>.html` beside the JSON and prints the card count. Only what would break the page or its prompt is an error (see below); every other rule is a warning, printed and not fatal. Read the warnings and fix the ones you agree with. Add `--strict` to make any warning exit 1, for a check that wants the full house style. Done when it prints the card count and exits 0.
+6. **Prove the page works** with `node .claude/skills/decision-page/scripts/check.mjs .scratch/<name>.html` (needs `puppeteer`; see the script header). It clicks an option, writes a note, generates the prompt, reloads, and fails if a choice is lost, if the page scrolls sideways at phone width or if the page raises an error. A missing question, preview, `see` or `asks` is printed as a `NOTE` and does not fail the check. Done when it prints `ALL CHECKS PASSED`.
 7. **Hand over** the path and one line per decision, in the user's words, and say the page is in `.scratch` and is removed once its decisions are recorded. Then wait.
 8. **Close each decision the moment it is answered.** Each line of the pasted prompt names a decision and an option id. For every line, in this order and before moving to the next line or the next piece of work:
    1. **Apply** the option to the spec or code, and keep related sections consistent.
@@ -79,7 +86,7 @@ The follow-up task goes in **`docs/tasks.md`**, which is where this project keep
 }
 ```
 
-Rules the renderer enforces (tests: `scripts/test_render.py`): each card has a `trigger` from the four stop triggers and a non-empty `trigger_detail`, shown on the page as "Asked because"; unique ids; exactly one recommended option per decision; 2 to 4 options; at least one pro and one con each; every text field non-empty; `question` ends with `?`; `see` holds no builder word (script, module, schema, JSON, flag, function and the like); `question`, `today` and `after` name no id such as `D1` or `module 8` that is not a card on the page. "Not sure" is added to every card by the page. A page in the old shape (one `context`, no `see` or `asks`) still renders, with a warning, so answered pages stay readable.
+The renderer fails only on what would make the page or the prompt wrong: a file that is not readable JSON, a decision or option with no `id`, a duplicate decision or option id, the option id `unsure` (the page adds that option itself), no decision, no options, or a decision with no `"recommended": true` option (the page preselects it and the prompt names it). Everything else here is guidance and gives a warning, and the page is still written: the card cap, a `trigger` from the four stop triggers with a `trigger_detail` (shown on the page as "Asked because"), 2 to 4 options, at least one pro and one con each, the user-side fields (`question` ending with `?`, `today`, `after`, `preview`, and `see` and `asks` on each option), no builder word in `see` (script, module, schema, JSON, flag, function and the like), and no id such as `D1` or `module 8` in `question`, `today` or `after` that is not a card on the page. A field that is missing is simply not shown. "Not sure" is added to every card by the page. A page in the old shape (one `context`, no `see` or `asks`) still renders, with a warning. Tests: `scripts/test_render.py` (`python3 -I .claude/skills/decision-page/scripts/test_render.py`).
 
 ## Writing decisions
 

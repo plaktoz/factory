@@ -1,0 +1,84 @@
+{
+  "task": "decision-page-relax",
+  "branch": "plaktoz/decision-page-relax",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 5,
+  "lines": {
+    "product": 0,
+    "spec": 7,
+    "process": 372
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "vision-2026-11-26"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "decision-page-rules-are-warnings",
+      "importance": "low",
+      "category": "reversible choice",
+      "commit": "53f883667"
+    },
+    {
+      "id": "decision-page-rules-are-warnings",
+      "importance": "medium",
+      "category": "process and records",
+      "commit": "4f3ce002e"
+    },
+    {
+      "id": "2026-11-26-autonomy-within-policy",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "9fe667a05"
+    },
+    {
+      "id": "2026-11-26-the-engine-stays-the-core",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "9fe667a05"
+    },
+    {
+      "id": "2026-11-26-fewer-questions-win",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "9fe667a05"
+    },
+    {
+      "id": "2026-11-26-any-kind-of-work-with-checks",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "9fe667a05"
+    },
+    {
+      "id": "2026-11-26-one-operator-for-each-install",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "9fe667a05"
+    },
+    {
+      "id": "2026-11-26-the-vision-names-no-phase",
+      "importance": "high",
+      "category": "process and records",
+      "commit": "9fe667a05"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

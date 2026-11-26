@@ -12,6 +12,8 @@ const file = process.argv[2];
 if (!file) { console.error("usage: node check.mjs <page.html>"); process.exit(2); }
 const fails = [];
 const ok = (cond, msg) => { console.log((cond ? "PASS " : "FAIL ") + msg); if (!cond) fails.push(msg); };
+// A guidance check: reported, but it never fails the run. The page works without these fields.
+const note = (cond, msg) => console.log((cond ? "PASS " : "NOTE ") + msg);
 
 const browser = await puppeteer.launch({ headless: "new", args: ["--no-sandbox"] });
 const page = await browser.newPage();
@@ -37,8 +39,8 @@ const shape = await page.$$eval("section.card:not(#out)", cs => cs.map(c => ({
 })));
 const modern = shape.filter(s => s.ta);
 if (modern.length) {
-  ok(modern.every(s => s.q && s.pv), "each card shows its question and a preview");
-  ok(modern.every(s => s.opts.every(o => o.see && o.asks)), "each option shows what you'll see and what it asks of you");
+  note(modern.every(s => s.q && s.pv), "each card shows its question and a preview");
+  note(modern.every(s => s.opts.every(o => o.see && o.asks)), "each option shows what you'll see and what it asks of you");
   const seeFirst = await page.$$eval("section.card:not(#out) label.opt", ls => ls.filter(l => l.querySelector(".see"))
     .every(l => { const n = l.querySelector(".see").previousElementSibling; return n && (n.classList.contains("name") || n.classList.contains("rec")); }));
   ok(seeFirst, "'What you'll see' is the first line under each option name");
