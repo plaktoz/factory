@@ -1,0 +1,35 @@
+{
+  "task": "phase-1-blocking-items",
+  "branch": "plaktoz/phase-1-blocking-items",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 4,
+  "lines": {
+    "product": 76,
+    "spec": 11,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "phase1-blocking-2026-11-26"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
