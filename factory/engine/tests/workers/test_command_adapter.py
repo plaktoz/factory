@@ -801,6 +801,31 @@ def test_a_failing_dotnet_test_run_exits_nonzero_names_the_failed_test_and_marks
     assert skipped == ["C"]
 
 
+@pytest.mark.parametrize("preset, expect_default", [(None, True), ("/custom/nuget", False)])
+def test_the_dotnet_test_step_puts_the_nuget_cache_in_the_task_folder_when_none_is_set(tmp_path, preset, expect_default):
+    """Under srt ~/.nuget is not writable, so a restore that is not cached would fail. The step sets NUGET_PACKAGES to a
+    folder under the task folder unless the caller set one. A stand-in dotnet records the variable."""
+    import stat
+    import subprocess
+    bins = tmp_path / "bin"
+    bins.mkdir()
+    fake = bins / "dotnet"
+    fake.write_text('#!/bin/sh\necho "$NUGET_PACKAGES" > "$FACTORY_TASK_DIR/nuget.txt"\nexit 0\n')
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    task = tmp_path / "work"
+    task.mkdir()
+    env = {k: v for k, v in os.environ.items() if k not in ("NUGET_PACKAGES", "FACTORY_TASK_DIR")}
+    env.update({"PATH": f"{bins}{os.pathsep}{os.environ['PATH']}", "FACTORY_TASK_DIR": str(task)})
+    if preset:
+        env["NUGET_PACKAGES"] = preset
+    subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=tmp_path, env=env, capture_output=True, text=True)
+    seen = (task / "nuget.txt").read_text().strip()
+    if expect_default:
+        assert seen == str(task / "cache" / "nuget")
+    else:
+        assert seen == preset
+
+
 def test_a_dotnet_run_that_aborts_with_an_empty_trx_leaves_no_report_so_the_task_is_not_done(tmp_path, task_dir, monkeypatch):
     """vstest can abort before it runs a test (a socket it cannot bind, measured under srt 2026-11-26): it still writes a
     TRX, with no results, and exits 1. A JUnit file with 0 cases would look like a run, so the step writes none. A stand-in
