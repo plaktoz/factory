@@ -713,3 +713,84 @@ def test_the_gradle_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
     r = subprocess.run(_profile_test_argv("java", "gradle"), env=env, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the C# test step runs `dotnet test --logger trx` and converts it to JUnit, with the real dotnet ----
+
+NUGET_CACHED = all((Path.home() / ".nuget/packages" / p).is_dir() for p in
+                   ("xunit/2.9.3", "xunit.runner.visualstudio/3.1.5", "microsoft.net.test.sdk/17.14.1", "coverlet.collector"))
+needs_dotnet = pytest.mark.skipif(shutil.which("dotnet") is None or not NUGET_CACHED,
+                                  reason="dotnet and the cached xunit 2.9.3, runner 3.1.5, Test.Sdk 17.14.1 and coverlet are required (no network)")
+
+CSPROJ = """<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFramework>net%s</TargetFramework><ImplicitUsings>enable</ImplicitUsings><IsPackable>false</IsPackable></PropertyGroup>
+<ItemGroup>
+<PackageReference Include="coverlet.collector" Version="6.0.4" />
+<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+<PackageReference Include="xunit" Version="2.9.3" />
+<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+</ItemGroup>
+<ItemGroup><Using Include="Xunit" /></ItemGroup>
+</Project>"""
+
+
+def _dotnet_project(worktree: Path, body: str) -> None:
+    import re
+    import subprocess
+    major = re.match(r"(\d+)\.", subprocess.run(["dotnet", "--version"], capture_output=True, text=True).stdout)[1]
+    (worktree / "Probe.csproj").write_text(CSPROJ % (major + ".0"))
+    (worktree / "ProbeTests.cs").write_text("namespace Probe;\npublic class ProbeTests {\n" + body + "\n}\n")
+
+
+DOTNET_PASS = "[Fact] public void A() { Assert.True(true); }\n[Fact] public void B() { Assert.Equal(2, 1 + 1); }"
+DOTNET_FAIL = ("[Fact] public void A() { Assert.True(true); }\n[Fact] public void B() { Assert.Equal(1, 2); }\n"
+               "[Fact(Skip = \"later\")] public void C() { }")
+
+
+def _run_dotnet_step(worktree: Path, task_dir: Path):
+    import subprocess
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir), "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+           "DOTNET_NOLOGO": "1"}
+    return subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=worktree, env=env, capture_output=True, text=True)
+
+
+@needs_dotnet
+def test_the_dotnet_test_argv_writes_a_junit_file_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real dotnet, offline from the NuGet cache. The SDK bundles no `junit` logger (the
+    run says `Could not find a test logger ... 'junit'`), so the step uses the bundled `trx` logger and converts it."""
+    from factory_engine import gates
+    _dotnet_project(worktree, DOTNET_PASS)
+    r = _run_dotnet_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
+    assert not list(worktree.rglob("*.trx")), "the trx file belongs in the task folder, not the repo"
+
+
+@needs_dotnet
+def test_a_failing_dotnet_test_run_exits_nonzero_names_the_failed_test_and_marks_a_skip(task_dir, worktree):
+    import xml.etree.ElementTree as ET
+    from factory_engine import gates
+    _dotnet_project(worktree, DOTNET_FAIL)
+    r = _run_dotnet_step(worktree, task_dir)
+    assert r.returncode != 0
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 3 and parsed.failed == ["B"]
+    skipped = [c.get("name") for c in ET.parse(task_dir / "test.junit.xml").getroot().iter("testcase")
+               if c.find("skipped") is not None]
+    assert skipped == ["C"]
+
+
+@needs_dotnet
+def test_a_dotnet_build_error_leaves_no_report_so_the_task_is_not_done(task_dir, worktree):
+    """A project that does not build runs no test and writes no trx, so no JUnit file (the engine's gate then blocks)."""
+    _dotnet_project(worktree, "this is not C#")
+    r = _run_dotnet_step(worktree, task_dir)
+    assert r.returncode != 0
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+def test_the_dotnet_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("csharp", "dotnet"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
