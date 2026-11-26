@@ -196,6 +196,59 @@ def test_multi_agent_is_switched_off_only_when_helpers_are_off(stub, machine, ma
     assert "--disable" not in stub.argv()
 
 
+# ---- the user's own Codex setup stays out of a worker ----------------------------------------------------------
+# Checked on codex-cli 0.164.0 with `codex debug prompt-input` (no model call): with CODEX_HOME at a folder that holds a
+# config.toml with an MCP server and an AGENTS.md, the server was started and the AGENTS.md text reached the model-visible
+# input; with CODEX_HOME at an empty folder neither did. `codex exec --help`: "--ignore-user-config  Do not load
+# `$CODEX_HOME/config.toml`; auth still uses `CODEX_HOME`". These tests assert what the adapter sends. They do not run Codex.
+
+def test_the_argv_drops_the_user_config_and_names_no_profile_or_config_file(tmp_path):
+    argv = X.codex_argv("/bin/codex", tmp_path, model="m", base_url=GATEWAY, helpers=HelperPolicy("auto", 2, [], 10))
+    assert argv[:2] == ["/bin/codex", "exec"]
+    assert "--ignore-user-config" in argv and "--ephemeral" in argv
+    flags = {a.split("=")[0] for a in argv if a.startswith("-")}
+    assert not flags & {"-p", "--profile", "--config-file", "--config_file"}, "a profile or config file would load user setup"
+    for i, a in enumerate(argv):
+        if a == "-c":
+            assert not argv[i + 1].startswith(("mcp_servers", "profile")), f"-c {argv[i + 1]} would add user setup"
+
+
+def test_codex_home_is_the_task_folder_and_the_machines_value_never_passes_through(tmp_path):
+    task = tmp_path / "task"
+    machine = {"PATH": "/usr/bin", "HOME": "/home/u", "CODEX_HOME": "/home/u/.codex", **ENV_KEY}
+    env = CodexAdapter(machine).child_env(CONF, task)
+    assert env["CODEX_HOME"] == str(task / "codex-home") != machine["CODEX_HOME"]
+    forced = CodexAdapter(machine).child_env(harness("codex", {**CONF.env, "CODEX_HOME": "/home/u/.codex"}), task)
+    assert forced["CODEX_HOME"] == str(task / "codex-home"), "a harness env must not move CODEX_HOME back to the user's"
+
+
+@needs_srt
+def test_a_users_codex_files_are_not_copied_into_the_task_codex_home(stub, machine, make_ctx, task_dir, tmp_path):
+    user = tmp_path / "userhome" / ".codex"
+    user.mkdir(parents=True)
+    (user / "auth.json").write_text('{"OPENAI_API_KEY": "sk-user-SECRET"}')
+    (user / "config.toml").write_text('[mcp_servers.leaked]\ncommand = "/bin/true"\n')
+    (user / "AGENTS.md").write_text("SENTINEL-INSTRUCTIONS-7731\n")
+    stale = task_dir / "codex-home"
+    stale.mkdir(parents=True)
+    (stale / "auth.json").write_text("left by an earlier attempt")  # start() must clear this
+    result, _ = attempt(gateway_adapter(machine), make_ctx(), conf_for(stub), tmp_path)
+    assert result.exit == "ok"
+    assert json.loads(stub.seen("codex-home.txt")) == []
+    assert stub.env()["CODEX_HOME"] == str(stale) != str(user)
+    ours = [p for p in task_dir.rglob("*") if p.is_file() and "SENTINEL-INSTRUCTIONS-7731" in p.read_text(errors="ignore")]
+    assert ours == [], f"user instructions were copied into the task folder: {ours}"
+    assert not list(task_dir.rglob("auth.json"))
+
+
+@needs_srt
+def test_the_argv_a_worker_is_started_with_carries_no_profile_or_config_file(stub, machine, make_ctx, tmp_path):
+    attempt(gateway_adapter(machine), make_ctx(), conf_for(stub), tmp_path)
+    argv = stub.argv()
+    assert "--ignore-user-config" in argv
+    assert "-p" not in argv and "--profile" not in argv and "--config-file" not in argv
+
+
 # ---- tokens, models and the artifact -----------------------------------------------------------------------------
 
 @needs_srt
