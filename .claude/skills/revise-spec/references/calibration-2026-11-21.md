@@ -88,6 +88,32 @@ Result:
 - The anchor removed the variance on Consequences for this ADR. It did not touch the variance on Justified. This is one ADR and three scorers; it does not show that the anchor is steady on an ADR that has a thin Consequences section, where 3 against 4 is a judgment about how much to repeat.
 - The anchor was not changed in this run.
 
+## Run 8: the Consequences anchor on a complete ADR (item 28 caveat, 2026-11-26)
+
+Question: does Consequences hold one value on an ADR that has a Consequences section? Run 7 used the strong ADR, which has none, so it could not show that.
+
+The ADR is `2026-11-22-human-rework-notes-reach-the-stage.md`. Commit `135552f` folded its rule into the module 8 Decisions row (option 1, the owner's answer of 2026-11-24) and deleted the file. It was chosen because it is a complete folded ADR: Decision, Context, Options considered with For and Against for each option, Why, Consequences and Source. It was recovered with `git show 135552f^:docs/adr/2026-11-22-human-rework-notes-reach-the-stage.md` to a temp file outside the repo, and the temp copy was removed afterwards. Three fresh agents each read only `SKILL.md` as it stands on this branch (with the anchor sentence) and that file. They were told to treat the ADR as `proposed` and to skip `precheck.py`. None saw an earlier result or this brief. The scores are as the scorers returned them. The ADR is `accepted`, so it was scored as if proposed, as in runs 1 to 7.
+
+| File | Run | Options | Justified | Consequences | Recommendation |
+| --- | --- | --- | --- | --- | --- |
+| `2026-11-22-human-rework-notes-reach-the-stage.md` (deleted `135552f`) | 8a | 5 | 4 | 3 | needs-changes |
+| | 8b | 4 | 4 | 3 | needs-changes |
+| | 8c | 4 | 4 | 3 | needs-changes |
+
+Consequences evidence, as each scorer gave it:
+
+- 8a: "missing: what gets harder. The cost at L28, 'the other required fields hold placeholders for a human rework,' is not repeated in Consequences, so it does not count." It credits the later work at L38 and `Supersedes: none` at L41.
+- 8b: "Missing: what gets harder is not stated." The costs under the chosen option at L28 (the state-file schema change, and the placeholder fields at L15) "are not repeated in Consequences or pointed to". Its blocking item: add those costs to the "If accepted" bullet.
+- 8c: "missing: what gets harder." Consequences "lists only committed work" (L38). It names a third unrepeated cost: whether a human rework will now log `routed_back` (L21).
+
+Result:
+
+- **Spread of Consequences: one value, 3, in 3 of 3.** Run 7 gave 2 on the strong ADR, which has no section. This ADR has one, and it still scored 3 on all three runs.
+- **Options moved on one run.** It was 5, 4, 4. The anchor did not set Options, and 8a's 5 is the one value that differs. Justified was 4 in all three runs.
+- **Recommendation was `needs-changes` on 3 of 3.** The lowest-score rule sets it, and the gap is the same in all three runs.
+- **Reading:** Consequences held one value, 3, on a complete ADR. All three scorers named the same gap, "missing: what gets harder": the Consequences section lists the work it commits to (L38) and does not repeat the costs under the chosen option (L28). The scorers named different costs as missing (8a the placeholder fields, 8b the schema change and the placeholders, 8c those two and `routed_back`), but none of them gave the section a 4.
+- **What this does not show:** it is one ADR and three scorers. Each Consequences section left the costs of the chosen option out, so the run did not test a section that repeats some costs and omits others, where 3 against 4 is a judgment about how much to repeat. Options moved by one point (5, 4, 4), and the anchor does not cover it. The anchor was not changed in this run.
+
 ## What this shows
 
 - The weak ADR scored `rework` on both runs. The recommendation is stable for it.
