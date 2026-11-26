@@ -1,0 +1,84 @@
+{
+  "task": "gradle-csharp-verified",
+  "branch": "plaktoz/gradle-csharp-verified",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 8,
+  "lines": {
+    "product": 373,
+    "spec": 8,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "item-58-gradle-csharp-verified"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "3ea93f9b5"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "bcff3fcb9"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "472a8b93d"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "098ae8492"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "c8265d4e9"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "dbcca91a0"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "bf0cd0c24"
+    },
+    {
+      "id": "gradle-and-csharp-verified",
+      "importance": "medium",
+      "category": "code",
+      "commit": "98dba1265"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}

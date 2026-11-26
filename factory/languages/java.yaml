@@ -81,5 +81,55 @@ variants:
     format:       [gradlew, spotlessApply]
     format_check: [gradlew, spotlessCheck]
     lint:         [gradlew, checkstyleMain]
-    test:         [gradlew, test]
+    # A JUnit report, as the Maven step (module 17A). Gradle writes TEST-*.xml under build/test-results/test (Gradle 9.9.2,
+    # a temp project, 2026-11-26). `cleanTest` forces the run: an up-to-date `test` task writes no new report. The
+    # reports this run wrote are copied into FACTORY_TASK_DIR/test.junit.xml, the file the engine waits for (module 9).
+    # gradlew keeps its exit code, and the copy runs on failure too. Gradle's user home is FACTORY_TASK_DIR/cache/gradle
+    # unless GRADLE_USER_HOME is set: under srt only the worktree and the task folder are writable (module 9).
+    test:
+      - python3
+      - -c
+      - |
+        import os, subprocess, sys, time
+        import xml.etree.ElementTree as ET
+        d = os.environ.get("FACTORY_TASK_DIR")
+        if not d:
+            sys.stderr.write("FACTORY_TASK_DIR is not set\n")
+            sys.exit(2)
+        env = dict(os.environ)
+        env.setdefault("GRADLE_USER_HOME", os.path.join(d, "cache", "gradle"))
+        # Under srt the macOS `java` stub finds no runtime (measured 2026-11-26), so a JAVA_HOME that is not set gets the
+        # Homebrew JDK, as Homebrew's own gradle and mvn scripts use it. A set JAVA_HOME is kept.
+        env.setdefault("JAVA_HOME", "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home")
+        start = time.time()
+        try:
+            rc = subprocess.call(["./gradlew", "--no-daemon", "cleanTest", "test"], env=env)
+        except FileNotFoundError:
+            sys.stderr.write("gradlew: command not found\n")
+            sys.exit(127)
+        suites = []
+        for root, dirs, files in os.walk("."):
+            dirs[:] = [x for x in dirs if x not in (".git", "node_modules")]
+            if os.path.basename(root) != "test" or os.path.basename(os.path.dirname(root)) != "test-results":
+                continue
+            for f in files:
+                src = os.path.join(root, f)
+                if f.startswith("TEST-") and f.endswith(".xml") and os.path.getmtime(src) >= start:
+                    suites.append(ET.parse(src).getroot())
+        if suites:
+            merged = ET.Element("testsuites")
+            for s in suites:
+                merged.append(s)
+            ET.ElementTree(merged).write(os.path.join(d, "test.junit.xml"), encoding="utf-8", xml_declaration=True)
+        sys.exit(rc)
+    # The hosts the Gradle test step reaches under srt (2026-11-26, Gradle 9.9.2, temp JUnit 5 project). Each is needed:
+    # services.gradle.org serves the wrapper distribution, which redirects to github.com, then to
+    # release-assets.githubusercontent.com; repo.maven.apache.org serves JUnit. Removing each in turn fails with
+    # `host is not on the allow list` (or `Could not resolve junit`). These hosts are NOT sufficient on their own: with
+    # them the step still fails under srt at Gradle's lock service (`SocketException: Operation not permitted`), which
+    # needs srt's allowLocalBinding, a sandbox-wide grant no profile key can name. The step is not srt-verified until
+    # the owner decides that (module 17A, Gradle row).
+    network:
+      test: [services.gradle.org, github.com, release-assets.githubusercontent.com, repo.maven.apache.org]
     build:        [gradlew, assemble]
+    tools: [gradlew]

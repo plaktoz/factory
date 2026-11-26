@@ -388,9 +388,23 @@ def test_the_maven_test_step_is_a_python_argv_that_runs_mvn_and_copies_the_suref
     assert "'mvn','-q','test'" in argv[2].replace(" ", "")
 
 
-def test_the_gradle_test_step_keeps_its_shipped_argv_because_it_was_not_verified(tmp_path):
+def test_the_gradle_test_step_is_a_python_argv_that_runs_gradlew_and_copies_its_xml_to_the_task_folder(tmp_path):
     w = fixture(tmp_path, {"build.gradle": ""})
-    assert toolchains.detect(w, CFG)[0].commands["test"] == ["gradlew", "test"]
+    tc = toolchains.detect(w, CFG)[0]
+    argv = tc.commands["test"]
+    assert argv[:2] == ["python3", "-c"]
+    assert "FACTORY_TASK_DIR" in argv[2] and "test-results" in argv[2] and "test.junit.xml" in argv[2]
+    assert "./gradlew" in argv[2]
+    assert tc.tools == ["gradlew"], "doctor must check the repo's wrapper, not the python3 interpreter alone"
+
+
+def test_the_dotnet_test_step_is_a_python_argv_that_runs_dotnet_test_with_trx_and_writes_a_junit_file(tmp_path):
+    w = fixture(tmp_path, {"App.csproj": "<Project/>"})
+    tc = toolchains.detect(w, CFG)[0]
+    argv = tc.commands["test"]
+    assert argv[:2] == ["python3", "-c"]
+    assert "FACTORY_TASK_DIR" in argv[2] and '"dotnet", "test"' in argv[2] and "trx" in argv[2] and "test.junit.xml" in argv[2]
+    assert tc.tools == ["dotnet"]
 
 
 def test_the_go_test_step_is_a_python_argv_that_runs_go_test_json_and_writes_a_junit_file(tmp_path):

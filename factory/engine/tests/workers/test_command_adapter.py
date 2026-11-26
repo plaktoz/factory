@@ -624,3 +624,241 @@ def test_the_go_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
     r = subprocess.run(_profile_test_argv("go", "go"), env=env, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the Gradle test step copies Gradle's JUnit XML into the task folder, with the real gradlew ----
+
+GRADLE_DIST_CACHED = (Path.home() / ".gradle/wrapper/dists/gradle-9.9.2-bin").is_dir()
+needs_gradle = pytest.mark.skipif(shutil.which("gradle") is None or shutil.which("java") is None or not GRADLE_DIST_CACHED,
+                                  reason="gradle 9.9.2 (to write the wrapper), java and the cached 9.9.2 distribution "
+                                         "and JUnit 5.10.2 are required (no network)")
+
+
+def _gradle_project(worktree: Path, assertion: str) -> None:
+    """A JUnit 5 project with its own wrapper, as the profile expects (`gradlew` is the repo's, module 17A)."""
+    import subprocess
+    (worktree / "settings.gradle").write_text('rootProject.name = "probe"\n')
+    (worktree / "build.gradle").write_text(
+        'plugins { id "java" }\nrepositories { mavenCentral() }\ndependencies {\n'
+        '    testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"\n'
+        '    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"\n}\ntest { useJUnitPlatform() }\n')
+    tests = worktree / "src" / "test" / "java" / "probe"
+    tests.mkdir(parents=True)
+    (tests / "ProbeTest.java").write_text(
+        "package probe;\nimport org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n"
+        f"class ProbeTest {{ @Test void a() {{ assertTrue(true); }} @Test void b() {{ {assertion} }} }}\n")
+    subprocess.run(["gradle", "wrapper", "--gradle-version", "9.9.2", "--offline"], cwd=worktree, check=True,
+                   capture_output=True)
+
+
+def _run_gradle_step(worktree: Path, task_dir: Path):
+    import subprocess
+    # Offline, from ~/.gradle (the cached distribution and JUnit), as the Maven tests read ~/.m2. The step's own default
+    # home is the task folder, which the srt test in test_step_network.py uses.
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir), "GRADLE_USER_HOME": str(Path.home() / ".gradle"),
+           "GRADLE_OPTS": "-Dorg.gradle.offline=true"}
+    return subprocess.run(_profile_test_argv("java", "gradle"), cwd=worktree, env=env, capture_output=True, text=True)
+
+
+@needs_gradle
+def test_the_gradle_test_argv_writes_one_junit_file_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real gradlew, offline. Gradle writes build/test-results/test/TEST-*.xml; the step
+    copies them into test.junit.xml, the file the engine waits for (module 17A)."""
+    from factory_engine import gates
+    _gradle_project(worktree, "assertEquals(2, 1 + 1);")
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
+
+
+@needs_gradle
+def test_a_failing_gradle_test_run_exits_nonzero_and_still_leaves_its_report(task_dir, worktree):
+    from factory_engine import gates
+    _gradle_project(worktree, "assertEquals(1, 2);")
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode != 0
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 2 and parsed.failed == ["b()"]
+
+
+@needs_gradle
+def test_a_second_gradle_run_with_nothing_changed_still_runs_the_tests_and_writes_a_report(task_dir, worktree, tmp_path):
+    """Gradle skips an up-to-date `test` task and writes no new XML; the step forces the run, so a retry is not empty."""
+    from factory_engine import gates
+    _gradle_project(worktree, "assertEquals(2, 1 + 1);")
+    assert _run_gradle_step(worktree, task_dir).returncode == 0
+    (task_dir / "test.junit.xml").unlink()
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
+
+
+@needs_gradle
+def test_a_stale_gradle_report_from_an_earlier_run_is_not_copied(task_dir, worktree):
+    """A build that fails before any test runs must not hand the gate the last run's report."""
+    _gradle_project(worktree, "assertEquals(2, 1 + 1);")
+    stale = worktree / "build" / "test-results" / "test"
+    stale.mkdir(parents=True)
+    old = stale / "TEST-old.xml"
+    old.write_text('<testsuite><testcase name="old"/></testsuite>')
+    os.utime(old, (1_000_000_000, 1_000_000_000))
+    (worktree / "build.gradle").write_text("this is not groovy {{{")
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode != 0
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+@pytest.mark.parametrize("preset, expect_default", [(None, True), ("/custom/jdk", False)])
+def test_the_gradle_test_step_names_a_jdk_when_none_is_set(tmp_path, preset, expect_default):
+    """Under srt the macOS `java` stub finds no runtime (measured 2026-11-26), so the step sets JAVA_HOME to the Homebrew
+    JDK that Homebrew's own gradle and mvn scripts use, unless the caller already set one. The gradlew here records it."""
+    import subprocess
+    (tmp_path / "gradlew").write_text('#!/bin/sh\necho "$JAVA_HOME" > "$FACTORY_TASK_DIR/java-home.txt"\n')
+    (tmp_path / "gradlew").chmod(0o755)
+    task = tmp_path / "work"
+    task.mkdir()
+    env = {k: v for k, v in os.environ.items() if k not in ("JAVA_HOME", "FACTORY_TASK_DIR")}
+    env["FACTORY_TASK_DIR"] = str(task)
+    if preset:
+        env["JAVA_HOME"] = preset
+    subprocess.run(_profile_test_argv("java", "gradle"), cwd=tmp_path, env=env, capture_output=True, text=True)
+    seen = (task / "java-home.txt").read_text().strip()
+    if expect_default:
+        assert seen == "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"
+    else:
+        assert seen == preset
+
+
+def test_the_gradle_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("java", "gradle"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the C# test step runs `dotnet test --logger trx` and converts it to JUnit, with the real dotnet ----
+
+NUGET_CACHED = all((Path.home() / ".nuget/packages" / p).is_dir() for p in
+                   ("xunit/2.9.3", "xunit.runner.visualstudio/3.1.5", "microsoft.net.test.sdk/17.14.1", "coverlet.collector"))
+needs_dotnet = pytest.mark.skipif(shutil.which("dotnet") is None or not NUGET_CACHED,
+                                  reason="dotnet and the cached xunit 2.9.3, runner 3.1.5, Test.Sdk 17.14.1 and coverlet are required (no network)")
+
+CSPROJ = """<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><TargetFramework>net%s</TargetFramework><ImplicitUsings>enable</ImplicitUsings><IsPackable>false</IsPackable></PropertyGroup>
+<ItemGroup>
+<PackageReference Include="coverlet.collector" Version="6.0.4" />
+<PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+<PackageReference Include="xunit" Version="2.9.3" />
+<PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+</ItemGroup>
+<ItemGroup><Using Include="Xunit" /></ItemGroup>
+</Project>"""
+
+
+def _dotnet_project(worktree: Path, body: str) -> None:
+    import re
+    import subprocess
+    major = re.match(r"(\d+)\.", subprocess.run(["dotnet", "--version"], capture_output=True, text=True).stdout)[1]
+    (worktree / "Probe.csproj").write_text(CSPROJ % (major + ".0"))
+    (worktree / "ProbeTests.cs").write_text("namespace Probe;\npublic class ProbeTests {\n" + body + "\n}\n")
+
+
+DOTNET_PASS = "[Fact] public void A() { Assert.True(true); }\n[Fact] public void B() { Assert.Equal(2, 1 + 1); }"
+DOTNET_FAIL = ("[Fact] public void A() { Assert.True(true); }\n[Fact] public void B() { Assert.Equal(1, 2); }\n"
+               "[Fact(Skip = \"later\")] public void C() { }")
+
+
+def _run_dotnet_step(worktree: Path, task_dir: Path):
+    import subprocess
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir), "DOTNET_CLI_TELEMETRY_OPTOUT": "1",
+           "DOTNET_NOLOGO": "1"}
+    return subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=worktree, env=env, capture_output=True, text=True)
+
+
+@needs_dotnet
+def test_the_dotnet_test_argv_writes_a_junit_file_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real dotnet, offline from the NuGet cache. The SDK bundles no `junit` logger (the
+    run says `Could not find a test logger ... 'junit'`), so the step uses the bundled `trx` logger and converts it."""
+    from factory_engine import gates
+    _dotnet_project(worktree, DOTNET_PASS)
+    r = _run_dotnet_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
+    assert not list(worktree.rglob("*.trx")), "the trx file belongs in the task folder, not the repo"
+
+
+@needs_dotnet
+def test_a_failing_dotnet_test_run_exits_nonzero_names_the_failed_test_and_marks_a_skip(task_dir, worktree):
+    import xml.etree.ElementTree as ET
+    from factory_engine import gates
+    _dotnet_project(worktree, DOTNET_FAIL)
+    r = _run_dotnet_step(worktree, task_dir)
+    assert r.returncode != 0
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 3 and parsed.failed == ["B"]
+    skipped = [c.get("name") for c in ET.parse(task_dir / "test.junit.xml").getroot().iter("testcase")
+               if c.find("skipped") is not None]
+    assert skipped == ["C"]
+
+
+@pytest.mark.parametrize("preset, expect_default", [(None, True), ("/custom/nuget", False)])
+def test_the_dotnet_test_step_puts_the_nuget_cache_in_the_task_folder_when_none_is_set(tmp_path, preset, expect_default):
+    """Under srt ~/.nuget is not writable, so a restore that is not cached would fail. The step sets NUGET_PACKAGES to a
+    folder under the task folder unless the caller set one. A stand-in dotnet records the variable."""
+    import stat
+    import subprocess
+    bins = tmp_path / "bin"
+    bins.mkdir()
+    fake = bins / "dotnet"
+    fake.write_text('#!/bin/sh\necho "$NUGET_PACKAGES|$NUGET_HTTP_CACHE_PATH" > "$FACTORY_TASK_DIR/nuget.txt"\nexit 0\n')
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    task = tmp_path / "work"
+    task.mkdir()
+    env = {k: v for k, v in os.environ.items() if k not in ("NUGET_PACKAGES", "NUGET_HTTP_CACHE_PATH", "FACTORY_TASK_DIR")}
+    env.update({"PATH": f"{bins}{os.pathsep}{os.environ['PATH']}", "FACTORY_TASK_DIR": str(task)})
+    if preset:
+        env["NUGET_PACKAGES"] = preset
+        env["NUGET_HTTP_CACHE_PATH"] = preset + "-http"
+    subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=tmp_path, env=env, capture_output=True, text=True)
+    packages, http = (task / "nuget.txt").read_text().strip().split("|")
+    if expect_default:
+        assert packages == str(task / "cache" / "nuget")
+        assert http == str(task / "cache" / "nuget-http")
+    else:
+        assert packages == preset and http == preset + "-http"
+
+
+def test_a_dotnet_run_that_aborts_with_an_empty_trx_leaves_no_report_so_the_task_is_not_done(tmp_path, task_dir, monkeypatch):
+    """vstest can abort before it runs a test (a socket it cannot bind, measured under srt 2026-11-26): it still writes a
+    TRX, with no results, and exits 1. A JUnit file with 0 cases would look like a run, so the step writes none. A stand-in
+    `dotnet` makes that TRX; the real tool's abort needs srt's local binding, which the factory does not grant."""
+    import stat
+    import subprocess
+    bins = tmp_path / "bin"
+    bins.mkdir()
+    fake = bins / "dotnet"
+    fake.write_text('#!/bin/sh\nfor a in "$@"; do last="$prev"; prev="$a"; done\n'
+                    'mkdir -p "$prev"\n'
+                    'printf \'<TestRun xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010"><Results/></TestRun>\' '
+                    '> "$prev/results.trx"\nexit 1\n')
+    fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
+    env = {**os.environ, "PATH": f"{bins}{os.pathsep}{os.environ['PATH']}", "FACTORY_TASK_DIR": str(task_dir)}
+    r = subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=tmp_path, env=env, capture_output=True, text=True)
+    assert r.returncode == 1
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+@needs_dotnet
+def test_a_dotnet_build_error_leaves_no_report_so_the_task_is_not_done(task_dir, worktree):
+    """A project that does not build runs no test and writes no trx, so no JUnit file (the engine's gate then blocks)."""
+    _dotnet_project(worktree, "this is not C#")
+    r = _run_dotnet_step(worktree, task_dir)
+    assert r.returncode != 0
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+def test_the_dotnet_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("csharp", "dotnet"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr

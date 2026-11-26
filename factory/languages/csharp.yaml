@@ -8,5 +8,62 @@ variants:
     format:       [dotnet, format]
     format_check: [dotnet, format, --verify-no-changes]
     lint:         [dotnet, format, --verify-no-changes]
-    test:         [dotnet, test]
+    # A JUnit report, as the other test steps (module 17A). The .NET SDK bundles no `junit` logger (dotnet 11.0.100:
+    # `Could not find a test logger ... 'junit'`), so the step runs `dotnet test --logger trx` into a folder made for this
+    # run and converts each test result in the TRX file to one JUnit case, in FACTORY_TASK_DIR/test.junit.xml. A failed
+    # test is a `failure`, a skipped (NotExecuted) one a `skipped`. dotnet keeps its exit code; the conversion runs on
+    # failure too. A project that does not build writes no TRX, so no file is left and the task is not done.
+    test:
+      - python3
+      - -c
+      - |
+        import os, shutil, subprocess, sys, tempfile
+        import xml.etree.ElementTree as ET
+        from xml.sax.saxutils import quoteattr
+        d = os.environ.get("FACTORY_TASK_DIR")
+        if not d:
+            sys.stderr.write("FACTORY_TASK_DIR is not set\n")
+            sys.exit(2)
+        results = tempfile.mkdtemp(prefix="trx-", dir=d)
+        # Under srt ~/.nuget and ~/.local/share/NuGet are not writable (measured 2026-11-26: the restore's HTTP cache was
+        # denied), so a restore that is not cached needs both caches in the task folder. Set values are kept.
+        env = dict(os.environ)
+        env.setdefault("NUGET_PACKAGES", os.path.join(d, "cache", "nuget"))
+        env.setdefault("NUGET_HTTP_CACHE_PATH", os.path.join(d, "cache", "nuget-http"))
+        try:
+            rc = subprocess.call(["dotnet", "test", "--logger", "trx;LogFileName=results.trx", "--results-directory", results], env=env)
+        except FileNotFoundError:
+            sys.stderr.write("dotnet: command not found\n")
+            sys.exit(127)
+        ns = "{http://microsoft.com/schemas/VisualStudio/TeamTest/2010}"
+        trx = os.path.join(results, "results.trx")
+        cases = []
+        if os.path.isfile(trx):
+            for r in ET.parse(trx).getroot().iter(ns + "UnitTestResult"):
+                outcome = r.get("outcome")
+                msg = r.find(f"{ns}Output/{ns}ErrorInfo/{ns}Message")
+                cases.append((r.get("testName", ""), outcome, (msg.text or "") if msg is not None else ""))
+        # A run with no test result (vstest aborted before any test ran) writes no file, so the task is not done.
+        if cases:
+            out = ['<testsuite name="dotnet test" tests="%d" failures="%d">' % (len(cases), sum(c[1] == "Failed" for c in cases))]
+            for name, outcome, text in cases:
+                out.append("<testcase classname=%s name=%s>" % (quoteattr(name.rpartition(".")[0]), quoteattr(name.rpartition(".")[2])))
+                if outcome == "Failed":
+                    out.append("<failure message=%s/>" % quoteattr(text[-2000:]))
+                elif outcome == "NotExecuted":
+                    out.append("<skipped/>")
+                out.append("</testcase>")
+            out.append("</testsuite>")
+            with open(os.path.join(d, "test.junit.xml"), "w") as f:
+                f.write("\n".join(out))
+        shutil.rmtree(results, ignore_errors=True)
+        sys.exit(rc)
+    # The NuGet host and the trustd grant (2026-11-26, dotnet 11.0.100, a temp xUnit project with Humanizer.Core not in
+    # the cache). A cold restore with the host removed fails `NU1301: Unable to load the service index`; with the host but
+    # no grant the index loads but the restore fails `NU1301` (SSL, the macOS trust store). Both are needed. The step
+    # also needs srt's allowLocalBinding, because vstest binds a TcpListener (`SocketException: Permission denied`), which
+    # no profile key can name: not srt-verified until the owner decides (module 17A, C# row).
+    network:
+      test: {allow: [api.nuget.org], mach: [com.apple.trustd.agent]}
     build:        [dotnet, build]
+    tools: [dotnet]
