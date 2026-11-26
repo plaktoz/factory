@@ -624,3 +624,92 @@ def test_the_go_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
     env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
     r = subprocess.run(_profile_test_argv("go", "go"), env=env, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
+
+
+# ---- item 58 follow-up: the Gradle test step copies Gradle's JUnit XML into the task folder, with the real gradlew ----
+
+GRADLE_DIST_CACHED = (Path.home() / ".gradle/wrapper/dists/gradle-9.9.2-bin").is_dir()
+needs_gradle = pytest.mark.skipif(shutil.which("gradle") is None or shutil.which("java") is None or not GRADLE_DIST_CACHED,
+                                  reason="gradle 9.9.2 (to write the wrapper), java and the cached 9.9.2 distribution "
+                                         "and JUnit 5.10.2 are required (no network)")
+
+
+def _gradle_project(worktree: Path, assertion: str) -> None:
+    """A JUnit 5 project with its own wrapper, as the profile expects (`gradlew` is the repo's, module 17A)."""
+    import subprocess
+    (worktree / "settings.gradle").write_text('rootProject.name = "probe"\n')
+    (worktree / "build.gradle").write_text(
+        'plugins { id "java" }\nrepositories { mavenCentral() }\ndependencies {\n'
+        '    testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"\n'
+        '    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"\n}\ntest { useJUnitPlatform() }\n')
+    tests = worktree / "src" / "test" / "java" / "probe"
+    tests.mkdir(parents=True)
+    (tests / "ProbeTest.java").write_text(
+        "package probe;\nimport org.junit.jupiter.api.Test;\nimport static org.junit.jupiter.api.Assertions.*;\n"
+        f"class ProbeTest {{ @Test void a() {{ assertTrue(true); }} @Test void b() {{ {assertion} }} }}\n")
+    subprocess.run(["gradle", "wrapper", "--gradle-version", "9.9.2", "--offline"], cwd=worktree, check=True,
+                   capture_output=True)
+
+
+def _run_gradle_step(worktree: Path, task_dir: Path):
+    import subprocess
+    # Offline, from ~/.gradle (the cached distribution and JUnit), as the Maven tests read ~/.m2. The step's own default
+    # home is the task folder, which the srt test in test_step_network.py uses.
+    env = {**os.environ, "FACTORY_TASK_DIR": str(task_dir), "GRADLE_USER_HOME": str(Path.home() / ".gradle"),
+           "GRADLE_OPTS": "-Dorg.gradle.offline=true"}
+    return subprocess.run(_profile_test_argv("java", "gradle"), cwd=worktree, env=env, capture_output=True, text=True)
+
+
+@needs_gradle
+def test_the_gradle_test_argv_writes_one_junit_file_into_the_task_folder(task_dir, worktree):
+    """The profile's own argv with the real gradlew, offline. Gradle writes build/test-results/test/TEST-*.xml; the step
+    copies them into test.junit.xml, the file the engine waits for (module 17A)."""
+    from factory_engine import gates
+    _gradle_project(worktree, "assertEquals(2, 1 + 1);")
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
+
+
+@needs_gradle
+def test_a_failing_gradle_test_run_exits_nonzero_and_still_leaves_its_report(task_dir, worktree):
+    from factory_engine import gates
+    _gradle_project(worktree, "assertEquals(1, 2);")
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode != 0
+    parsed = gates.parse_junit([task_dir / "test.junit.xml"])
+    assert parsed.total == 2 and parsed.failed == ["b()"]
+
+
+@needs_gradle
+def test_a_second_gradle_run_with_nothing_changed_still_runs_the_tests_and_writes_a_report(task_dir, worktree, tmp_path):
+    """Gradle skips an up-to-date `test` task and writes no new XML; the step forces the run, so a retry is not empty."""
+    from factory_engine import gates
+    _gradle_project(worktree, "assertEquals(2, 1 + 1);")
+    assert _run_gradle_step(worktree, task_dir).returncode == 0
+    (task_dir / "test.junit.xml").unlink()
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert gates.parse_junit([task_dir / "test.junit.xml"]).total == 2
+
+
+@needs_gradle
+def test_a_stale_gradle_report_from_an_earlier_run_is_not_copied(task_dir, worktree):
+    """A build that fails before any test runs must not hand the gate the last run's report."""
+    _gradle_project(worktree, "assertEquals(2, 1 + 1);")
+    stale = worktree / "build" / "test-results" / "test"
+    stale.mkdir(parents=True)
+    old = stale / "TEST-old.xml"
+    old.write_text('<testsuite><testcase name="old"/></testsuite>')
+    os.utime(old, (1_000_000_000, 1_000_000_000))
+    (worktree / "build.gradle").write_text("this is not groovy {{{")
+    r = _run_gradle_step(worktree, task_dir)
+    assert r.returncode != 0
+    assert not list(task_dir.glob("*.junit.xml"))
+
+
+def test_the_gradle_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
+    import subprocess
+    env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}
+    r = subprocess.run(_profile_test_argv("java", "gradle"), env=env, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 2 and "FACTORY_TASK_DIR is not set" in r.stderr
