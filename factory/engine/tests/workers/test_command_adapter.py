@@ -708,6 +708,27 @@ def test_a_stale_gradle_report_from_an_earlier_run_is_not_copied(task_dir, workt
     assert not list(task_dir.glob("*.junit.xml"))
 
 
+@pytest.mark.parametrize("preset, expect_default", [(None, True), ("/custom/jdk", False)])
+def test_the_gradle_test_step_names_a_jdk_when_none_is_set(tmp_path, preset, expect_default):
+    """Under srt the macOS `java` stub finds no runtime (measured 2026-11-26), so the step sets JAVA_HOME to the Homebrew
+    JDK that Homebrew's own gradle and mvn scripts use, unless the caller already set one. The gradlew here records it."""
+    import subprocess
+    (tmp_path / "gradlew").write_text('#!/bin/sh\necho "$JAVA_HOME" > "$FACTORY_TASK_DIR/java-home.txt"\n')
+    (tmp_path / "gradlew").chmod(0o755)
+    task = tmp_path / "work"
+    task.mkdir()
+    env = {k: v for k, v in os.environ.items() if k not in ("JAVA_HOME", "FACTORY_TASK_DIR")}
+    env["FACTORY_TASK_DIR"] = str(task)
+    if preset:
+        env["JAVA_HOME"] = preset
+    subprocess.run(_profile_test_argv("java", "gradle"), cwd=tmp_path, env=env, capture_output=True, text=True)
+    seen = (task / "java-home.txt").read_text().strip()
+    if expect_default:
+        assert seen == "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home"
+    else:
+        assert seen == preset
+
+
 def test_the_gradle_test_argv_refuses_to_run_without_a_task_folder(tmp_path):
     import subprocess
     env = {k: v for k, v in os.environ.items() if k != "FACTORY_TASK_DIR"}

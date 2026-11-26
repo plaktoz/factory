@@ -98,6 +98,9 @@ variants:
             sys.exit(2)
         env = dict(os.environ)
         env.setdefault("GRADLE_USER_HOME", os.path.join(d, "cache", "gradle"))
+        # Under srt the macOS `java` stub finds no runtime (measured 2026-11-26), so a JAVA_HOME that is not set gets the
+        # Homebrew JDK, as Homebrew's own gradle and mvn scripts use it. A set JAVA_HOME is kept.
+        env.setdefault("JAVA_HOME", "/opt/homebrew/opt/openjdk/libexec/openjdk.jdk/Contents/Home")
         start = time.time()
         try:
             rc = subprocess.call(["./gradlew", "--no-daemon", "cleanTest", "test"], env=env)
