@@ -12,7 +12,7 @@ You need:
 
 - `git`, `gh` (logged in: `gh auth status`) and `uv`.
 - Node 22.12 or newer, and the sandbox `srt` that runs on it: `npm install -g @anthropic-ai/sandbox-runtime@0.0.83`. `factory doctor` checks both and prints this command when `srt` is missing.
-- The Claude Code CLI (`claude`) on your `PATH`. The factory starts it for each worker task. Install it from Anthropic's Claude Code documentation, then check it with `claude --version`. The runs on this page used 2.1.330.
+- The Claude Code CLI (`claude`) on your `PATH`. The factory starts it for each worker task. Install it with `npm install -g @anthropic-ai/claude-code`, then check it with `claude --version`. The runs on this page used 2.1.330.
 - Python 3.10 or newer.
 - Credentials for Claude: `ANTHROPIC_API_KEY`, or `ANTHROPIC_AUTH_TOKEN` with `ANTHROPIC_BASE_URL`. A login session does not work in phase 1.
 - The factory source: a checkout of this repo, in any folder you like. Set `FACTORY_SRC` to its path, for example `export FACTORY_SRC=~/Developer/factory`. Every `$FACTORY_SRC` below uses it. It is a name used on this page only, and the factory does not read it. It is **not** `~/.factory`: that is the factory home, a different folder (see the next section).
