@@ -864,10 +864,22 @@ class Engine:
             worktree=worktree, task_dir=task_dir, scope=list(spec.scope), deny=list(spec.deny), helpers=spec.helpers,
             feedback=sorted((run_dir / "tasks" / spec.id / "feedback").glob("*.json")),
             notes=notes.delivered_notes(run_dir, spec.id), progress=None, output_schema=None, model=spec.model,
-            mcp=[], practices=[], artifact_name=spec.out or "artifact.json", bash=[],
+            mcp=[], practices=self._practices(run, stage, spec), artifact_name=spec.out or "artifact.json", bash=[],
             cmd=list(spec.cmd) if spec.cmd else None, run=spec.run, plugin_dir=None,
             question=self._question_of(run_dir, stage, spec), network_domains=list(spec.network_domains),
             network_mach=list(spec.network_mach))
+
+    def _practices(self, run: Run, stage: Stage, spec: TaskSpec) -> list[skills.SkillRef]:
+        """Module 10: a skill task gets the practice pack of each language the run has changed so far. The languages are
+        17A's verify computation (`toolchains.language_tasks`: a detected profile whose files the run branch's diff
+        against its base matches), so there is one detector. A command task gets none, and a run that changed no
+        detected language gets none."""
+        if spec.skill is None or not run.worktree.is_dir():  # triage runs before the run worktree exists: nothing changed yet
+            return []
+        base = (self.cfg.repo or {}).get("base_branch", "main")
+        changed = gitops.changed_files(run.worktree, gitops.base_ref(run.worktree, base))
+        languages = [t.id.removeprefix("test-") for t in toolchains.language_tasks(run.worktree, self.cfg, "test", changed)]
+        return skills.practice_packs(languages, stage.id, self.repo, self.cfg)
 
     @staticmethod
     def _question_of(run_dir: Path, stage: Stage, spec: TaskSpec) -> str | None:
