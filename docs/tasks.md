@@ -6,11 +6,38 @@ Markers: `[ ]` open, `[~]` started (say what is left), `[x]` done (say how it wa
 
 ## Resume here
 
-**State at 2026-11-24 (phase 1a built and item 12 done; the backlog review is filed as items 46 to 61).** Merged work is in `git log origin/main`; this page does not name a sha. Checked 2026-11-24 on `984e533`: the engine suite with `-n 8` gives 1111 passed, 2 skipped, 1 xfailed, 1 failed (item 47); the launcher suite gives 159 passed; `records`, `links`, `criteria` and `contracts` pass. The merge history below is from 2026-11-16. Merged: waves 0 to 2 (modules 3, 4, 5, 6A, 7, 8, 9, 10, 11, 12, 14, 17, 17A), module 13 (PR #37), module 15 (PR #36), the report schemas (PR #35), the waves 1 and 2 criteria audit (PR #38), **module 6B (PR #49), the three audit code gaps (PR #50), the wave 3 decisions and triage tasks (PRs #46, #47), and the Codex residual risk in D7 (PR #48), and the Codex worker adapter (PR #43, merge commit `683e3e5`)**. Last full engine suite, reported in PR #50 (not rerun on 2026-11-16): 785 passed, 1 skipped on 3.10 and on 3.15; launcher suite 57 passed. All PRs after #35 went in as merge commits.
+**State at 2026-11-26.** `main` is green: the four docs checks pass and `records.py` reports 0 problems. Phase 1a is **not done**. Its done line (owner decision 2026-11-26, `2026-11-26-phase-1a-done-needs-every-box`) is every integration box tagged 1a in `docs/design/shared/20-dependencies-and-plan.md`, live runs included. Two are unticked: the pilot run on a real repo, and a seeded request through every `bug-fix` gate with a real model (the adapter half passed on 2026-11-26). Both need the owner. Merged work is in `git log origin/main`; this page names no sha.
 
-**Product before process (owner, 2026-11-22, the decide-by-default row in `docs/process.md`):** until item 12 (a full live run) is `[x]`, build product code; a new skill, check, calibration round or process ADR waits for the owner to ask. Reversible choices are made at the recommendation and logged in `decisions.md`; only stop triggers in `AGENTS.md` go to the owner, at most one page a day.
+**Product before process (owner, 2026-11-22):** a new skill, check, calibration round or process ADR waits for the owner to ask (`docs/vision.md` P5).
 
-**Next (the owner's backlog list of 2026-11-24, in this order):** item 47 (route the blocked answer; `main` has one red test), items 48 to 53 (commit, merge `origin/main` and open a pull request for each unpushed piece of work), then item 55 (apply the five owner decisions) and item 56 (the per-worktree lock: a proposal first, and no code until the owner approves it), then items 57 to 61. The spec-pilot verdict (item 18) can be read after 2026-11-25 11:24 UTC.
+### Work board (2026-11-26)
+
+Pick a lane, not an item. Lanes touch disjoint files, so sessions in different lanes can run in parallel in their own worktrees. Two items in one lane share files and go one after another. **`factory/engine/factory_engine/engine.py` (1,462 lines) is shared by lanes B and C, so they must not run at the same time.**
+
+| Lane | Work | Files it touches | Needs the owner? |
+| --- | --- | --- | --- |
+| A. Phase 1a close | The pilot on `plaktoz/test-adapters`; a live bug-fix run through every gate. Steps are in the owner's `.scratch/owner-steps-phase-1a.md` (untracked) | `plaktoz/test-adapters`, the run folder, section 20 | **Yes**: the chore issue, the repo's push approval, a fixture for the live bug-fix run |
+| B. Practice packs and MCP (1b step 2) | `engine.py` passes `practices=[]` and `mcp=[]`; `practice_packs` has no caller; `factory/skills/own/practices/` is empty (module 10 L72) | `engine.py`, `skills.py`, `factory/skills/own/practices/`, module 10 | No |
+| C. Plugins and hooks (1b step 3) | module 5 has 10 unticked criteria; `plugins` is listed in the launcher's command list but no engine parser command backs it, so `factory plugins enable\|disable` answers `kit.no_engine` or nothing (module 16 L106) | `engine.py`, `workflow.py`, `plugin_runner.py`, modules 5, 9, 16 | No, after lane B |
+| D. Dashboard writes (1b step 4) | module 15 L100 (submit on the page); there is no React source | `factory/launcher/factory_launcher/server/`, `factory/dashboard/`, module 15 | No |
+| E. Codex proofs (P2-1) | The live Codex smoke passed 2026-11-26. `CodexAdapter.check` already checks the binary, the key and `srt`; what it does not check is isolation: no test shows a user's MCP servers stay out of a Codex worker, and the `doctor` isolation probe is Claude-only. Also open: the same gate evidence on both harnesses, the router skill from Codex | `adapters/worker/codex.py`, `doctor` probe, module 9, `phase-2.md` P2-1 | No (the gateway key works, checked 2026-11-26) |
+| F. Small gaps, any time | module 7 L140 (`reset_dependents` writes no marker), module 10 L72 and L106, module 11 L221 (one test for every stop kind), module 9 L330 (personal instructions the probe cannot see) | one test file or one function each | No |
+| G. Docs and process | item 3 (the tutorial's install line for Claude Code is missing: it says to install it from Anthropic's documentation. This machine has it from `npm install -g @anthropic-ai/claude-code` (2.1.332, checked 2026-11-26); part 3's own sample request; a repo with required CI); item 18 (rerun `scripts/spec-pilot.py --window 72h` once a spec pull request has a full window); item 33 (calibration rows for modules 7 and 16 wait for the owner to ask) | `docs/tutorial.md`, `docs/process.md` | Item 33 only |
+
+**The order within 1b is the owner's (2026-11-24): feature workflow (done), practice packs and MCP, plugins and hooks, dashboard writes.** Lane D has no shared file with B or C, so it can run beside either; the order matters for what ships first, not for what can be built.
+
+### Next three, if you are a session with no brief
+
+1. **Lane F, module 12 L40:** a test that a queued note reaches the restarted worker's prompt (`test_a_queued_note_restarts_the_worker_and_is_marked_delivered`). Branch `plaktoz/note-reaches-the-prompt` has the assertion; it is not merged yet, and it fails when the engine stops handing over notes.
+2. **Lane F, module 7 L140:** `gitops.reset_dependents` creates task worktrees with no run marker, and nothing calls it. Decide first whether to wire it or delete it; a test that lists a worktree's factory files comes with either.
+3. **Lane B, practice packs:** wire `skills.practice_packs` into `Engine._specs` for each task's changed languages, ship one real practice file for Python, and test that a Java-only task gets only the Java pack (module 10 L72).
+
+### Stale lines in the numbered items below (checked 2026-11-26)
+
+- Item 59: the unticked boxes are now the live smoke (adapter half passed), the pilot, research (1b) and a dashboard decision (1b). Boxes 177 and 178 are ticked with tests (PR #231). Its text still lists "L175 and L176"; the line numbers moved.
+- Item 62 says Codex proofs need the gateway key checked; it works (a real `codex exec` returned, and `test_live_codex_smoke.py` passes).
+- Items 5, 6 and 15 carry "still open" text that later pull requests closed; read the Log, not the item, for the current state.
+- Items with no marker (2, 4 to 7, 9 to 12, 14, 15) are history. None is a task.
 
 **Not done:**
 
