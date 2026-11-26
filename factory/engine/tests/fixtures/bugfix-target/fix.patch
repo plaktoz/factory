@@ -1,0 +1,13 @@
+diff --git a/services/api/report.py b/services/api/report.py
+index d2ab9de..cbb4cd4 100644
+--- a/services/api/report.py
++++ b/services/api/report.py
+@@ -6,7 +6,7 @@ import sys
+ 
+ def report_total(rows):
+     """The sum of every row's `amount_cents`."""
+-    return sum(row["amount_cents"] for row in rows[:-1])
++    return sum(row["amount_cents"] for row in rows)
+ 
+ 
+ def build_report(rows):
