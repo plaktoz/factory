@@ -1,0 +1,54 @@
+{
+  "task": "open-items-2026-11-26",
+  "branch": "plaktoz/open-items-2026-11-26",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 0,
+    "spec": 9,
+    "process": 1
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "open-items-2026-11-26"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [
+    {
+      "id": "2026-11-26-phase-1a-done-needs-every-box",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "d374c1ddf"
+    },
+    {
+      "id": "2026-11-26-the-merge-record-keeps-its-shape",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "d374c1ddf"
+    },
+    {
+      "id": "delete-the-merged-remote-branches",
+      "importance": "high",
+      "category": "reversible choice",
+      "commit": "d374c1ddf"
+    }
+  ],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
