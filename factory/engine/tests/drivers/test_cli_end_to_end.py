@@ -10,6 +10,7 @@ stubbed that way: they go to the command fake, which writes their reports. The r
 """
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from factory_engine import cli, decisions, gates, skills, state
 from factory_engine.adapters.worker.base import Capabilities
 from factory_engine.adapters.worker.fake import FakeWorkerAdapter, ok
 from factory_engine.fake_prs import FakePullRequests
+from factory_engine.gh import GitHubTracker
 
 
 @pytest.fixture
@@ -241,3 +243,77 @@ def _split_worker_and_command(script, writes, *, native: bool = False):
 def _tracker():
     from factory_engine.adapters.tracker.fake import FakeTracker
     return FakeTracker()
+
+
+class RecordedGh:
+    """A `gh` runner that replays what GitHub answers: one open `factory` issue, and it records every call. The label
+    and comment calls (`issue edit`, `issue comment`) are the factory telling the issue where its run stands."""
+
+    def __init__(self):
+        self.calls: list[list[str]] = []
+        self.issues = json.dumps([{
+            "number": 7, "title": "Fix the off-by-one in the report", "body": "The totals miss the last row.",
+            "labels": [{"name": "factory"}, {"name": "bug"}], "author": {"login": "plaktoz"},
+            "updatedAt": "2026-11-26T00:00:00Z"}])
+
+    def __call__(self, args):
+        self.calls.append(args)
+        return subprocess.CompletedProcess(args, 0, self.issues if args[:2] == ["issue", "list"] else "", "")
+
+    def labels_added(self) -> list[str]:
+        return [a[a.index("--add-label") + 1] for a in self.calls if a[:2] == ["issue", "edit"]]
+
+
+def test_a_bug_fix_run_that_starts_as_a_github_issue_is_synced_run_decided_merged_and_cleaned_up(seeded, capsys,
+                                                                                                monkeypatch):
+    """Section 20, first integration test, with its first word: the request is an issue. `factory sync` reads it
+    through `GitHubTracker` (a recorded `gh`), the run is the same bug-fix chain as above, and the issue is told each
+    state on the way (`factory:queued`, then `factory:needs-human` at the stop and the merge review, then
+    `factory:done`). Nothing calls the engine's Python API."""
+    monkeypatch.setattr(cli.api, "spawn_engine", lambda repo, run_id: None)
+    gh = RecordedGh()
+    tracker = GitHubTracker("plaktoz/report", gh)
+    monkeypatch.setattr(cli.api, "default_tracker", lambda repo, cfg: tracker)
+    prs = FakePullRequests()
+    repro_now_passes: list[int] = []
+
+    def stub_runner(argv, ctx):
+        if argv == ["scripts/repro-now-passes.sh"]:
+            repro_now_passes.append(1)
+            return (1, "the repro still fails") if len(repro_now_passes) == 1 else (0, "")
+        return 0, ""
+
+    code, synced = _cli(["sync", "--repo", str(seeded), "--json"], capsys)
+    assert code == 0 and len(synced["data"]["created"]) == 1, synced  # the issue became exactly one run
+    run_id = synced["data"]["created"][0]
+    run_dir = state.find_run(state.factory_home(), run_id).run_dir
+    assert state.read_run(run_dir).request.source.ref == "plaktoz/report#7"  # the run's source is the issue
+
+    script, writes = bug_fix_script(run_dir, verify_failures=1)
+    worker, command = _split_worker_and_command(script, writes, native=True)
+    factories = dict(worker_factory=lambda cfg: {"claude": worker}, command_factory=lambda cfg: command,
+                     tracker_factory=lambda repo, cfg: tracker, prs_factory=lambda repo, cfg: prs)
+
+    with gates.use_command_runner(stub_runner):
+        code, parked = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+        assert code == 3 and state.read_run(run_dir).stage == "propose", parked
+        packet = decisions.read_decision(run_dir, "propose", 1)["packet"]
+        code, decided = _cli(["decide", run_id, "--repo", str(seeded), "--json", "--packet", packet["sha"],
+                              "D1=approve"], capsys)
+        assert code == 0 and decided["data"]["status"] == "approved", decided
+        code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+    assert code == 3 and driven["data"]["runs"] == {run_id: "awaiting_approval"}, driven
+    assert state.read_run(run_dir).loops == {"verify->fix": 1}  # one rework, from verify back to fix
+    run = state.read_run(run_dir)
+    worktree = run.worktree
+
+    prs.human_merge(run.pr)
+    with gates.use_command_runner(stub_runner):
+        code, driven = _cli(["run", run_id, "--repo", str(seeded), "--json"], capsys, **factories)
+    assert code == 0 and driven["data"]["runs"] == {run_id: "done"}, driven
+    assert not worktree.exists()  # cleanup: the run worktree is gone from disk
+    events = [e.type for e in state.read_events(run_dir)]
+    assert events.count("merged") == 1 and events.count("run_done") == 1
+    labels = gh.labels_added()
+    assert labels[-1] == "factory:done", labels  # the issue ends told the run is done
+    assert "factory:needs-human" in labels, labels  # and was told it waited on a person

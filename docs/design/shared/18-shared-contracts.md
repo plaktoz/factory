@@ -210,6 +210,7 @@ Every `FactoryError.code` is `<module>.<reason>` and is listed here with its `Er
 | Code | Kind | Hint |
 | --- | --- | --- |
 | `config.invalid` | `fail_fast` | Name the file, the line and the form to write |
+| `intake.invalid` | `fail_fast` | The request is not usable: name the missing or bad field in the reason. The source is marked `factory:invalid` and no run is made (module 4) |
 | `state.locked` | `fail_fast` | Another engine holds the run; exit 5 |
 | `git.hook_failed` | `human` | Show the hook output |
 | `skills.unknown` | `fail_fast` | No override, locked skill or own skill matches the name; add one (module 10: with no fallback it fails fast at workflow load) |

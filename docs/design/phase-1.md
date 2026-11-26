@@ -42,7 +42,7 @@ They are in [`docs/vision.md`](../vision.md), which describes the end state and 
 
 ### Phase split
 
-Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-dependencies-and-plan.md) is the same for both; the split decides what each wave leaves out first. Phase 1b is built in this order (owner decision 2026-11-24): the feature workflow, practice packs and MCP, plugins and hooks, then dashboard writes.
+Phase 1 is delivered in two steps, and each step has a done line. **Phase 1a is done** when every integration box in [section 20](shared/20-dependencies-and-plan.md) tagged 1a, or tagged for no phase, is ticked, live runs included (owner decision 2026-11-26). **Phase 1b is done** when its boxes are ticked too: the research run, and the 1b half of the two-repo dashboard box, plus every unticked criterion that a module file marks "phase 1b" (`python3 scripts/docs-check/criteria.py .` lists them). The wave order in [section 20](shared/20-dependencies-and-plan.md) is the same for both; the split decides what each wave leaves out first. Phase 1b is built in this order (owner decision 2026-11-24): the feature workflow, practice packs and MCP, plugins and hooks, then dashboard writes.
 
 | Area | Phase 1a (walking skeleton) | Phase 1b |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-depe
 | Merge policy | Chores auto-merge, the rest human review | More workflows added to `auto` from `history.jsonl` |
 | Plugins | None | Plugins, hooks and `tasks_from` for plugins |
 | MCP servers, practice packs | None | Both |
-| Toolchains (17A) | Profile loader and the profiles the first target repos need | The other shipped languages |
+| Toolchains (17A) | Profile loader and the profiles the first target repos need. The spec names one: Python, because the pilot repo is Python ([phase 2](phase-2.md), "Why it moved"); `plaktoz/test-adapters` is Python and Shell (checked 2026-11-26, GitHub's language list). Shell has no profile, and what `detect` does for a repo with no matching profile is Unspecified. Five profiles ship (`csharp`, `go`, `java`, `python`, `typescript` in `factory/languages/`) | The other shipped languages |
 | Dashboard | A plain HTML page, read-only: overview, Needs you, run detail, usage, Show JSON. Answers go through `factory decide` and the other CLI commands | The React bundle replaces the plain page. Writes: Submit, notes, retry, goto, skip, abort |
 | Operating systems | macOS and Linux | Windows is phase 2 |
 | Pilot repo | One `factory`-labelled chore or bug-fix issue in `plaktoz/test-adapters`, human merge | Feature work, once the feature workflow lands |
@@ -90,7 +90,9 @@ flowchart LR
   del --> done["Merge and cleanup<br/>issue closed, clean worktree removed"]
 ```
 
-Every request follows this path. A stage repeats until its gates pass, and a failed gate sends the run back to an earlier stage with a feedback record. Human stops happen inside stages.
+Every request follows this path. A failed gate sends the run back to an earlier stage with a feedback record, and each such edge has a limit (`max` on its `on_fail` or `on_conflict`, for example `{goto: fix, max: 3}`). When the limit is used up, or a worker's retries run out, the run is **Blocked** and waits for a human ([module 6](modules/06-engine-core.md), "Statuses"; [module 8](modules/08-gates-error-handling-and-rework.md), errors). Two edges are different: a person's rework answer (`on_reject`) has no limit, because a person is in the loop each time, and an exhausted interruption limit (`max_interruptions`) fails that task, not the run. Human stops happen inside stages.
+
+**Where a failure is specified.** A task that runs past its timeout (`timeout_minutes`, default 30, [module 5](modules/05-workflows-and-plugins.md)) is killed and recorded ([module 6](modules/06-engine-core.md), "Scheduler"), and a crash is recovered from the last checkpoint ("Lock and recovery"). A worker error starts a new attempt, up to `retries` for each task (default 2), and each error class (worker, infrastructure, gate, human) and its handling is in [module 8](modules/08-gates-error-handling-and-rework.md). A sandbox the OS refuses to start fails the attempt with `sandbox.unavailable`, a missing `srt` with `sandbox.srt_missing`, and a settings file that is not JSON is refused before the worker starts ([module 9](modules/09-worker-adapters-and-governed-helpers.md), "Threat model and isolation"); the tests replay these with a stub, and Linux is not yet verified. A configuration file that is not valid fails with `config.invalid`, naming the file and the form to write, and a request that is not usable fails with `intake.invalid`, marks the issue `factory:invalid` and creates no run ([module 4](modules/04-intake-and-triage.md); [section 18](shared/18-shared-contracts.md), "Error-code catalogue"). An expired GitHub login is `git.auth_expired`.
 
 **Decisions made**
 
