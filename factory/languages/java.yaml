@@ -122,5 +122,14 @@ variants:
                 merged.append(s)
             ET.ElementTree(merged).write(os.path.join(d, "test.junit.xml"), encoding="utf-8", xml_declaration=True)
         sys.exit(rc)
+    # The hosts the Gradle test step reaches under srt (2026-11-26, Gradle 9.9.2, temp JUnit 5 project). Each is needed:
+    # services.gradle.org serves the wrapper distribution, which redirects to github.com, then to
+    # release-assets.githubusercontent.com; repo.maven.apache.org serves JUnit. Removing each in turn fails with
+    # `host is not on the allow list` (or `Could not resolve junit`). These hosts are NOT sufficient on their own: with
+    # them the step still fails under srt at Gradle's lock service (`SocketException: Operation not permitted`), which
+    # needs srt's allowLocalBinding, a sandbox-wide grant no profile key can name. The step is not srt-verified until
+    # the owner decides that (module 17A, Gradle row).
+    network:
+      test: [services.gradle.org, github.com, release-assets.githubusercontent.com, repo.maven.apache.org]
     build:        [gradlew, assemble]
     tools: [gradlew]

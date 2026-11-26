@@ -58,5 +58,12 @@ variants:
                 f.write("\n".join(out))
         shutil.rmtree(results, ignore_errors=True)
         sys.exit(rc)
+    # The NuGet host and the trustd grant (2026-11-26, dotnet 11.0.100, a temp xUnit project with Humanizer.Core not in
+    # the cache). A cold restore with the host removed fails `NU1301: Unable to load the service index`; with the host but
+    # no grant the index loads but the restore fails `NU1301` (SSL, the macOS trust store). Both are needed. The step
+    # also needs srt's allowLocalBinding, because vstest binds a TcpListener (`SocketException: Permission denied`), which
+    # no profile key can name: not srt-verified until the owner decides (module 17A, C# row).
+    network:
+      test: {allow: [api.nuget.org], mach: [com.apple.trustd.agent]}
     build:        [dotnet, build]
     tools: [dotnet]

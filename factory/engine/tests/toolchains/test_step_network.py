@@ -183,17 +183,22 @@ def test_the_shipped_java_maven_test_step_allows_only_the_maven_central_host():
     assert doc["variants"]["maven"]["network"] == {"test": ["repo.maven.apache.org"]}
 
 
-def test_no_shipped_profile_allows_a_host_or_a_grant_for_any_step_but_the_java_and_go_test_steps():
-    """The shipped allowances are exactly two: Maven's one host and Go's proxy with the trustd grant. A new one is a
-    decision, so it changes this test too."""
+def test_no_shipped_profile_allows_a_host_or_a_grant_for_any_step_but_the_listed_test_steps():
+    """The shipped allowances are exactly these: Maven's one host, Go's proxy with the trustd grant, Gradle's four hosts
+    (2026-11-26) and C#'s NuGet host with the same grant. A new one is a decision, so it changes this test too."""
     import yaml
     allowed = {}
     for p in sorted(KIT.glob("*.yaml")):
         for vname, v in (yaml.safe_load(p.read_text()).get("variants") or {}).items():
             for step, spec in (v.get("network") or {}).items():
                 allowed[(p.stem, vname, step)] = spec
-    assert allowed == {("java", "maven", "test"): ["repo.maven.apache.org"],
-                       ("go", "go", "test"): {"allow": ["proxy.golang.org"], "mach": ["com.apple.trustd.agent"]}}
+    assert allowed == {
+        ("java", "maven", "test"): ["repo.maven.apache.org"],
+        ("java", "gradle", "test"): ["services.gradle.org", "github.com", "release-assets.githubusercontent.com",
+                                     "repo.maven.apache.org"],
+        ("go", "go", "test"): {"allow": ["proxy.golang.org"], "mach": ["com.apple.trustd.agent"]},
+        ("csharp", "dotnet", "test"): {"allow": ["api.nuget.org"], "mach": ["com.apple.trustd.agent"]},
+    }
 
 
 @pytest.mark.parametrize("hosts", [
