@@ -648,3 +648,36 @@ def test_resetting_to_the_pre_join_commit_drops_the_failed_stages_own_commits(re
     run(rw, "reset", "--hard", base)
     assert run(rw, "rev-parse", "HEAD") == base
     assert run(rw, "rev-list", "--count", "main..HEAD") == "0"
+
+
+def _factory_files(wt):
+    """Every file in the worktree, ignored ones too, that is a factory file: one under a `factory` or `.factory` path,
+    except the shims (module 7: the only factory files a worktree may hold besides the marker)."""
+    import os
+    shims = (".claude/skills/factory-", ".agents/skills/factory-")
+    found = []
+    for dirpath, dirnames, filenames in os.walk(wt):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for name in filenames:
+            rel = Path(dirpath, name).relative_to(wt).as_posix()
+            if any(p == "factory" or p.startswith(".factory") for p in rel.split("/")) and not rel.startswith(shims):
+                found.append(rel)
+    return sorted(found)
+
+
+@pytest.mark.xfail(strict=True, reason="gitops.reset_dependents recreates task worktrees through create_task_worktree, "
+                   "which does not call mark_run; only engine.py does. Remove this mark when the marker is written there.")
+def test_tasks_recreated_by_reset_dependents_hold_the_run_marker_and_no_other_factory_file(repo, cfg, tmp_path):
+    """Module 7: every worktree the factory creates holds `.factory-run.json` and no other factory file except the shims.
+    The engine marks each worktree it creates; a task worktree that reset_dependents recreates must match."""
+    start_run(repo, cfg)
+    make_task(repo, cfg, "run-1", "a", {"services/api.py": "x = 'a'\n"})
+    make_task(repo, cfg, "run-1", "b", {"web/b.js": "b\n"}, bases=["run-1--a"])
+    tw_a = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--a"
+    (tw_a / "services" / "api.py").write_text("x = 'a, reworked'\n")
+    gitops.checkpoint(tw_a, "a", 2)
+    assert gitops.reset_dependents(repo, cfg, "run-1", "a", {"a": [], "b": ["a"]}) == ["b"]
+    tw_b = Path(cfg.machine["worktree_root"]) / "repo" / "run-1--b"
+    assert (tw_b / gitops.RUN_MARKER).is_file(), "the recreated task worktree has no .factory-run.json"
+    assert _factory_files(tw_b) == [gitops.RUN_MARKER]
+    assert run(tw_b, "status", "--porcelain") == ""  # the marker is excluded from git, so it is no change
