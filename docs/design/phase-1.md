@@ -42,7 +42,7 @@ They are in [`docs/vision.md`](../vision.md), which describes the end state and 
 
 ### Phase split
 
-Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-dependencies-and-plan.md) is the same for both; the split decides what each wave leaves out first. Phase 1b is built in this order (owner decision 2026-11-24): the feature workflow, practice packs and MCP, plugins and hooks, then dashboard writes.
+Phase 1 is delivered in two steps, and each step has a done line. **Phase 1a is done** when every integration box in [section 20](shared/20-dependencies-and-plan.md) tagged 1a, or tagged for no phase, is ticked, live runs included (owner decision 2026-11-26). **Phase 1b is done** when its boxes are ticked too: the research run, and the 1b half of the two-repo dashboard box, plus the criteria its modules add. The wave order in [section 20](shared/20-dependencies-and-plan.md) is the same for both; the split decides what each wave leaves out first. Phase 1b is built in this order (owner decision 2026-11-24): the feature workflow, practice packs and MCP, plugins and hooks, then dashboard writes.
 
 | Area | Phase 1a (walking skeleton) | Phase 1b |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Phase 1 is delivered in two steps. The wave order in [section 20](shared/20-depe
 | Merge policy | Chores auto-merge, the rest human review | More workflows added to `auto` from `history.jsonl` |
 | Plugins | None | Plugins, hooks and `tasks_from` for plugins |
 | MCP servers, practice packs | None | Both |
-| Toolchains (17A) | Profile loader and the profiles the first target repos need | The other shipped languages |
+| Toolchains (17A) | Profile loader and the profiles the first target repos need. Which profiles those are is Unspecified: no file names them. Five profiles ship (`csharp`, `go`, `java`, `python`, `typescript` in `factory/languages/`), and the pilot repo `plaktoz/test-adapters` is Python and Shell (checked 2026-11-26, GitHub's language list) | The other shipped languages |
 | Dashboard | A plain HTML page, read-only: overview, Needs you, run detail, usage, Show JSON. Answers go through `factory decide` and the other CLI commands | The React bundle replaces the plain page. Writes: Submit, notes, retry, goto, skip, abort |
 | Operating systems | macOS and Linux | Windows is phase 2 |
 | Pilot repo | One `factory`-labelled chore or bug-fix issue in `plaktoz/test-adapters`, human merge | Feature work, once the feature workflow lands |
@@ -90,7 +90,9 @@ flowchart LR
   del --> done["Merge and cleanup<br/>issue closed, clean worktree removed"]
 ```
 
-Every request follows this path. A stage repeats until its gates pass, and a failed gate sends the run back to an earlier stage with a feedback record. Human stops happen inside stages.
+Every request follows this path. A failed gate sends the run back to an earlier stage with a feedback record, and each such edge has a limit (`max` on its `on_fail` or `on_conflict`, for example `{goto: fix, max: 3}`). When the limit is used up, or a worker's retries run out, the run is **Blocked** and waits for a human; it never loops without an end ([module 6](modules/06-engine-core.md), "Statuses"; [module 8](modules/08-gates-error-handling-and-rework.md), errors). Human stops happen inside stages.
+
+**Where a failure is specified.** A task that runs past its timeout is killed and recorded, and a worker error starts a new attempt from the last checkpoint ([module 6](modules/06-engine-core.md), "Scheduler" and "Lock and recovery"). Each error class (worker, infrastructure, gate, human) and its handling is in [module 8](modules/08-gates-error-handling-and-rework.md). A sandbox that cannot start fails the attempt and never runs the worker unsandboxed ([module 9](modules/09-worker-adapters-and-governed-helpers.md), threat model and isolation). A request or a file that is not valid fails at the boundary with `config.invalid`, naming the file and the form to write ([section 18](shared/18-shared-contracts.md), "Error-code catalogue").
 
 **Decisions made**
 
