@@ -411,7 +411,7 @@ flowchart TD
 
 **Questions to answer.**
 
-- [ ] Whether the factory takes on work that is not software at all. This changes the stated purpose of the factory ("a reusable software factory" in `AGENTS.md`), so it needs a new ADR in `docs/adr/` before any of this is built. The ADR should say which kinds of non-software work are in scope (wireframes and design work, customer slide decks, other documents) and which are not. Unspecified.
+- [ ] Which kinds of non-software work the factory takes on, and what checks each needs. The direction is decided: the vision covers any kind of work (`2026-11-26-any-kind-of-work-with-checks`, in `docs/process.md`), and a kind earns autonomy only with checks that tell right from wrong. Building any of it needs a new ADR in `docs/adr/` first. The ADR should say which kinds of non-software work are in scope (wireframes and design work, customer slide decks, other documents) and which are not. Unspecified.
 - [ ] Which upstream skills make a wireframe or a slide deck, their licenses, and whether the factory ships its own instead. Unspecified.
 - [ ] The gates for output that is not code (a plan schema, a render check, a human review of the rendered pages), and which of them block. Unspecified.
 - [ ] The sink for output that does not go in the code repo, and where the file is stored. Unspecified.

@@ -3,6 +3,7 @@
 | Folder | Holds |
 | --- | --- |
 | `design/` | Specs. `phase-1.md` is the overview and index. `modules/` has one file per module, `shared/` the cross-cutting sections, and `phase-2.md` tracks what moved out of phase 1. Each module file ends with a `Decisions` table. |
+| `vision.md` | The end state and the principles, ranked, with no phase. Read it after `AGENTS.md` when no rule settles a choice. |
 | `process.md` | How this repo is built: the rules for sessions, the pilot and the checks, each with its why. |
 | `adr/` | Proposed decisions only, named `<date>-<slug>.md`. An accepted ADR is folded into a spec's `Decisions` table and its file deleted; `adr/README.md` names the commit that holds the full text. The rule is in `AGENTS.md`, and `process.md` gives the reasons. |
 | `decision-pages/` | Source (`*.json`) and generated `*.html` for decision pages the owner answers in one sitting. Empty until the next page; each answer then becomes a `Decisions` row in a spec, or a `proposed` ADR in `adr/` while it waits. |

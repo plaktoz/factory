@@ -1,6 +1,6 @@
 # Factory
 
-A reusable software factory: a deterministic Python engine that turns a request into reviewed work, with LLM workers doing bounded tasks. The spec is `docs/design/phase-1.md`, an overview that links one file per module under `docs/design/modules/` and the cross-cutting sections under `docs/design/shared/`. Read the module's file, its contract and its acceptance criteria, before touching a module.
+A reusable factory for delegated work, software first: a deterministic Python engine that turns a request into reviewed work, with LLM workers doing bounded tasks. Where it is going and which way to lean when no rule settles a choice is in [`docs/vision.md`](docs/vision.md); read it after this file. The spec is `docs/design/phase-1.md`, an overview that links one file per module under `docs/design/modules/` and the cross-cutting sections under `docs/design/shared/`. Read the module's file, its contract and its acceptance criteria, before touching a module.
 
 ## Layout
 
