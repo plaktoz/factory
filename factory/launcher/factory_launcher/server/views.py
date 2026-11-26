@@ -7,6 +7,7 @@ task_dir() (called by read_usage and pending_notes) creates folders.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from dataclasses import fields, is_dataclass
@@ -273,6 +274,22 @@ def task_log(index: RunIndex, run_id: str, task_id: str) -> str | None:
     if not (task_dir / "task.json").is_file():
         return None
     return tail_log(task_dir / "worker.log", LOG_LINES)
+
+
+_NO_SUBMIT_URL = 'data-submit-url=""'  # how the engine writes the page when it has no submit URL (module 11)
+_CSP_DEFAULT = html.escape("default-src 'none';", quote=True)  # the page's meta CSP, as the engine escapes it
+
+
+def submit_wired(page_text: str, run_id: str) -> str:
+    """The served decision page with Submit turned on (module 15, 1b). The engine writes the page without a submit URL,
+    and the dashboard does not write files, so the wiring is added to the text it serves: the submit URL for this run's
+    decide route, and connect-src 'self' in the page's meta CSP, so the page may post to the dashboard and nowhere else.
+    A page that already has a submit URL is returned as it is."""
+    if _NO_SUBMIT_URL not in page_text:
+        return page_text
+    url = html.escape(f"/api/runs/{run_id}/decide", quote=True)
+    text = page_text.replace(_NO_SUBMIT_URL, f'data-submit-url="{url}"', 1)
+    return text.replace(_CSP_DEFAULT, _CSP_DEFAULT + " connect-src &#x27;self&#x27;;", 1)
 
 
 def decision_page(index: RunIndex, run_id: str, name: str) -> Path | None:

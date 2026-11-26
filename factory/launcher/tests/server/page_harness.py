@@ -31,13 +31,18 @@ STUB = r"""
   window.__out = out;
   window.__clip = clip;
   window.addEventListener("error", function (e) { out.errors.push(String(e.message)); });
-  var hanging = {};
+  var hanging = {}, failing = {};
+  window.__fail = function (path, body) { failing[path] = body; };
   window.__set = function (path, body) { responses[path] = body; delete hanging[path]; };
   window.__hang = function (path) { hanging[path] = true; };
   window.fetch = function (path, opts) {
     var headers = (opts && opts.headers) || {};
     out.fetches.push({ path: path, method: (opts && opts.method) || "GET",
-                       token: headers["X-Factory-Token"] || null, at: performance.now() });
+                       token: headers["X-Factory-Token"] || null, body: (opts && opts.body) || null,
+                       at: performance.now() });
+    if (Object.prototype.hasOwnProperty.call(failing, path)) {  // the server answered with an error status
+      return Promise.resolve({ ok: false, status: 422, text: function () { return Promise.resolve(failing[path]); } });
+    }
     if (hanging[path]) {  // a server that never answers: the promise never settles, unless the page aborts it
       return new Promise(function (resolve, reject) {
         var signal = opts && opts.signal;
@@ -95,14 +100,20 @@ def hang(path: str) -> str:
     return f"__hang({json.dumps(path)})"
 
 
+def fail(path: str, text: str) -> str:
+    """From this step on, a request to `path` is answered with an error status and this body."""
+    return f"__fail({json.dumps(path)}, {json.dumps(text)})"
+
+
 def set_clipboard(mode: str) -> str:
     return f"__clip.mode = {json.dumps(mode)}"
 
 
 def run_page(tmp_path: Path, responses: dict[str, str], steps: list[tuple[int, str]], *, token: str,
-             budget_ms: int = BUDGET_MS) -> dict:
+             budget_ms: int = BUDGET_MS, page_text: str | None = None) -> dict:
     """Load the real page with the stub, run the timeline, and return the recorded result. `budget_ms` is Chrome's
-    virtual clock: a test that waits past the default 12 s (the 10 s state timeout) passes a longer one."""
+    virtual clock: a test that waits past the default 12 s (the 10 s state timeout) passes a longer one. `page_text`
+    replaces the dashboard page with another page, for example a decision page as the server serves it."""
     timeline = [f"setTimeout(function () {{ {js} }}, {ms});" for ms, js in steps]
     timeline.append(f"setTimeout(function () {{ __flush(); }}, {budget_ms - 100});")
     script = STUB.replace("__RESPONSES__", json.dumps(responses)) + "\n" + "\n".join(timeline)
@@ -110,7 +121,7 @@ def run_page(tmp_path: Path, responses: dict[str, str], steps: list[tuple[int, s
     page_dir = tmp_path / "page"
     page_dir.mkdir()
     page = page_dir / "index.html"
-    page.write_text(DASHBOARD.read_text().replace("</head>", f"<script>{script}</script></head>", 1))
+    page.write_text((page_text if page_text is not None else DASHBOARD.read_text()).replace("</head>", f"<script>{script}</script></head>", 1))
     profile = tmp_path / "chrome-profile"
     profile.mkdir()
     url = page.as_uri() + "?token=" + token
