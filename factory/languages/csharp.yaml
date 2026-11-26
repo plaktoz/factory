@@ -25,10 +25,11 @@ variants:
             sys.stderr.write("FACTORY_TASK_DIR is not set\n")
             sys.exit(2)
         results = tempfile.mkdtemp(prefix="trx-", dir=d)
-        # Under srt ~/.nuget is not writable (measured 2026-11-26), so a restore that is not cached needs the package
-        # cache in the task folder. A set NUGET_PACKAGES is kept.
+        # Under srt ~/.nuget and ~/.local/share/NuGet are not writable (measured 2026-11-26: the restore's HTTP cache was
+        # denied), so a restore that is not cached needs both caches in the task folder. Set values are kept.
         env = dict(os.environ)
         env.setdefault("NUGET_PACKAGES", os.path.join(d, "cache", "nuget"))
+        env.setdefault("NUGET_HTTP_CACHE_PATH", os.path.join(d, "cache", "nuget-http"))
         try:
             rc = subprocess.call(["dotnet", "test", "--logger", "trx;LogFileName=results.trx", "--results-directory", results], env=env)
         except FileNotFoundError:

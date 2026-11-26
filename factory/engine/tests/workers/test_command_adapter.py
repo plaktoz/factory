@@ -810,20 +810,22 @@ def test_the_dotnet_test_step_puts_the_nuget_cache_in_the_task_folder_when_none_
     bins = tmp_path / "bin"
     bins.mkdir()
     fake = bins / "dotnet"
-    fake.write_text('#!/bin/sh\necho "$NUGET_PACKAGES" > "$FACTORY_TASK_DIR/nuget.txt"\nexit 0\n')
+    fake.write_text('#!/bin/sh\necho "$NUGET_PACKAGES|$NUGET_HTTP_CACHE_PATH" > "$FACTORY_TASK_DIR/nuget.txt"\nexit 0\n')
     fake.chmod(fake.stat().st_mode | stat.S_IXUSR)
     task = tmp_path / "work"
     task.mkdir()
-    env = {k: v for k, v in os.environ.items() if k not in ("NUGET_PACKAGES", "FACTORY_TASK_DIR")}
+    env = {k: v for k, v in os.environ.items() if k not in ("NUGET_PACKAGES", "NUGET_HTTP_CACHE_PATH", "FACTORY_TASK_DIR")}
     env.update({"PATH": f"{bins}{os.pathsep}{os.environ['PATH']}", "FACTORY_TASK_DIR": str(task)})
     if preset:
         env["NUGET_PACKAGES"] = preset
+        env["NUGET_HTTP_CACHE_PATH"] = preset + "-http"
     subprocess.run(_profile_test_argv("csharp", "dotnet"), cwd=tmp_path, env=env, capture_output=True, text=True)
-    seen = (task / "nuget.txt").read_text().strip()
+    packages, http = (task / "nuget.txt").read_text().strip().split("|")
     if expect_default:
-        assert seen == str(task / "cache" / "nuget")
+        assert packages == str(task / "cache" / "nuget")
+        assert http == str(task / "cache" / "nuget-http")
     else:
-        assert seen == preset
+        assert packages == preset and http == preset + "-http"
 
 
 def test_a_dotnet_run_that_aborts_with_an_empty_trx_leaves_no_report_so_the_task_is_not_done(tmp_path, task_dir, monkeypatch):
