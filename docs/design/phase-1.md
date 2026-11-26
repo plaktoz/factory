@@ -4,26 +4,19 @@ Nov 14, 2026 · @gohleemarble
 
 Phase 1 spec for a reusable software factory, organized by module. Each module states what it owns, its files, its rules, and which parts run without an LLM.
 
-This file is the overview: the vision, principles, decisions made, the glossary and the module map. Every module has its own file under `modules/`, and the cross-cutting sections are under `shared/`. Items moved out of phase 1 are in [phase-2.md](phase-2.md).
+This file is the overview: the route to the vision, decisions made, the glossary and the module map. Every module has its own file under `modules/`, and the cross-cutting sections are under `shared/`. Items moved out of phase 1 are in [phase-2.md](phase-2.md).
 
 ## 1. Overview
 
 The factory is a reusable kit that turns a request into reviewed work through a deterministic Python engine. LLM workers do only the bounded tasks a workflow assigns them.
 
-**Vision**
+**Vision and principles**
 
-- Not bound to an OS, an LLM or a harness. Phase 1 runs Claude on macOS and Linux; a repo may also choose Codex (owner decision 2026-11-24), whose remaining proofs are in `docs/design/phase-2.md` P2-1. Windows follows in phase 2.
+They are in [`docs/vision.md`](../vision.md), which describes the end state and names no phase. This file is the route: what phase 1 builds. Its constraints, so a reader here has them:
+
+- Phase 1 runs Claude on macOS and Linux; a repo may also choose Codex (owner decision 2026-11-24), whose remaining proofs are in [phase-2.md](phase-2.md) P2-1. Windows follows in phase 2.
 - Minimal intrusion: a repo gets the `factory/` kit, the factory skills and a `.factory/` folder. An update replaces `factory/` and the skill shims only.
 - Plugin-style workflows: stages adapt to the kind of work (bug fix, feature, new app, chore, research), and tasks inside a stage run in parallel.
-- The engine runs outside any LLM harness and decides everything that can be decided by code.
-
-**Principles**
-
-1. The engine decides, the worker does the work. Only the engine starts tasks, moves stages and merges.
-2. Every LLM output passes a deterministic gate before anything depends on it.
-3. Every human stop is a file, so it can be answered from the dashboard, the CLI, a chat or an editor.
-4. State is files: JSON for state, JSON Lines for logs, YAML for files people write.
-5. A workflow must pass with helpers off before native helpers are allowed on.
 
 ### Module map
 
