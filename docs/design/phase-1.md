@@ -17,6 +17,7 @@ They are in [`docs/vision.md`](../vision.md), which describes the end state and 
 - Phase 1 runs Claude on macOS and Linux; a repo may also choose Codex (owner decision 2026-11-24), whose remaining proofs are in [phase-2.md](phase-2.md) P2-1. Windows follows in phase 2.
 - Minimal intrusion: a repo gets the `factory/` kit, the factory skills and a `.factory/` folder. An update replaces `factory/` and the skill shims only.
 - Plugin-style workflows: stages adapt to the kind of work (bug fix, feature, new app, chore, research), and tasks inside a stage run in parallel.
+- A workflow must pass with helpers off before native helpers are switched on ([module 9](modules/09-worker-adapters-and-governed-helpers.md)).
 
 ### Module map
 

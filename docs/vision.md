@@ -1,6 +1,6 @@
 # Vision
 
-Where the project ends up, and which way to lean when no rule settles a choice. It names no phase: `docs/design/phase-1.md` and `phase-2.md` are the route, and this file is the destination. It changes only through a `proposed` ADR that the owner accepts (section 9).
+Where the project ends up, and which way to lean when no rule settles a choice. It names no phase: `docs/design/phase-1.md` and `phase-2.md` are the route, and this file is the destination. It changes only through a `proposed` ADR that the owner accepts (section 11).
 
 `AGENTS.md` says how to work. The specs in `docs/design/` say what to build. `docs/process.md` says how this repo is built. This file says what it is for.
 
@@ -54,13 +54,14 @@ The owner's time goes into policy and real stops, and the work still gets done. 
 
 When two principles pull apart, the higher one wins. Most choices touch only one or two.
 
-**P1. Safe and recoverable.** Never lose committed work, never leak a secret, never write outside the scope a task was given. A crash, a sleep or a kill leaves a state the engine can resume from. A workflow must pass with helpers off before native helpers are allowed on.
+**P1. Safe and recoverable.** Never lose committed work, never leak a secret, never write outside the scope a task was given. A crash, a sleep or a kill leaves a state the engine can resume from.
 *So:* take the lock before you remove anything; fail closed when a plugin or gate cannot be checked; keep the worker sandbox on.
 *Not:* a faster path that can leave a half-written state file.
 
-**P2. The engine decides.** If code can decide it, code decides it. Only the engine starts tasks, moves stages and merges. Every LLM output passes a deterministic gate before anything depends on it, and the same inputs give the same run. Autonomy rests on trusting those checks, not on trusting a model's judgment.
+**P2. The engine decides.** If code can decide it, code decides it. Only the engine starts tasks, moves stages and merges. Every LLM output passes a deterministic gate before anything depends on it, and given the same worker outputs the engine gives the same run. Autonomy rests on trusting those checks, not on trusting a model's judgment.
 *So:* rules before a model in triage; a schema gate on every report.
 *Not:* asking a worker to judge something a check could settle; a model that plans and drives the run.
+*Determinism:* gates, scheduling, state and merges are deterministic. A worker's output is not, which is why every output passes a gate.
 
 **P3. The owner's attention is the budget.** Ask only on a stop trigger. Make each answer cheap: one page, at most five cards, a recommended option, and a command to apply it. Where fewer questions and a fuller record pull apart, fewer questions win: sessions write the records, and the owner's reading time is what cannot be bought.
 *So:* decide by default and log it; turn a finding a check can settle into a fix.
@@ -70,8 +71,8 @@ When two principles pull apart, the higher one wins. Most choices touch only one
 *So:* JSON for state, JSON Lines for logs, YAML for what people write, plain markdown for specs; evidence on the same line as a tick.
 *Not:* knowledge that lives only in a session, a chat or one machine; the same fact in two files.
 
-**P5. Product before process.** A working factory comes before better rules for building it. Process earns its place with a measured problem.
-*So:* a new skill, check or process ADR waits until the owner asks, or a retro shows the cost it removes.
+**P5. Product before process.** A working factory comes before better rules for building it. Process earns its place with a measured problem. This is a standing principle, not a phase: when a process change competes with an open product criterion, the product wins.
+*So:* a new skill, check or process ADR waits until the owner asks, or a retro shows the cost it removes. `AGENTS.md` (Build order) names the current gate.
 *Not:* scoring rounds while acceptance criteria are open.
 
 **P6. Light and portable.** The kit is small, replaceable in one step and free of references to this repo. Nothing ties it to one OS, LLM or harness beyond what the work built so far allows.
@@ -115,10 +116,10 @@ Each one has happened in this repo, and each became a rule.
 
 | Sign | What it cost | Rule that answers it |
 | --- | --- | --- |
-| Every branch edits one long file | 15 of 86 merges conflicted in `tasks.md` (`AGENTS.md`) | The merger writes `tasks.md` |
+| Every branch edits one long file | 15 of 86 merges conflicted in `tasks.md` (`AGENTS.md`, dated 2026-11-20 on) | The merger writes `tasks.md` |
 | A turn ends on a status update | An estimated 10 hours of owner gaps over 66 sessions, read by keyword (`docs/process.md`) | End a turn only for the owner |
 | Decision pages of eight cards | Two batch days hold 64 of 99 answers (`docs/process.md`) | At most five cards a page |
-| Process work while product items wait | Calibration runs 3 to 8 in `references/calibration-2026-11-21.md`; the one `ready` was not an independent score (`docs/tasks.md` item 45) | Product before process |
+| Process work while product items wait | Calibration runs 3 to 8 in `references/calibration-2026-11-21.md`; the one `ready` was scored by the file's own author, not an independent scorer (dated 2026-11-22) | Product before process |
 | A tick with no evidence | A reader cannot check it | Evidence on the same line |
 
 If your change looks like one of these, stop and choose again.
