@@ -19,7 +19,7 @@ from factory_engine.adapters.worker.runtime import base_env, cache_env
 
 HERE = Path(__file__).resolve().parent
 FIXTURE = HERE / "bugfix-target"
-KIT_DIR = HERE.parents[1]  # factory/: the kit folder that init copies into a target repo
+KIT_DIR = HERE.parents[2]  # factory/: the kit folder that init copies into a target repo (HERE is factory/engine/tests/fixtures)
 WORKFLOW = KIT_DIR / "workflows" / "bug-fix.yaml"
 GIT = ["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.invalid"]
 

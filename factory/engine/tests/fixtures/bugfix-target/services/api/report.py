@@ -6,7 +6,7 @@ import sys
 
 def report_total(rows):
     """The sum of every row's `amount_cents`."""
-    return sum(row["amount_cents"] for row in rows[:-1])  # seeded bug: drops the last row
+    return sum(row["amount_cents"] for row in rows[:-1])
 
 
 def build_report(rows):
