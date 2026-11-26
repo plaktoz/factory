@@ -170,6 +170,11 @@ def test_a_queued_note_restarts_the_worker_and_is_marked_delivered(new_run, repo
     assert notes.delivered_notes(run_dir, "change") == ["Keep the public signature"]
     assert any(e.type == "worker_restarted" for e in state.read_events(run_dir))
     assert state.read_task(run_dir, "change").restarts == 1
+    # the criterion's end: the restarted attempt was handed the note, and its prompt says so
+    restarted = [c for c in inner.started if c.task_id == "change"][-1]
+    assert restarted.notes == ["Keep the public signature"]
+    from factory_engine.prompt import build_prompt
+    assert "Keep the public signature" in build_prompt(restarted)
 
 
 # ---- criterion 2: tasks with no `needs` start together, up to `concurrency`; helpers reserve slots --------------------
