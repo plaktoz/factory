@@ -101,7 +101,7 @@ class App:
         path = views.decision_page(self.index, run_id, name)
         if path is None:
             return _error(404, "dashboard.not_found", f"no decision page {name} for run {run_id}")
-        text = path.read_bytes().decode("utf-8", errors="replace")
+        text = views.submit_wired(path.read_bytes().decode("utf-8", errors="replace"), run_id)
         # The token is injected when the page is served, never written to the file on disk.
         script = f"<script>window.FACTORY_TOKEN={json.dumps(self.token)};</script>"
         text = text.replace("</head>", script + "</head>", 1) if "</head>" in text else script + text
