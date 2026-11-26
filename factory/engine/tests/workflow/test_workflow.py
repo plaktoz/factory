@@ -1,6 +1,6 @@
 """Module 5 acceptance criteria for phase 1a: the loader, the validator, tasks_from and helper expansion.
 
-Plugins, hooks and deterministic plugin tasks are phase 1b and have no tests here.
+Plugins are tested in test_plugins.py. Hooks and deterministic plugin tasks run through the engine are not built yet.
 """
 
 import json

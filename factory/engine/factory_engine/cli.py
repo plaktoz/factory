@@ -197,6 +197,25 @@ def _repo_key(repo: Path) -> str:
     return state.repo_key(repo, load_config(repo))
 
 
+def _plugins_enable(args, f) -> _Result:
+    """Module 16: check a plugin and record its hash; the merged stages are shown so the reviewer sees what will run."""
+    from . import plugins
+
+    repo = _repo_here(args)
+    merged = plugins.enable_plugin(repo, load_config(repo), args.name)
+    stages = [{"id": s.id, "needs": list(s.needs), "source": s.source} for s in merged.stages]
+    return _Result({"plugin": args.name, "stages": stages},
+                   message=f"plugin {args.name} enabled: its hash is recorded; {len(stages)} stages in the merged workflow")
+
+
+def _plugins_disable(args, f) -> _Result:
+    from . import plugins
+
+    repo = _repo_here(args)
+    plugins.disable_plugin(repo, args.name)
+    return _Result({"plugin": args.name, "state": "off"}, message=f"plugin {args.name} disabled")
+
+
 def _decide(args, f) -> _Result:
     ref = _ref(args.run)
     repo = _repo_of_run(args, args.run)
@@ -414,6 +433,16 @@ def _parser() -> argparse.ArgumentParser:
     sp.add_argument("--all", action="store_true", help="every run in this repo")
     sp.add_argument("--detach", action="store_true", help="start the engine in the background and print its pid")
     sp.add_argument("--poll", type=int, default=5, help="seconds between passes")
+
+    sp = add("plugins", _plugins_enable, help="enable or disable a plugin in this repo")
+    plug = sp.add_subparsers(dest="plugins_action", metavar="<enable|disable>", required=True, parser_class=_Parser)
+    for action, handler, what in (("enable", _plugins_enable, "check a plugin and record its hash"),
+                                  ("disable", _plugins_disable, "turn a plugin off")):
+        ap = plug.add_parser(action, help=what, description=what)
+        ap.add_argument("name", help="the plugin's folder name under .factory/config/plugins/")
+        ap.add_argument("--repo", help="the repo folder (default: the git repo here)")
+        ap.add_argument("--json", action="store_true", help="print one JSON object")
+        ap.set_defaults(handler=handler)
 
     sp = add("decide", _decide, help="answer a human stop")
     sp.add_argument("run")
