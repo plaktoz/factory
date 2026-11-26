@@ -13,7 +13,14 @@ The page (`<name>.json` and the `<name>.html` rendered from it) is created in **
 
 ## Steps
 
-1. **Triage first.** Work through every finding yourself. Fix what a check can settle (run it, show the output). A bug fix or record upkeep is a commit, not a card. Apply the recommended option yourself and add one line to `docs/decisions.md`, unless the choice meets a **stop trigger** in `AGENTS.md` (Working rules). A finding the spec already answers is a build task, not a card. If a finding needs a machine or login you do not have, make it a task. Keep for the page only the stop triggers, at most one page a day and at most five cards (`render.py` warns on a sixth and still writes the page); decide the rest at the recommendation and log them. Done when each finding is fixed with evidence, logged in `docs/decisions.md`, made a task, or listed as a card with its `trigger`. If nothing is left, do not build a page.
+1. **Triage first.** Take each finding yourself, in this order, and stop at the first rule that fits. A card is the last resort, not the default.
+   1. **A check can settle it:** run the check and show its output. A bug fix or record upkeep is a commit, not a card.
+   2. **The spec already answers it:** it is a build task.
+   3. **It needs a machine or a login you do not have:** make it a task.
+   4. **It meets no stop trigger** in `AGENTS.md` (Working rules): take the recommended option, keep working, and add one line to `docs/decisions.md`.
+   5. **It meets a stop trigger:** it becomes a card, named with its `trigger`.
+
+   Aim for one page a day and at most five cards. `render.py` only warns on a sixth card and still writes the page, so the limit is yours to keep. Decide the rest at the recommendation and log them. Triage is done when every finding has exactly one outcome: fixed with evidence, logged, made a task, or a card. If no card is left, do not build a page.
 2. **Check facts before writing options.** A fact in a card (a tool, a flag, a file, what a run does) is looked up by running something (`--help`, a probe, a test run), not remembered or read off the source. Done when every factual claim has a command behind it, and a claim you only read in code says so on the card.
 3. **Write `decisions.json`** to the schema below, in `.scratch/<name>.json` (create the folder if it is missing). Never write the page under `docs/`: it would be tracked, and the record is a `Decisions` row in the spec (or a `proposed` ADR while the card waits).
 4. **Read it as an outsider.** For each option, answer from its `see` and `asks` alone: what changes for someone who has never seen the codebase? If you cannot, rewrite the card. Done when every option passes.
