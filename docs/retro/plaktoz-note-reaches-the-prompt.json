@@ -1,0 +1,35 @@
+{
+  "task": "note-reaches-the-prompt",
+  "branch": "plaktoz/note-reaches-the-prompt",
+  "base": "origin/main",
+  "sessions": [],
+  "commits": 1,
+  "lines": {
+    "product": 5,
+    "spec": 0,
+    "process": 0
+  },
+  "adrs_added": 0,
+  "agent_runs": [
+    "task-board-2026-11-26"
+  ],
+  "time": {
+    "wall_s": 0.0,
+    "buckets": {}
+  },
+  "tokens": {
+    "main": {},
+    "subagent": {},
+    "by_activity": {}
+  },
+  "prompts": {},
+  "owner_decisions": [],
+  "agent_decisions": [],
+  "friction": {
+    "tool_errors": 0,
+    "interrupts": 0,
+    "secret_scans": 0,
+    "slow": []
+  },
+  "hooks": {}
+}
