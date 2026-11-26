@@ -64,12 +64,14 @@ How they stay small:
 4. **A size limit.** Each `SKILL.md` has a line limit (`practices.max_lines`, default 150), and `factory doctor` reports packs over it.
 5. **Fit to the stage.** Review stages get `review.md`; fix and implement stages get the core rules.
 
+**Wiring: built (2026-11-26).** `Engine._practices` builds a skill task's `practices` list when the engine builds the task's context. The languages are the ones 17A's verify wiring finds (`toolchains.language_tasks`: a detected profile whose `files` globs match the run branch's diff against its base), so there is one detector. A command task gets no pack, and a run that has changed no detected language gets none. The diff is read when the task starts, so the first implement attempt, which starts before any file has changed, gets no pack; a task in a later stage does (test_a_python_only_task_gets_the_python_pack_and_no_other). Only `python` ships a pack so far; a language with no pack gets none and no error. `mcp` is still `[]`.
+
 ```python
 # skills.py (addition)
 def practice_packs(languages: list[str], stage: str, repo: Path, cfg: Config) -> list[SkillRef]
 ```
 
-- [ ] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (not ticked: `skills.practice_packs` takes a language list, and test_skills.py::test_a_java_only_task_gets_only_the_java_pack_and_a_mixed_task_gets_both passes that list in. Nothing in `factory_engine` calls `practice_packs` (engine.py passes `practices=[]`), so no task gets a pack from its files)
+- [x] A Java-only task gets only the Java pack; a task touching Java and TypeScript gets both. (test: factory/engine/tests/engine/test_practice_packs.py::test_a_java_only_task_gets_only_the_java_pack, ::test_a_task_that_changed_java_and_typescript_gets_both_packs; with `practices=[]` put back in engine.py both fail)
 - [x] A team override in `.factory/config/overrides/practices/` is used in place of, or merged with, the shipped pack. (test: factory/engine/tests/skills/test_skills.py::test_a_team_override_replaces_the_shipped_pack, ::test_a_team_override_can_be_merged_over_the_shipped_pack)
 - [x] A pack over `max_lines` is reported by `factory doctor`. (test: factory/engine/tests/skills/test_skills.py::test_a_pack_over_max_lines_is_reported_and_the_limit_is_configurable, factory/engine/tests/kit/test_kit.py::test_the_driver_adds_module_10s_lock_and_pack_checks)
 
